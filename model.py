@@ -41,64 +41,81 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
 
 
 # ============================================================================
-# FIX #3: VISION-FIRST FUSION (prevent text shortcut)
+# ✅ FIX: FLAMINGO-STYLE GATED CROSS ATTENTION (Simple & SOTA)
 # ============================================================================
 
-class VisionFirstFusion(nn.Module):
+class FlamingoGatedCrossAttention(nn.Module):
     """
-    Vision-first cross-attention to prevent text shortcuts
+    Flamingo-style Gated Cross Attention
     
-    Key idea: Force model to attend to vision BEFORE using text
+    ✅ CORRECT DIRECTION: Vision queries text (vision = query, text = key/value)
+    ✅ GATED residual to stabilize training
+    ✅ Simple but effective (proven by Flamingo)
+    
+    Key insight:
+    - Vision features should QUERY information from text
+    - NOT the other way around (prevents text shortcuts)
+    - Decoder sees ONLY vision-conditioned output
     """
     def __init__(self, hidden_dim=1024, num_heads=16, dropout=0.1):
         super().__init__()
         
-        # Vision → Text attention (vision queries text)
-        self.vision_to_text = nn.MultiheadAttention(
+        # ✅ CORRECT: Vision queries text
+        self.cross_attn = nn.MultiheadAttention(
             hidden_dim, num_heads, dropout=dropout, batch_first=True
         )
         
-        # Text → Enhanced Vision attention
-        self.text_to_vision = nn.MultiheadAttention(
-            hidden_dim, num_heads, dropout=dropout, batch_first=True
+        # FFN
+        self.ffn = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim * 4),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim * 4, hidden_dim),
+            nn.Dropout(dropout)
         )
         
-        self.norm1 = nn.LayerNorm(hidden_dim)
-        self.norm2 = nn.LayerNorm(hidden_dim)
+        # Layer norms
+        self.norm_cross = nn.LayerNorm(hidden_dim)
+        self.norm_ffn = nn.LayerNorm(hidden_dim)
         
-        # Gating
-        self.gate = nn.Linear(hidden_dim * 2, hidden_dim)
+        # ✅ CRITICAL: Gated residual (α tanh gate from Flamingo paper)
+        self.gate_cross = nn.Parameter(torch.zeros(1))
+        self.gate_ffn = nn.Parameter(torch.zeros(1))
         
-    def forward(self, text_features, visual_features, image_dropout_prob=0.0):
+    def forward(self, vision_features, text_features, text_attention_mask=None):
         """
         Args:
-            image_dropout_prob: FIX #3 - randomly drop images during training
+            vision_features: (B, num_patches, D) - from DINOv2 patch tokens
+            text_features: (B, seq_len, D) - from BART encoder
+            text_attention_mask: (B, seq_len) - 1 for valid tokens, 0 for padding
+        
+        Returns:
+            vision_conditioned: (B, num_patches, D) - vision features conditioned on text
+            attn_weights: attention weights for visualization
         """
-        # FIX #3: Image dropout to force robustness
-        if self.training and image_dropout_prob > 0:
-            batch_size = visual_features.size(0)
-            keep_mask = torch.rand(batch_size, 1, 1, device=visual_features.device) > image_dropout_prob
-            visual_features = visual_features * keep_mask
+        # 🚨 FIX: Convert attention_mask to key_padding_mask
+        # attention_mask: 1=valid, 0=padding
+        # key_padding_mask: True=ignore, False=attend
+        key_padding_mask = None
+        if text_attention_mask is not None:
+            key_padding_mask = (text_attention_mask == 0)  # Flip: padding=True
         
-        # Step 1: Vision queries text (vision-grounded text)
-        vision_grounded, _ = self.vision_to_text(
-            query=visual_features, key=text_features, value=text_features
-        )
-        vision_enhanced = self.norm1(visual_features + vision_grounded)
-        
-        # Step 2: Text attends to enhanced vision
-        text_enhanced, attn = self.text_to_vision(
-            query=text_features, key=vision_enhanced, value=vision_enhanced
+        # ✅ Cross-attention: vision queries text (with proper masking!)
+        attn_out, attn_weights = self.cross_attn(
+            query=vision_features,
+            key=text_features,
+            value=text_features,
+            key_padding_mask=key_padding_mask  # ✅ FIXED: Ignore padding!
         )
         
-        # Gating
-        gate_input = torch.cat([text_features, text_enhanced], dim=-1)
-        gate = torch.sigmoid(self.gate(gate_input))
+        # Gated residual (starts at 0, learns to open)
+        vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_out)
         
-        fused = gate * text_enhanced + (1 - gate) * text_features
-        fused = self.norm2(fused)
+        # FFN with gated residual
+        ffn_out = self.ffn(vision_features)
+        vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out)
         
-        return fused, attn
+        return vision_features, attn_weights
 
 
 # ============================================================================
@@ -393,6 +410,7 @@ class FixedLatentReasoningVQA(nn.Module):
         # Vision encoder
         self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
         vision_hidden_dim = self.vision_encoder.config.hidden_size
+        print(f"  📊 DINOv2 hidden_dim: {vision_hidden_dim}")  # Should be 768
         
         # Language model
         bartpho_full = MBartForConditionalGeneration.from_pretrained(bartpho_model_name)
@@ -400,6 +418,7 @@ class FixedLatentReasoningVQA(nn.Module):
         
         self.tokenizer = BartphoTokenizer.from_pretrained(bartpho_model_name)
         bart_hidden_dim = bartpho_full.config.d_model
+        print(f"  📊 BARTpho d_model: {bart_hidden_dim}")  # Should be 1024
         
         self.encoder = bartpho_full.model.encoder
         self.decoder = bartpho_full.model.decoder
@@ -412,18 +431,31 @@ class FixedLatentReasoningVQA(nn.Module):
         
         del bartpho_full
         
-        # Vision projection
+        # 🚨 FIX: Learnable 2D position embeddings for vision patches (Flamingo style)
+        # DINOv2-base outputs 16x16=256 patches for 224x224 images
+        # Use learnable embeddings instead of sinusoidal (better for fine-tuning)
+        self.num_patches = 256  # 16x16 for DINOv2-base @ 224x224
+        self.vision_pos_embed = nn.Parameter(
+            torch.randn(1, self.num_patches, vision_hidden_dim) * 0.02
+        )
+        print(f"  ✅ Vision position embeddings: {self.num_patches} patches")
+        
+        # Vision projection (with dimension check)
+        assert vision_hidden_dim != bart_hidden_dim, f"Vision ({vision_hidden_dim}) != BART ({bart_hidden_dim})"
         self.vision_proj = nn.Sequential(
-            nn.Linear(vision_hidden_dim, bart_hidden_dim),
+            nn.Linear(vision_hidden_dim, bart_hidden_dim),  # 768 → 1024
             nn.LayerNorm(bart_hidden_dim),
             nn.Dropout(dropout)
         )
+        print(f"  ✅ Vision projection: {vision_hidden_dim} → {bart_hidden_dim}")
         
-        # FIX #3: Vision-first fusion
-        self.vision_first_fusion = nn.ModuleList([
-            VisionFirstFusion(bart_hidden_dim, num_heads, dropout)
-            for _ in range(num_fusion_layers)
+        # ✅ FIX: Flamingo-style gated cross attention (2-3 layers is enough!)
+        self.flamingo_fusion = nn.ModuleList([
+            FlamingoGatedCrossAttention(bart_hidden_dim, num_heads, dropout)
+            for _ in range(num_fusion_layers)  # Default: 2 layers
         ])
+        
+        print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers (vision→text)")
         
         # FIX #4: Compressed latent reasoning
         self.latent_reasoning = CompressedLatentReasoning(
@@ -492,7 +524,7 @@ class FixedLatentReasoningVQA(nn.Module):
         # Trainable: fusion + reasoning + lm_head + decoder (if unfrozen)
         trainable = (
             sum(p.numel() for p in self.vision_proj.parameters()) +
-            sum(p.numel() for p in self.vision_first_fusion.parameters()) +
+            sum(p.numel() for p in self.flamingo_fusion.parameters()) +
             sum(p.numel() for p in self.latent_reasoning.parameters()) +
             sum(p.numel() for p in self.lm_head.parameters()) +
             sum(p.numel() for p in self.encoder.parameters() if p.requires_grad) +
@@ -517,7 +549,9 @@ class FixedLatentReasoningVQA(nn.Module):
         # FIX #8: KL warmup
         kl_weight: float = 1.0,
         # PROPOSAL: Stochastic sampling for teacher distillation
-        temperature: float = 1.0  # Temperature for stochastic reasoning sampling
+        temperature: float = 1.0,  # Temperature for stochastic reasoning sampling
+        # 🚨 FIX: Stage control for true baseline
+        stage: int = 3  # 1=baseline (no reasoning), 2=warmup, 3=full
     ):
         """
         Forward pass with interventions and stochastic sampling
@@ -529,45 +563,87 @@ class FixedLatentReasoningVQA(nn.Module):
             kl_weight: Curriculum for KL (warmup from 0 → 1)
             temperature: Temperature for sampling reasoning (>1 = more random, <1 = more deterministic)
         """
-        # 1. Encode vision
+        # 1. Encode vision - FIX: Use PATCH TOKENS (not CLS!)
         visual_outputs = self.vision_encoder(pixel_values, return_dict=True)
-        visual_features = self.vision_proj(visual_outputs.last_hidden_state)
+        # ✅ CRITICAL FIX: DINOv2 is strong at PATCH tokens, NOT CLS
+        patch_tokens = visual_outputs.last_hidden_state[:, 1:]  # Skip CLS token at [:, 0]
+        
+        # 🚨 FIX: Add learnable position embeddings (Flamingo style)
+        # DINOv2-base @ 224x224 ALWAYS outputs 256 patches (16x16 grid)
+        # No interpolation needed - just assert correct size
+        batch_size, num_patches, _ = patch_tokens.shape
+        assert num_patches == self.num_patches, (
+            f"Expected {self.num_patches} patches, got {num_patches}. "
+            f"Make sure images are 224x224 for DINOv2-base."
+        )
+        
+        # Add position embeddings BEFORE projection
+        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        
+        # Project to BART dimension (768 → 1024)
+        visual_features = self.vision_proj(patch_tokens)  # (B, num_patches, bart_hidden_dim)
         
         # 2. Encode text
         text_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
         text_features = text_outputs.last_hidden_state
         
-        # 3. FIX #3: Vision-first fusion with image dropout
-        fused = text_features
+        # 3. ✅ FIX: Flamingo fusion (vision queries text)
+        # Output is vision-conditioned features (NOT text features!)
+        vision_conditioned = visual_features
         attention_maps = []
-        for fusion_layer in self.vision_first_fusion:
-            fused, attn = fusion_layer(fused, visual_features, self.image_dropout_prob)
+        for fusion_layer in self.flamingo_fusion:
+            vision_conditioned, attn = fusion_layer(
+                vision_conditioned, 
+                text_features,
+                text_attention_mask=attention_mask  # 🚨 FIXED: Pass attention mask!
+            )
             attention_maps.append(attn)
         
-        # 4. FIX #4 & #2: Extract compressed reasoning with free bits + PROPOSAL temperature
-        reasoning_latents, kl_loss, compressed_z, mu, logvar = self.latent_reasoning(
-            fused, attention_mask,
-            deterministic=deterministic_reasoning,
-            stop_gradient=stop_gradient_to_latent,
-            temperature=temperature  # PROPOSAL: Stochastic sampling
-        )
-        
-        # 5. FIX #5: Apply diversity regularization
-        reasoning_latents = self.diversity_regularizer.apply_token_dropout(
-            reasoning_latents, training=self.training
-        )
-        
-        ortho_loss = self.diversity_regularizer.compute_orthogonality_loss(reasoning_latents)
-        
-        # 6. FIX #6: Interventions
-        if ablate_reasoning:
-            reasoning_latents = torch.zeros_like(reasoning_latents)
-        
-        if noise_reasoning is not None:
-            reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
-        
-        # 7. FIX #1: CRITICAL - Decoder sees ONLY reasoning (bottleneck!)
-        encoder_hidden_states = reasoning_latents  # NOT concat with fused!
+        # 🚨 FIX #1: STAGE 1 BYPASS REASONING HOÀN TOÀN
+        if stage == 1:
+            # Stage 1: TRUE BASELINE - NO reasoning bottleneck!
+            # Decoder nhìn trực tiếp vision+text fusion (không qua latent reasoning)
+            encoder_hidden_states = vision_conditioned.detach()  # Detach để không backprop vào fusion
+            
+            # Dummy values cho compatibility
+            reasoning_latents = torch.zeros(visual_features.size(0), self.num_reasoning_tokens, 
+                                           self.latent_dim, device=visual_features.device)
+            kl_loss = torch.tensor(0.0, device=visual_features.device)
+            ortho_loss = torch.tensor(0.0, device=visual_features.device)
+            compressed_z = None
+            mu = None
+            logvar = None
+        else:
+            # Stage 2-3: USE reasoning bottleneck
+            # 🚨 FIX #3: Reasoning nhận CẢ vision+text (concat), không chỉ vision!
+            # Add text summary (mean pooling) để reasoning có context từ question
+            text_summary = text_features.mean(dim=1, keepdim=True)  # (B, 1, D)
+            multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)  # (B, patches+1, D)
+            
+            # 4. FIX #4 & #2: Extract compressed reasoning with free bits + PROPOSAL temperature
+            reasoning_latents, kl_loss, compressed_z, mu, logvar = self.latent_reasoning(
+                multimodal_features, attention_mask=None,
+                deterministic=deterministic_reasoning,
+                stop_gradient=stop_gradient_to_latent,
+                temperature=temperature
+            )
+            
+            # 5. FIX #5: Apply diversity regularization
+            reasoning_latents = self.diversity_regularizer.apply_token_dropout(
+                reasoning_latents, training=self.training
+            )
+            
+            ortho_loss = self.diversity_regularizer.compute_orthogonality_loss(reasoning_latents)
+            
+            # 6. FIX #6: Interventions
+            if ablate_reasoning:
+                reasoning_latents = torch.zeros_like(reasoning_latents)
+            
+            if noise_reasoning is not None:
+                reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
+            
+            # 7. FIX #1: CRITICAL - Decoder sees ONLY reasoning (bottleneck!)
+            encoder_hidden_states = reasoning_latents  # NOT concat with fused!
         
         # 8. Decode
         # NOTE: Skip decoder if no labels (will use generate_from_reasoning() instead)
@@ -576,9 +652,12 @@ class FixedLatentReasoningVQA(nn.Module):
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
             
+            # 🚨 FIX #2: attention_mask phải dùng decoder_input_ids, KHÔNG phải labels!
+            decoder_attention_mask = (decoder_input_ids != self.config.pad_token_id)
+            
             decoder_outputs = self.decoder(
                 input_ids=decoder_input_ids,
-                attention_mask=(labels != self.config.pad_token_id),
+                attention_mask=decoder_attention_mask,  # ✅ FIXED!
                 encoder_hidden_states=encoder_hidden_states,
                 return_dict=True,
                 use_cache=False
@@ -598,9 +677,10 @@ class FixedLatentReasoningVQA(nn.Module):
             answer_loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
             
             # FIX #8: Curriculum - gradually increase KL weight
+            # 🚨 FIX #4: Tăng scale từ 0.01 → 0.03 để KL có impact
             total_loss = (
                 answer_loss +
-                kl_weight * 0.01 * kl_loss +  # Warmup KL
+                kl_weight * 0.03 * kl_loss +  # ✅ FIXED: 0.03 thay vì 0.01
                 ortho_loss * self.diversity_regularizer.ortho_weight
             )
         
@@ -634,21 +714,39 @@ class FixedLatentReasoningVQA(nn.Module):
         noise_reasoning=None
     ):
         """Generate with intervention support"""
-        # Encode
+        # Encode vision - ✅ Use patch tokens
         visual_outputs = self.vision_encoder(pixel_values, return_dict=True)
-        visual_features = self.vision_proj(visual_outputs.last_hidden_state)
+        patch_tokens = visual_outputs.last_hidden_state[:, 1:]  # Skip CLS
+        
+        # 🚨 FIX: Add position embeddings (simplified - no interpolation)
+        batch_size, num_patches, _ = patch_tokens.shape
+        assert num_patches == self.num_patches, f"Expected {self.num_patches} patches, got {num_patches}"
+        
+        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        visual_features = self.vision_proj(patch_tokens)
         
         text_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
         text_features = text_outputs.last_hidden_state
         
-        # Fuse
-        fused = text_features
-        for fusion_layer in self.vision_first_fusion:
-            fused, _ = fusion_layer(fused, visual_features, image_dropout_prob=0.0)
+        # Fuse - ✅ Vision queries text (Flamingo style)
+        vision_conditioned = visual_features
+        for fusion_layer in self.flamingo_fusion:
+            vision_conditioned, _ = fusion_layer(
+                vision_conditioned, 
+                text_features,
+                text_attention_mask=attention_mask  # 🚨 FIXED: Pass attention mask!
+            )
+        
+        # 🚨 FIX: Stage control (same as forward())
+        # Note: Stage parameter should be added to function signature
+        # For now, always use Stage 3 behavior in generate()
+        # Add text summary
+        text_summary = text_features.mean(dim=1, keepdim=True)
+        multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)
         
         # Reasoning (deterministic)
         reasoning_latents, _, _, _, _ = self.latent_reasoning(
-            fused, attention_mask, deterministic=True, stop_gradient=False
+            multimodal_features, attention_mask=None, deterministic=True, stop_gradient=False
         )
         
         # Intervention

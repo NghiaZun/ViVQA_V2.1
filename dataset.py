@@ -9,7 +9,7 @@ class VQAGenDataset(Dataset):
     def __init__(self, csv_path, image_folder,
                  vision_processor,
                  tokenizer_name='vinai/bartpho-syllable',
-                 max_q_len=32, max_a_len=32):
+                 max_q_len=32, max_a_len=10):
 
         self.data = pd.read_csv(csv_path)
         self.image_folder = image_folder
