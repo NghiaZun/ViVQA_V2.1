@@ -42,8 +42,8 @@ class FixedTrainConfig:
     
     # Optimization - ✅ FIXED LR for frozen setup
     base_lr: float = 5e-5
-    fusion_lr: float = 2e-4  # Higher LR for fusion layers (trainable)
-    decoder_lr: float = 1e-4  # Higher LR for decoder (trainable)
+    fusion_lr: float = 5e-4  # 🚨 INCREASED: 2e-4 → 5e-4 (fusion needs higher LR)
+    decoder_lr: float = 2e-4  # 🚨 INCREASED: 1e-4 → 2e-4 (decoder needs to learn)
     encoder_lr: float = 5e-6  # Lower LR for encoder finetuning
     weight_decay: float = 0.05
     max_grad_norm: float = 1.0

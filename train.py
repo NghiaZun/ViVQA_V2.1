@@ -45,8 +45,8 @@ def main():
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--teacher_type", type=str, default="rule_based", 
                        choices=["rule_based", "vlm"])
-    parser.add_argument("--stage1_epochs", type=int, default=5)
-    parser.add_argument("--stage2_epochs", type=int, default=10)
+    parser.add_argument("--stage1_epochs", type=int, default=0)  # 🚨 SKIP Stage 1 - too restrictive
+    parser.add_argument("--stage2_epochs", type=int, default=15)  # Extended warmup
     parser.add_argument("--stage3_epochs", type=int, default=20)
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
     parser.add_argument("--max_kl_weight", type=float, default=15.0,
