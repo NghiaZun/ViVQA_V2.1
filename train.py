@@ -198,23 +198,25 @@ def main():
         # Determine current stage
         current_stage = get_current_stage(epoch, args.stage1_epochs, args.stage2_epochs)
         
-        # 🚨 CRITICAL: Freeze/unfreeze decoder based on stage
+        # 🚨 CRITICAL: Adjust learning rates based on stage (not hard freeze!)
+        # Stage 1: LR=0 for decoder (no update but gradient flows)
+        # Stage 2+: Normal LR for decoder
         if current_stage == 1:
-            # Stage 1: Freeze decoder (only train fusion)
-            for name, param in model.named_parameters():
-                if 'decoder' in name or 'lm_head' in name:
-                    param.requires_grad = False
+            # Set decoder LR to 0 (no weight update but allows gradient flow)
+            for param_group in optimizer.param_groups:
+                if param_group['name'] == 'decoder':
+                    param_group['lr'] = 0.0
         else:
-            # Stage 2+: Unfreeze decoder
-            for name, param in model.named_parameters():
-                if 'decoder' in name or 'lm_head' in name:
-                    param.requires_grad = True
+            # Restore decoder LR for Stage 2+
+            for param_group in optimizer.param_groups:
+                if param_group['name'] == 'decoder':
+                    param_group['lr'] = cfg.decoder_lr * scheduler.get_last_lr()[0] / cfg.base_lr
         
         # Stage transition announcements
         if epoch == 0:
             print("\n" + "="*80)
             print("🔵 STAGE 1: BASELINE (No Reasoning)")
-            print("🔒 Decoder FROZEN (only train fusion)")
+            print("🔒 Decoder LR=0 (gradient flows, no update)")
             print("="*80 + "\n")
         elif epoch == stage1_end:
             print("\n" + "="*80)
