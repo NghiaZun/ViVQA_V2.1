@@ -55,8 +55,10 @@ class FixedTrainConfig:
     latent_dim: int = 256
     num_reasoning_layers: int = 2
     num_fusion_layers: int = 2
-    free_bits: float = 0.02  # 🚨 CRITICAL FIX: 0.1→0.02 (penalty_reduction=20-40%)
-    # OLD: 0.1 made ALL KL free! NEW: 0.02 → kl_after=0.03 when kl_raw=0.05 ✅
+    free_bits: float = 0.005  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02, not 0.05!)
+    # Observation: KLr=0.02-0.024 (lower than expected 0.05-0.08)
+    # With free_bits=0.02, fb%=91% (too high!) → Reduce to 0.005 for fb%=20-30%
+    # New calculation: KLr=0.022, free_bits=0.005 → KLa=0.017, fb%=23% ✅
     ortho_weight: float = 0.1
     token_dropout_prob: float = 0.3
     unfreeze_encoder_layers: int = 0

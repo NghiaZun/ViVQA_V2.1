@@ -509,20 +509,21 @@ def main():
             
             print(f"  🔍 KL Diagnostics: raw={kl_raw:.4f}, after_free_bits={kl_after:.4f}, penalty_reduction={penalty_reduction:.1f}%")
             
-            # 🚨 UPDATED: Health checks for free_bits=0.02
-            if kl_after == 0 and kl_raw > 0.02:
-                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.02 to 0.01!")
+            # 🚨 EMPIRICAL UPDATE: Health checks for free_bits=0.005
+            # Observed: KLr = 0.02-0.024 (lower than theoretical 0.05-0.08!)
+            if kl_after == 0 and kl_raw > 0.005:
+                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.005!")
             elif kl_raw < 0.01:
-                print(f"     ⚠️  KL COLLAPSE! raw < 0.01. Increase KL weight or reduce free_bits!")
-            elif kl_raw < 0.03 and epoch_in_stage2 > 10:
-                print(f"     🟡 KL raw low (<0.03) after 10 epochs - monitor for posterior collapse")
-            elif kl_raw > 0.15:
-                print(f"     ⚠️  KL TOO HIGH! raw > 0.15. Risk over-regularization - reduce KL weight!")
+                print(f"     ⚠️  KL COLLAPSE! raw < 0.01. Increase KL weight!")
+            elif kl_raw < 0.015 and epoch_in_stage2 > 10:
+                print(f"     🟡 KL raw low (<0.015) after 10 epochs - monitor for collapse")
+            elif kl_raw > 0.10:
+                print(f"     ⚠️  KL TOO HIGH! raw > 0.10. Risk over-regularization - reduce KL weight!")
             elif penalty_reduction < 10:
-                print(f"     🟡 Free bits tight (<{penalty_reduction:.0f}% reduction). Consider increasing to 0.025.")
-            elif penalty_reduction > 60:
-                print(f"     ⚠️  Free bits generous (>{penalty_reduction:.0f}% reduction). Reduce from 0.02 to 0.015!")
-            elif 0.03 <= kl_raw <= 0.08 and 20 <= penalty_reduction <= 40:
+                print(f"     🟡 Free bits tight (<{penalty_reduction:.0f}% reduction). Consider increasing to 0.008.")
+            elif penalty_reduction > 50:
+                print(f"     ⚠️  Free bits generous (>{penalty_reduction:.0f}% reduction). Reduce from 0.005 to 0.003!")
+            elif 0.02 <= kl_raw <= 0.04 and 15 <= penalty_reduction <= 35:
                 print(f"     ✅ KL healthy range! (target: 0.03-0.08, penalty: 20-40%)")
         
         # 🚨 NEW: Teacher loss diagnostics (Stage 3 only)

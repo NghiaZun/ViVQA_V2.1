@@ -138,10 +138,9 @@ class CompressedLatentReasoning(nn.Module):
         num_heads: int = 8,
         num_layers: int = 2,
         dropout: float = 0.1,
-        free_bits: float = 0.02,  # 🚨 CRITICAL FIX: 0.1→0.02 (for penalty_reduction=20-40%)
-        # Analysis: kl_raw~0.05 (MEAN over dims), free_bits=0.02 → kl_after=0.03
-        #           penalty_reduction = (0.05-0.03)/0.05 = 40% ✅ Target range!
-        #           Old value 0.1 made ALL KL free (penalty_red=100%)!
+        free_bits: float = 0.005,  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02!)
+        # Empirical observation: KLr=0.02-0.024 (not 0.05-0.08 as expected)
+        # With free_bits=0.005: KLr=0.022 → KLa=0.017 → fb%=23% ✅ Target!
     ):
         super().__init__()
         self.num_tokens = num_tokens
@@ -202,13 +201,15 @@ class CompressedLatentReasoning(nn.Module):
         
         🚨 CRITICAL: Free bits calculation
         - KL computed as MEAN over latent_dim → typical value ~0.01-0.05 per token
-        - Free bits should be VERY SMALL (0.01-0.03) to allow penalty
-        - OLD: free_bits=0.1 made ALL KL free (kl_after=0)!
-        - NEW: free_bits=0.02 → penalty_reduction=20-40% ✅
+        - 🚨 EMPIRICAL UPDATE: Actual KLr observed = 0.02-0.024 (lower than theory!)
+        - Free bits adjusted to 0.005 (not 0.02) to achieve target penalty_reduction
         
-        Example with free_bits=0.02:
-            kl_raw=0.05 → kl_after=max(0.05-0.02, 0)=0.03 → reduction=40% ✅
-            kl_raw=0.08 → kl_after=max(0.08-0.02, 0)=0.06 → reduction=25% ✅
+        Example with free_bits=0.005:
+            kl_raw=0.022 → kl_after=max(0.022-0.005, 0)=0.017 → reduction=23% ✅
+            kl_raw=0.024 → kl_after=max(0.024-0.005, 0)=0.019 → reduction=21% ✅
+        
+        OLD values (theoretical, not matching reality):
+            kl_raw=0.05 → kl_after=0.03 → reduction=40% (theoretical)
         """
         # Standard KL per dimension: -0.5 * (1 + logvar - mu^2 - exp(logvar))
         # Use MEAN over latent_dim (not SUM) to avoid scaling by dimension size
