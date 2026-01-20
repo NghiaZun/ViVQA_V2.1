@@ -55,7 +55,7 @@ class FixedTrainConfig:
     latent_dim: int = 256
     num_reasoning_layers: int = 2
     num_fusion_layers: int = 2
-    free_bits: float = 0.005  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02, not 0.05!)
+    free_bits: float = 0.008  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02, not 0.05!)
     # Observation: KLr=0.02-0.024 (lower than expected 0.05-0.08)
     # With free_bits=0.02, fb%=91% (too high!) → Reduce to 0.005 for fb%=20-30%
     # New calculation: KLr=0.022, free_bits=0.005 → KLa=0.017, fb%=23% ✅
@@ -137,6 +137,17 @@ def run_one_epoch(
             )
             
             loss = outputs.total_loss
+            
+            # 🚨 NEW: NaN detection and early abort
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"\n❌ NaN/Inf detected at batch {batch_idx}!")
+                print(f"   Answer loss: {outputs.answer_loss.item() if outputs.answer_loss is not None else 'N/A'}")
+                print(f"   KL loss: {outputs.kl_loss.item() if outputs.kl_loss is not None else 'N/A'}")
+                print(f"   KL raw: {outputs.kl_loss_raw.item() if outputs.kl_loss_raw is not None else 'N/A'}")
+                print(f"   Ortho loss: {outputs.ortho_loss.item() if outputs.ortho_loss is not None else 'N/A'}")
+                print(f"   KL weight: {kl_weight:.4f}")
+                print(f"   Stage: {stage}")
+                raise RuntimeError(f"Training stopped due to NaN/Inf loss at batch {batch_idx}")
             
             # Teacher distillation (Stage 3 only)
             teacher_loss = torch.tensor(0.0, device=device)

@@ -183,8 +183,8 @@ def main():
     parser.add_argument("--stage2_epochs", type=int, default=15)  # Extended warmup
     parser.add_argument("--stage3_epochs", type=int, default=20)
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
-    parser.add_argument("--max_kl_weight", type=float, default=15.0,
-                       help="Max KL weight (15.0 with 0.01 factor → effective 0.15)")
+    parser.add_argument("--max_kl_weight", type=float, default=0.6,
+                       help="🚨 REDUCED: 7.5→0.6 (slow KL warmup, vision FROZEN)")
     parser.add_argument("--early_stopping_patience", type=int, default=5,
                        help="Stop if val loss doesn't improve for N epochs")
     
@@ -384,21 +384,20 @@ def main():
                 # Direct to Stage 2
                 print("\n" + "="*80)
                 print("🟡 STAGE 2: WARMUP (Reasoning KL Warmup)")
-                print("🎯 Strategy: Freeze vision encoder first 3 epochs for stability")
+                print("🎯 Strategy: Keep vision encoder FROZEN (DINOv2 + small dataset)")
                 print("="*80 + "\n")
                 curriculum.warmup_epochs = 0
         elif epoch == stage1_end and stage1_end > 0:
             print("\n" + "="*80)
             print("🟡 STAGE 2: WARMUP (Reasoning KL Warmup)")
-            print("🎯 Strategy: Freeze vision encoder first 3 epochs for stability")
+            print("🎯 Strategy: Keep vision encoder FROZEN (DINOv2 + small dataset)")
             print("="*80 + "\n")
             curriculum.warmup_epochs = 0  # Track warmup progress
-        elif epoch == stage1_end + 3:
-            # 🚨 NEW: Unfreeze vision encoder after 3 epochs of Stage 2
-            print("\n" + "🔓 UNFREEZING VISION ENCODER (Stage 2, Epoch 3)")
-            for param in model.vision_encoder.parameters():
-                param.requires_grad = True
-            print("    → Vision encoder now trainable for fine-tuning\n")
+        # ❌ REMOVED: Vision unfreezing (causes gradient explosion with DINOv2)
+        # elif epoch == stage1_end + 3:
+        #     for param in model.vision_encoder.parameters():
+        #         param.requires_grad = True
+        # 👉 Vision stays FROZEN throughout training (correct for 11-15K samples)
         elif epoch == stage2_end:
             print("\n" + "="*80)
             print("🟢 STAGE 3: FULL (Complete + Teacher)")

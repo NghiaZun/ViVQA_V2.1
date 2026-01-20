@@ -814,6 +814,8 @@ class FixedLatentReasoningVQA(nn.Module):
             pad_token_id=self.config.pad_token_id,
             eos_token_id=self.config.eos_token_id,
             bos_token_id=self.tokenizer.bos_token_id,
+            repetition_penalty=1.2, 
+            no_repeat_ngram_size=2,
             use_cache=True
         )
         
@@ -1167,7 +1169,7 @@ class TrainingCurriculum:
     Stage 2: Warmup reasoning (KL warmup, no teacher)
     Stage 3: Full (with teacher)
     """
-    def __init__(self, total_steps_per_stage: int = 1000, max_kl_weight: float = 15.0):
+    def __init__(self, total_steps_per_stage: int = 1000, max_kl_weight: float = 6.0):
         """
         Args:
             total_steps_per_stage: Total steps for ENTIRE STAGE 2 (not per epoch!)
@@ -1186,7 +1188,14 @@ class TrainingCurriculum:
         if stage == 1:
             return 0.0
         elif stage == 2:
-            return self.max_kl_weight * epoch_progress  # Linear warmup
+            # 🚨 SAFE: Smoother warmup with sqrt + max=0.6 (vision FROZEN)
+            # With max_kl_weight=0.6:
+            #   Epoch 5: sqrt(5/15) * 0.6 = 0.35
+            #   Epoch 10: sqrt(10/15) * 0.6 = 0.49
+            #   Epoch 15: sqrt(15/15) * 0.6 = 0.6
+            # Effective weight = kl_weight × 0.2 (KL factor) → Max 0.12 ✅
+            import math
+            return self.max_kl_weight * math.sqrt(epoch_progress)  # Smoother warmup
         else:
             return self.max_kl_weight    
     def get_stop_gradient(self, stage: int):
