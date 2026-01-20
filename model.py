@@ -138,7 +138,10 @@ class CompressedLatentReasoning(nn.Module):
         num_heads: int = 8,
         num_layers: int = 2,
         dropout: float = 0.1,
-        free_bits: float = 0.5,  # FIX #2: Prevent collapse
+        free_bits: float = 0.02,  # 🚨 CRITICAL FIX: 0.1→0.02 (for penalty_reduction=20-40%)
+        # Analysis: kl_raw~0.05 (MEAN over dims), free_bits=0.02 → kl_after=0.03
+        #           penalty_reduction = (0.05-0.03)/0.05 = 40% ✅ Target range!
+        #           Old value 0.1 made ALL KL free (penalty_red=100%)!
     ):
         super().__init__()
         self.num_tokens = num_tokens
@@ -196,6 +199,16 @@ class CompressedLatentReasoning(nn.Module):
         Shape:
             mu, logvar: [batch_size, num_tokens, latent_dim]
             output: scalar (mean over batch)
+        
+        🚨 CRITICAL: Free bits calculation
+        - KL computed as MEAN over latent_dim → typical value ~0.01-0.05 per token
+        - Free bits should be VERY SMALL (0.01-0.03) to allow penalty
+        - OLD: free_bits=0.1 made ALL KL free (kl_after=0)!
+        - NEW: free_bits=0.02 → penalty_reduction=20-40% ✅
+        
+        Example with free_bits=0.02:
+            kl_raw=0.05 → kl_after=max(0.05-0.02, 0)=0.03 → reduction=40% ✅
+            kl_raw=0.08 → kl_after=max(0.08-0.02, 0)=0.06 → reduction=25% ✅
         """
         # Standard KL per dimension: -0.5 * (1 + logvar - mu^2 - exp(logvar))
         # Use MEAN over latent_dim (not SUM) to avoid scaling by dimension size
@@ -203,8 +216,8 @@ class CompressedLatentReasoning(nn.Module):
         # kl_per_token shape: [batch_size, num_tokens]
         
         # Free bits: only penalize if KL > free_bits (per token)
-        # With MEAN computation, typical KL ~ 0.1-0.5, so free_bits should be small
-        # Set to 0.0 to disable (warmup schedule handles collapse prevention)
+        # 🚨 CRITICAL FIX: Free bits=0.02 (not 0.1!)
+        # With kl_raw~0.05, free_bits=0.02 → kl_after=0.03 → penalty_red=40% ✅
         if self.free_bits > 0:
             kl_per_token = torch.clamp(kl_per_token - self.free_bits, min=0.0)
         
@@ -242,22 +255,34 @@ class CompressedLatentReasoning(nn.Module):
         mu = self.to_mu(compressed)
         logvar = self.to_logvar(compressed)
         
-        if deterministic or not self.training:
+        # 🚨 CLARIFIED: deterministic takes priority over self.training
+        # Priority: deterministic > self.training > temperature
+        if deterministic:
+            # Fully deterministic - use mean only (for testing interventions)
             z = mu
-        else:
-            # PROPOSAL: Stochastic sampling with temperature
-            # Higher temperature = more exploration of reasoning space
+        elif not self.training:
+            # Validation - low temperature sampling (explore but stable)
+            # Note: temperature passed from train_utils (0.5 for val, 0.6 for train)
             std = torch.exp(0.5 * logvar)
             eps = torch.randn_like(std)
-            z = mu + temperature * std * eps  # Temperature-scaled sampling
+            z = mu + temperature * std * eps  # Use val temperature (0.5)
+        else:
+            # Training - use specified temperature for exploration
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            z = mu + temperature * std * eps  # Use train temperature (0.6)
         
         # FIX #2: KL with free bits
+        # 🚨 NEW: Compute raw KL first for monitoring
+        kl_per_token_raw = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
+        kl_loss_raw = kl_per_token_raw.mean()
+        
         kl_loss = self.compute_kl_with_free_bits(mu, logvar)
         
         # Expand back to input_dim
         reasoning_output = self.from_latent(z)
         
-        return reasoning_output, kl_loss, z, mu, logvar
+        return reasoning_output, kl_loss, z, mu, logvar, kl_loss_raw  # 🚨 NEW: Return raw KL
 
 
 # ============================================================================
@@ -362,6 +387,7 @@ class FixedVQAOutput:
     reasoning_compressed: torch.Tensor  # The actual bottleneck
     answer_loss: Optional[torch.Tensor] = None
     kl_loss: Optional[torch.Tensor] = None
+    kl_loss_raw: Optional[torch.Tensor] = None  # 🚨 NEW: Raw KL before free bits
     ortho_loss: Optional[torch.Tensor] = None
     total_loss: Optional[torch.Tensor] = None
     diversity_metrics: Optional[dict] = None
@@ -609,6 +635,7 @@ class FixedLatentReasoningVQA(nn.Module):
             reasoning_latents = torch.zeros(visual_features.size(0), self.num_reasoning_tokens, 
                                            self.latent_dim, device=visual_features.device)
             kl_loss = torch.tensor(0.0, device=visual_features.device)
+            kl_loss_raw = torch.tensor(0.0, device=visual_features.device)  # 🚨 NEW
             ortho_loss = torch.tensor(0.0, device=visual_features.device)
             compressed_z = None
             mu = None
@@ -621,7 +648,7 @@ class FixedLatentReasoningVQA(nn.Module):
             multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)  # (B, patches+1, D)
             
             # 4. FIX #4 & #2: Extract compressed reasoning with free bits + PROPOSAL temperature
-            reasoning_latents, kl_loss, compressed_z, mu, logvar = self.latent_reasoning(
+            reasoning_latents, kl_loss, compressed_z, mu, logvar, kl_loss_raw = self.latent_reasoning(
                 multimodal_features, attention_mask=None,
                 deterministic=deterministic_reasoning,
                 stop_gradient=stop_gradient_to_latent,
@@ -677,10 +704,12 @@ class FixedLatentReasoningVQA(nn.Module):
             answer_loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
             
             # FIX #8: Curriculum - gradually increase KL weight
-            # 🚨 FIX #4: Tăng scale từ 0.01 → 0.03 để KL có impact
+            # 🚨 CRITICAL FIX: Tăng KL factor để cân bằng với answer_loss
+            # Target: answer_loss ~0.3, kl_loss ~0.1 → cần KL weight ~3.0 để balance
+            # Với max_kl_weight=15 → effective = 15 * 0.2 = 3.0 ✅
             total_loss = (
                 answer_loss +
-                kl_weight * 0.03 * kl_loss +  # ✅ FIXED: 0.03 thay vì 0.01
+                kl_weight * 0.2 * kl_loss +  # ✅ FIXED: 0.2 (thay vì 0.03) để KL có impact mạnh!
                 ortho_loss * self.diversity_regularizer.ortho_weight
             )
         
@@ -695,6 +724,7 @@ class FixedLatentReasoningVQA(nn.Module):
             reasoning_compressed=compressed_z,
             answer_loss=answer_loss,
             kl_loss=kl_loss,
+            kl_loss_raw=kl_loss_raw,  # 🚨 NEW: Include raw KL for monitoring
             ortho_loss=ortho_loss,
             total_loss=total_loss,
             diversity_metrics=diversity_metrics,
@@ -711,9 +741,16 @@ class FixedLatentReasoningVQA(nn.Module):
         num_beams=4,
         # FIX #6: Intervention during generation
         ablate_reasoning=False,
-        noise_reasoning=None
+        noise_reasoning=None,
+        stage: int = 3  # ✅ FIXED: Add stage parameter (default Stage 3)
     ):
-        """Generate with intervention support"""
+        """
+        Generate with intervention support and stage control
+        
+        Args:
+            stage: Training stage (1=baseline, 2=warmup, 3=full)
+                   Default 3 for inference. Must match training stage!
+        """
         # Encode vision - ✅ Use patch tokens
         visual_outputs = self.vision_encoder(pixel_values, return_dict=True)
         patch_tokens = visual_outputs.last_hidden_state[:, 1:]  # Skip CLS
@@ -737,27 +774,29 @@ class FixedLatentReasoningVQA(nn.Module):
                 text_attention_mask=attention_mask  # 🚨 FIXED: Pass attention mask!
             )
         
-        # 🚨 FIX: Stage control (same as forward())
-        # Note: Stage parameter should be added to function signature
-        # For now, always use Stage 3 behavior in generate()
-        # Add text summary
-        text_summary = text_features.mean(dim=1, keepdim=True)
-        multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)
-        
-        # Reasoning (deterministic)
-        reasoning_latents, _, _, _, _ = self.latent_reasoning(
-            multimodal_features, attention_mask=None, deterministic=True, stop_gradient=False
-        )
-        
-        # Intervention
-        if ablate_reasoning:
-            reasoning_latents = torch.zeros_like(reasoning_latents)
-        
-        if noise_reasoning is not None:
-            reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
-        
-        # FIX #1: Only reasoning to decoder
-        encoder_hidden_states = reasoning_latents
+        # 🚨 FIXED: Stage control (consistent with forward())
+        if stage == 1:
+            # Stage 1: TRUE BASELINE - NO reasoning bottleneck!
+            encoder_hidden_states = vision_conditioned
+        else:
+            # Stage 2-3: USE reasoning bottleneck
+            # Add text summary (same as forward())
+            text_summary = text_features.mean(dim=1, keepdim=True)
+            multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)
+            
+            # Reasoning (deterministic for generation)
+            reasoning_latents, _, _, _, _, _ = self.latent_reasoning(
+                multimodal_features, attention_mask=None, deterministic=True, stop_gradient=False
+            )
+            
+            # Intervention
+            if ablate_reasoning:
+                reasoning_latents = torch.zeros_like(reasoning_latents)
+            
+            if noise_reasoning is not None:
+                reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
+            
+            encoder_hidden_states = reasoning_latents
         
         # Generate
         batch_size = pixel_values.size(0)
@@ -1133,31 +1172,22 @@ class TrainingCurriculum:
             total_steps_per_stage: Total steps for ENTIRE STAGE 2 (not per epoch!)
                                   Should be: batches_per_epoch * num_stage2_epochs
             max_kl_weight: Maximum KL weight (default 15.0)
-                          Note: Loss uses `kl_weight * 0.01 * kl_loss`
-                          So effective weight = 15.0 * 0.01 = 0.15
-                          Target KL contribution: ~0.05-0.1
+                          Note: Loss uses `kl_weight * 0.2 * kl_loss` (UPDATED!)
+                          So effective weight = 15.0 * 0.2 = 3.0
+                          Target KL contribution: ~0.3 (cân bằng với answer_loss ~0.3)
         """
         self.total_steps = total_steps_per_stage
         self.current_step = 0
         self.max_kl_weight = max_kl_weight
+        self.warmup_epochs = 0  # Track epochs for smoother warmup
     
-    def get_kl_weight(self, stage: int):
-        """
-        FIX #2: KL warmup to prevent collapse
-        
-        Stage 1: KL = 0 (no reasoning)
-        Stage 2: KL = 0 → max_kl_weight (gradual warmup)
-        Stage 3: KL = max_kl_weight (full)
-        """
+    def get_kl_weight(self, stage: int, epoch_progress: float = 1.0):
         if stage == 1:
             return 0.0
         elif stage == 2:
-            # Linear warmup to max_kl_weight
-            progress = min(self.current_step / self.total_steps, 1.0)
-            return progress * self.max_kl_weight
-        else:  # stage 3
-            return self.max_kl_weight
-    
+            return self.max_kl_weight * epoch_progress  # Linear warmup
+        else:
+            return self.max_kl_weight    
     def get_stop_gradient(self, stage: int):
         """
         FIX #2: Stop gradient in early stages

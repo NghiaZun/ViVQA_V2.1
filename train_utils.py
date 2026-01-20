@@ -43,7 +43,7 @@ class FixedTrainConfig:
     # Optimization - ✅ FIXED LR for frozen setup
     base_lr: float = 5e-5
     fusion_lr: float = 5e-4  # 🚨 INCREASED: 2e-4 → 5e-4 (fusion needs higher LR)
-    decoder_lr: float = 2e-4  # 🚨 INCREASED: 1e-4 → 2e-4 (decoder needs to learn)
+    decoder_lr: float = 5e-4  # 🚨 CRITICAL FIX: 2e-4 → 5e-4 (decoder cần học NHANH để adapt reasoning!)
     encoder_lr: float = 5e-6  # Lower LR for encoder finetuning
     weight_decay: float = 0.05
     max_grad_norm: float = 1.0
@@ -55,7 +55,8 @@ class FixedTrainConfig:
     latent_dim: int = 256
     num_reasoning_layers: int = 2
     num_fusion_layers: int = 2
-    free_bits: float = 0.05
+    free_bits: float = 0.02  # 🚨 CRITICAL FIX: 0.1→0.02 (penalty_reduction=20-40%)
+    # OLD: 0.1 made ALL KL free! NEW: 0.02 → kl_after=0.03 when kl_raw=0.05 ✅
     ortho_weight: float = 0.1
     token_dropout_prob: float = 0.3
     unfreeze_encoder_layers: int = 0
@@ -63,9 +64,10 @@ class FixedTrainConfig:
     # Teacher distillation
     use_teacher: bool = False
     teacher_type: str = 'rule_based'
-    teacher_weight: float = 0.5
+    teacher_weight: float = 0.3  # 🚨 REFINED: 0.5→0.3 (giảm coupling với KL + high decoder LR)
     num_reasoning_samples: int = 5
-    reasoning_temperature: float = 0.7
+    reasoning_temperature: float = 0.6  # 🚨 CRITICAL: Train temp=0.6 (exploration), Val=0.5 (deterministic)
+    reasoning_temperature_val: float = 0.5  # 🚨 NEW: Separate temp for validation
     preference_margin: float = 0.1
     
     # Early stopping
@@ -92,6 +94,7 @@ def run_one_epoch(
     total_loss = 0.0
     answer_loss_sum = 0.0
     kl_loss_sum = 0.0
+    kl_loss_raw_sum = 0.0  # 🚨 NEW: Track raw KL before free bits
     ortho_loss_sum = 0.0
     teacher_loss_sum = 0.0
     num_batches = 0
@@ -111,6 +114,12 @@ def run_one_epoch(
         kl_weight = curriculum.get_kl_weight(stage)
         stop_grad = curriculum.get_stop_gradient(stage)
         
+        # 🚨 CLARIFIED: Temperature handling
+        # Train: deterministic=False, temperature=0.6 (exploration)
+        # Val:   deterministic=False, temperature=0.5 (lower noise, more stable)
+        # Note: deterministic=True only for intervention tests (not during training/val)
+        temperature = cfg.reasoning_temperature if train else cfg.reasoning_temperature_val
+        
         with autocast(device_type='cuda', enabled=cfg.use_amp):
             # 🚨 CRITICAL: Pass stage parameter for Stage 1 bypass!
             outputs = model(
@@ -121,6 +130,7 @@ def run_one_epoch(
                 deterministic_reasoning=not train,
                 stop_gradient_to_latent=stop_grad,
                 kl_weight=kl_weight,
+                temperature=temperature,  # 🚨 NEW: Use train/val-specific temperature
                 stage=stage  # 🚨 FIXED!
             )
             
@@ -137,46 +147,55 @@ def run_one_epoch(
                     gt = model.tokenizer.decode(label_ids, skip_special_tokens=True).strip()
                     ground_truths.append(gt)
                 
-                # Sample multiple reasoning paths
-                candidate_outputs = []
-                candidate_answers = []
+                # 🚨 OPTIMIZED: Sample all reasoning paths in single forward pass
+                # Old: Loop num_samples times → B × N forward passes
+                # New: Expand batch → single forward with (B × N) batch size
+                batch_size = pixel_values.size(0)
+                num_samples = cfg.num_reasoning_samples
                 
-                for sample_idx in range(cfg.num_reasoning_samples):
-                    sample_out = model(
-                        pixel_values=pixel_values,
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        labels=None,
-                        deterministic_reasoning=False,
-                        temperature=cfg.reasoning_temperature,
-                        stop_gradient_to_latent=stop_grad,
-                        kl_weight=0.0,
-                        stage=stage  # 🚨 FIXED!
+                # Expand inputs: [B, ...] → [B * N, ...]
+                expanded_pixels = pixel_values.repeat_interleave(num_samples, dim=0)
+                expanded_input_ids = input_ids.repeat_interleave(num_samples, dim=0)
+                expanded_attention_mask = attention_mask.repeat_interleave(num_samples, dim=0)
+                
+                # Single forward for all samples
+                sample_out = model(
+                    pixel_values=expanded_pixels,
+                    input_ids=expanded_input_ids,
+                    attention_mask=expanded_attention_mask,
+                    labels=None,
+                    deterministic_reasoning=False,
+                    temperature=cfg.reasoning_temperature,
+                    stop_gradient_to_latent=stop_grad,
+                    kl_weight=0.0,
+                    stage=stage
+                )
+                
+                # Generate answers from all samples at once
+                with torch.no_grad():
+                    all_answers = model.generate_from_reasoning(
+                        reasoning_latents=sample_out.reasoning_latents,
+                        max_length=10,
+                        num_beams=1
                     )
-                    
-                    with torch.no_grad():
-                        answers = model.generate_from_reasoning(
-                            reasoning_latents=sample_out.reasoning_latents,
-                            max_length=10,
-                            num_beams=1
-                        )
-                    
-                    candidate_outputs.append(sample_out)
-                    candidate_answers.append(answers)
                 
-                # Teacher evaluates
+                # Reshape back to [B, N]
+                candidate_answers = []
+                for i in range(batch_size):
+                    answers_for_example = all_answers[i * num_samples:(i + 1) * num_samples]
+                    candidate_answers.append(answers_for_example)
+                
+                # Teacher evaluates (still per-example for scoring)
                 batch_teacher_losses = []
                 
-                for batch_i in range(len(ground_truths)):
-                    answers_for_example = [
-                        candidate_answers[sample_idx][batch_i]
-                        for sample_idx in range(cfg.num_reasoning_samples)
-                    ]
+                for batch_i in range(batch_size):
+                    # Get N answers for this example
+                    answers_for_example = candidate_answers[batch_i]
                     
                     teacher_scores = teacher_evaluator.evaluate_answers(
                         answers_for_example,
-                        [ground_truths[batch_i]] * cfg.num_reasoning_samples,
-                        images=pixel_values[batch_i:batch_i+1].repeat(cfg.num_reasoning_samples, 1, 1, 1) if cfg.teacher_type == 'vlm' else None,
+                        [ground_truths[batch_i]] * num_samples,
+                        images=pixel_values[batch_i:batch_i+1].repeat(num_samples, 1, 1, 1) if cfg.teacher_type == 'vlm' else None,
                         questions=None
                     )
                     
@@ -209,32 +228,47 @@ def run_one_epoch(
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                
-                # 🚨 REMOVED scheduler.step() - step once per epoch in main loop!
-                
-                curriculum.step()
         
         # Accumulate
         total_loss += loss.item() * cfg.accum_steps if train else loss.item()
         answer_loss_sum += outputs.answer_loss.item() if outputs.answer_loss is not None else 0
         kl_loss_sum += outputs.kl_loss.item() if outputs.kl_loss is not None else 0
+        kl_loss_raw_sum += outputs.kl_loss_raw.item() if outputs.kl_loss_raw is not None else 0  # 🚨 NEW
         ortho_loss_sum += outputs.ortho_loss.item() if outputs.ortho_loss is not None else 0
         teacher_loss_sum += teacher_loss.item() if isinstance(teacher_loss, torch.Tensor) else 0
         num_batches += 1
         
-        pbar.set_postfix({
-            'L': f"{loss.item() * cfg.accum_steps if train else loss.item():.3f}",
-            'A': f"{outputs.answer_loss.item():.3f}",
-            'KL': f"{outputs.kl_loss.item():.3f}",
-            'O': f"{outputs.ortho_loss.item():.3f}",
-            'T': f"{teacher_loss.item():.3f}",
-            'KLw': f"{kl_weight * 0.03:.4f}"  # 🚨 FIXED: Log effective weight (×0.03)
-        })
+        # 🚨 FIXED: Realtime KL diagnostics in progress bar
+        if hasattr(outputs, 'kl_loss_raw') and outputs.kl_loss_raw is not None:
+            kl_raw_value = outputs.kl_loss_raw.item()
+            kl_after_value = outputs.kl_loss.item() if outputs.kl_loss is not None else 0
+            penalty_red = ((kl_raw_value - kl_after_value) / kl_raw_value * 100) if kl_raw_value > 1e-6 else 0
+            
+            pbar.set_postfix({
+                'L': f"{loss.item() * cfg.accum_steps if train else loss.item():.3f}",
+                'A': f"{outputs.answer_loss.item():.3f}",
+                'KLr': f"{kl_raw_value:.3f}",  # Raw KL before free bits
+                'KLa': f"{kl_after_value:.3f}",  # After free bits
+                'fb%': f"{penalty_red:.0f}%",  # Free bits reduction
+                'T': f"{teacher_loss.item():.3f}",
+                'KLw': f"{kl_weight * 0.2:.4f}"
+            })
+        else:
+            # Fallback
+            pbar.set_postfix({
+                'L': f"{loss.item() * cfg.accum_steps if train else loss.item():.3f}",
+                'A': f"{outputs.answer_loss.item():.3f}",
+                'KL': f"{outputs.kl_loss.item():.3f}",
+                'O': f"{outputs.ortho_loss.item():.3f}",
+                'T': f"{teacher_loss.item():.3f}",
+                'KLw': f"{kl_weight * 0.2:.4f}"
+            })
     
     return {
         'total': total_loss / num_batches,
         'answer': answer_loss_sum / num_batches,
         'kl': kl_loss_sum / num_batches,
+        'kl_raw': kl_loss_raw_sum / num_batches,  # 🚨 NEW: Include raw KL
         'ortho': ortho_loss_sum / num_batches,
         'teacher': teacher_loss_sum / num_batches
     }
