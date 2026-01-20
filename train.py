@@ -334,7 +334,12 @@ def main():
     
     # 🚨 NEW: CSV logging for training curves
     csv_log_path = os.path.join(cfg.save_dir, 'training_log.csv')
-    csv_file = open(csv_log_path, 'w', newline='')
+    # Ensure save directory exists before opening the log file
+    os.makedirs(cfg.save_dir, exist_ok=True)
+    try:
+        csv_file = open(csv_log_path, 'w', newline='')
+    except Exception as e:
+        raise RuntimeError(f"Failed to open CSV log file at {csv_log_path}: {e}")
     csv_writer = csv.writer(csv_file)
     csv_writer.writerow([
         'epoch', 'stage', 
