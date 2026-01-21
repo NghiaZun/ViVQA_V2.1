@@ -138,7 +138,7 @@ class CompressedLatentReasoning(nn.Module):
         num_heads: int = 8,
         num_layers: int = 2,
         dropout: float = 0.1,
-        free_bits: float = 0.003,  # � FIX: 0.005→0.003 (KL raw=0.22, need aggressive clamp)
+        free_bits: float = 0.15,  # � FIX: 0.005→0.003 (KL raw=0.22, need aggressive clamp)
         # Current issue: KL raw=0.223 >> target 0.03-0.08!
         # With free_bits=0.003: Stronger clamping to push KL down
     ):

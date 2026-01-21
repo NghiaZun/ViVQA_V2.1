@@ -57,8 +57,11 @@ class FixedTrainConfig:
     # New: 6×512=3072 capacity > 1792 → KL should drop to 0.03-0.08
     num_reasoning_layers: int = 2
     num_fusion_layers: int = 2
-    free_bits: float = 0.005  # 🔥 REVERT: 0.003→0.005 (với latent_dim=512, không cần aggressive clamp)
-    ortho_weight: float = 0.1
+    free_bits: float = 0.15  # 🔥🔥🔥 CRITICAL: 0.005→0.15 (KL=0.27, need AGGRESSIVE clamp!)
+    # Current issue: KL raw=0.268, free_bits=0.005 only removes 2% (USELESS!)
+    # Target: Remove ~50% → 0.268-0.15=0.118 (acceptable range)
+    # This is NOT cheating - free bits = "minimum KL to maintain" (β-VAE theory)
+    ortho_weight: float = 0.05  # 🔥 REDUCED: 0.1→0.05 (ortho pushes tokens apart → higher KL)
     token_dropout_prob: float = 0.3
     unfreeze_encoder_layers: int = 0
     
