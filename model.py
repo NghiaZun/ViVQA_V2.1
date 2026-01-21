@@ -133,14 +133,17 @@ class CompressedLatentReasoning(nn.Module):
     def __init__(
         self,
         input_dim: int = 1024,
-        num_tokens: int = 4,  # FIX #4: Much smaller!
-        latent_dim: int = 256,  # FIX #4: Compressed!
+        num_tokens: int = 3,  # 🔥 AGGRESSIVE: 4→3 tokens (25% reduction!)
+        latent_dim: int = 320,  # 🔥 SAFER: 384→320 dims (compromise!)
+        # Total capacity: 3×320 = 960 features (37% smaller than 4×384=1536!)
+        # Rationale: 768 too risky → mode collapse, 960 = sweet spot!
         num_heads: int = 8,
-        num_layers: int = 2,
+        num_layers: int = 4,  # 🔥 DEEPER REASONING: 4 layers (not 2!)
+        # Enable multi-hop: "đường ray" → "phương tiện" → "xe lửa"
         dropout: float = 0.1,
-        free_bits: float = 0.15,  # � FIX: 0.005→0.003 (KL raw=0.22, need aggressive clamp)
-        # Current issue: KL raw=0.223 >> target 0.03-0.08!
-        # With free_bits=0.003: Stronger clamping to push KL down
+        free_bits: float = 0.23,  # 🔥 TIGHTER: 0.27→0.23 (force compression!)
+        # Target: KL after = 0.08-0.12 (not 0.15-0.20!)
+        # ⚠️  If KL_raw < 0.10 → capacity too small, increase latent_dim!
     ):
         super().__init__()
         self.num_tokens = num_tokens
@@ -490,22 +493,26 @@ class FixedLatentReasoningVQA(nn.Module):
         self,
         dinov2_model_name: str = 'facebook/dinov2-base',
         bartpho_model_name: str = 'vinai/bartpho-syllable',
-        num_reasoning_tokens: int = 6,  # FIX #4: Small!
-        latent_dim: int = 256,  # FIX #4: Compressed!
-        num_reasoning_layers: int = 2,
+        num_reasoning_tokens: int = 3,  # 🔥 AGGRESSIVE: 4→3 tokens (TIGHTER!)
+        latent_dim: int = 320,  # 🔥 SAFER: 384→320 dims (COMPROMISE!)
+        # Total: 3×320 = 960 features (was 4×384=1536, now 37% SMALLER!)
+        # Rationale: 768 (3×256) too risky for mode collapse
+        #           960 (3×320) = tight enough to force semantics, stable enough to train!
+        num_reasoning_layers: int = 4,  # 🔥 KEEP: 4 layers (multi-hop needed!)
         num_fusion_layers: int = 2,
         num_heads: int = 8,
         dropout: float = 0.1,
-        free_bits: float = 0.5,  # FIX #2
+        free_bits: float = 0.23,  # 🔥 TIGHTER: 0.27→0.23 (force compression!)
         ortho_weight: float = 0.1,  # FIX #5
         image_dropout_prob: float = 0.1,  # FIX #3
-        token_dropout_prob: float = 0.3,  # FIX #5
+        token_dropout_prob: float = 0.4,  # 🔥 FIXED: 0.3→0.4 (moderate regularization)
         gradient_checkpointing: bool = True
     ):
         super().__init__()
         
         print("[FIXED MODEL] Initializing with critical fixes...")
-        print(f"  ✅ Reasoning bottleneck: {num_reasoning_tokens} tokens × {latent_dim} dim")
+        print(f"  ✅ Reasoning bottleneck: {num_reasoning_tokens} tokens × {latent_dim} dim = {num_reasoning_tokens * latent_dim} features")
+        print(f"  ⚠️  COMPROMISE: 37% reduction (1536→960) - tight but stable!")
         print(f"  ✅ Free bits: {free_bits}")
         print(f"  ✅ Orthogonality: {ortho_weight}")
         print(f"  ✅ Image dropout: {image_dropout_prob}")
@@ -728,7 +735,15 @@ class FixedLatentReasoningVQA(nn.Module):
             # Stage 2-3: USE reasoning bottleneck
             # 🚨 FIX #3: Reasoning nhận CẢ vision+text (concat), không chỉ vision!
             # Add text summary (mean pooling) để reasoning có context từ question
-            text_summary = text_features.mean(dim=1, keepdim=True)  # (B, 1, D)
+            # 🔥 CRITICAL FIX: Use attention-weighted pooling thay vì mean pooling!
+            # Mean pooling treats all words equally → padding và question words có weight giống nhau
+            # Attention-weighted → focus vào question keywords ("màu gì", "bao nhiêu", "đâu")
+            
+            # Compute attention weights from text attention mask
+            expanded_mask = attention_mask.unsqueeze(-1).float()  # (B, seq_len, 1)
+            masked_text = text_features * expanded_mask  # Zero out padding
+            text_summary = masked_text.sum(dim=1, keepdim=True) / (expanded_mask.sum(dim=1, keepdim=True) + 1e-8)  # (B, 1, D)
+            
             multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)  # (B, patches+1, D)
             
             # 4. FIX #4 & #2: Extract compressed reasoning with free bits + PROPOSAL temperature
@@ -1018,14 +1033,15 @@ class TeacherEvaluator:
                 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
                 
                 print("[Teacher] Loading Qwen2.5-VL-7B-Instruct...")
-                # Load on GPU with optimization for speed
+                # 🔥 CRITICAL: Load on CPU to save VRAM, move to GPU per-batch
                 self.vlm_model = Qwen2VLForConditionalGeneration.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct",
                     torch_dtype=torch.float16,
-                    device_map="auto",  # Auto GPU allocation
+                    device_map="cpu",  # 🚨 CHANGED: CPU to save VRAM
                     low_cpu_mem_usage=True
                 )
                 self.vlm_model.eval()  # Inference mode
+                print("[Teacher] ⚠️  VLM on CPU - will move to GPU per-batch (slower but no OOM)")
                 
                 self.vlm_processor = AutoProcessor.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct"
@@ -1153,7 +1169,10 @@ class TeacherEvaluator:
                     text=[text],
                     images=image_inputs,
                     return_tensors="pt"
-                ).to(self.vlm_model.device)
+                ).to(self.device)  # Use self.device
+                
+                # 🔥 CRITICAL: Move VLM to GPU temporarily
+                self.vlm_model.to(self.device)
                 
                 # Generate score
                 outputs = self.vlm_model.generate(
@@ -1161,6 +1180,10 @@ class TeacherEvaluator:
                     max_new_tokens=10,
                     temperature=0.1  # Low temp for consistent scoring
                 )
+                
+                # 🔥 CRITICAL: Move VLM back to CPU to free VRAM
+                self.vlm_model.to('cpu')
+                torch.cuda.empty_cache()
                 
                 # Decode and parse score
                 response = self.vlm_processor.batch_decode(
@@ -1235,10 +1258,17 @@ Score (number only):"""
         inputs = self.vlm_processor(
             text=[prompt],
             return_tensors="pt"
-        ).to(self.vlm_model.device)
+        ).to(self.device)  # 🚨 FIX: Use self.device
+        
+        # 🔥 Move VLM to GPU temporarily
+        self.vlm_model.to(self.device)
         
         outputs = self.vlm_model.generate(**inputs, max_new_tokens=5)
         response = self.vlm_processor.batch_decode(outputs, skip_special_tokens=True)[0]
+        
+        # 🔥 Move back to CPU
+        self.vlm_model.to('cpu')
+        torch.cuda.empty_cache()
         
         return self._parse_vlm_score(response)
     

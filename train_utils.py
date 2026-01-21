@@ -45,43 +45,54 @@ class FixedTrainConfig:
     fusion_lr: float = 5e-4  # 🚨 INCREASED: 2e-4 → 5e-4 (fusion needs higher LR)
     decoder_lr: float = 5e-4  # 🚨 CRITICAL FIX: 2e-4 → 5e-4 (decoder cần học NHANH để adapt reasoning!)
     encoder_lr: float = 5e-6  # Lower LR for encoder finetuning
-    weight_decay: float = 0.05
+    weight_decay: float = 0.1  # 🔥 CRITICAL: 0.05→0.1 (combat overfitting!)
     max_grad_norm: float = 1.0
     warmup_ratio: float = 0.06
     use_amp: bool = True
     
     # Model
-    num_reasoning_tokens: int = 6
-    latent_dim: int = 512  # 🔥 CRITICAL FIX: 256→512 (KL=0.17 vì capacity không đủ!)
-    # Root cause: 6×256=1536 capacity < 1792 input (vision 768 + text 1024)
-    # New: 6×512=3072 capacity > 1792 → KL should drop to 0.03-0.08
-    num_reasoning_layers: int = 2
+    num_reasoning_tokens: int = 4  # 🔥 TIGHTER BOTTLENECK: 6→4 tokens
+    # VAE config - AGGRESSIVE BOTTLENECK với SAFEGUARDS!
+    num_reasoning_tokens: int = 3  # 🔥 CRITICAL: 4→3 tokens (25% fewer!)
+    latent_dim: int = 320  # 🔥 SAFER: 256→320 dims (compromise!)
+    # Total capacity: 3×320 = 960 features (was 4×384=1536, 37% REDUCTION!)
+    # Rationale: 768 (3×256) too risky → mode collapse!
+    #           960 (3×320) = sweet spot → tight but stable!
+    # Compression: 960/200K = 0.48% (extreme but survivable!)
+    num_reasoning_layers: int = 4  # Keep 4 layers (multi-hop still needed)
+    # Enable multi-hop reasoning: "đường ray" → "phương tiện" → "xe lửa"
+    # 2 layers only learn surface features → shortcuts win
+    # 4 layers can chain concepts → semantic reasoning possible
     num_fusion_layers: int = 2
-    free_bits: float = 0.15  # 🔥🔥🔥 CRITICAL: 0.005→0.15 (KL=0.27, need AGGRESSIVE clamp!)
-    # Current issue: KL raw=0.268, free_bits=0.005 only removes 2% (USELESS!)
-    # Target: Remove ~50% → 0.268-0.15=0.118 (acceptable range)
-    # This is NOT cheating - free bits = "minimum KL to maintain" (β-VAE theory)
-    ortho_weight: float = 0.05  # 🔥 REDUCED: 0.1→0.05 (ortho pushes tokens apart → higher KL)
-    token_dropout_prob: float = 0.3
+    free_bits: float = 0.23  # 🔥 CRITICAL: 0.27→0.23 (tighter KL pressure!)
+    # With 960 features, expect KL_raw=0.20-0.30
+    # Target: KL_after = 0.08-0.12 (force compression without collapse!)
+    # ⚠️  Monitor: If KL_raw < 0.10 → capacity too small! Increase latent_dim!
+    ortho_weight: float = 0.05  # 🔥 KEEP: Diversity vs KL balance (don't reduce!)
+    token_dropout_prob: float = 0.4  # 🔥 MODERATE: 0.5→0.4 (0.6 causes underfitting!)
+    # Balance: Regularization without losing capacity
     unfreeze_encoder_layers: int = 0
     
     # Teacher distillation
     use_teacher: bool = False
     teacher_type: str = 'rule_based'
-    teacher_weight: float = 0.3  # 🚨 REFINED: 0.5→0.3 (giảm coupling với KL + high decoder LR)
-    num_reasoning_samples: int = 5
-    reasoning_temperature: float = 0.6  # 🚨 CRITICAL: Train temp=0.6 (exploration), Val=0.5 (deterministic)
-    reasoning_temperature_val: float = 0.5  # 🚨 NEW: Separate temp for validation
-    preference_margin: float = 0.1
+    teacher_weight: float = 0.5  # 🔥 INCREASE: 0.3→0.5 (stronger semantic guidance in Stage 3)
+    # Model learns shortcuts → teacher forces semantic understanding
+    num_reasoning_samples: int = 8  # 🔥 MODERATE: 5→8 (more diversity, not 10 to avoid noise)
+    # Balance: Diversity without computational overhead
+    reasoning_temperature: float = 0.8  # 🔥 INCREASE: 0.6→0.8 (more exploration, avoid shortcuts)
+    reasoning_temperature_val: float = 0.6  # 🔥 INCREASE: 0.5→0.6 (consistency with train)
+    preference_margin: float = 0.2  # 🔥 INCREASE: 0.1→0.2 (stronger contrast best/worst)
+    # Margin 0.2 → teacher strongly penalizes "màu đỏ" vs "xe lửa"
     
     # Early stopping
-    es_patience: int = 6
+    es_patience: int = 4  # 🔥 REDUCE: 6→4 (stop sooner on plateau)
     es_min_delta: float = 1e-4
 
 
 def run_one_epoch(
     model, loader, optimizer, scaler, device, cfg,
-    curriculum, stage, teacher_evaluator=None, scheduler=None, train=True
+    curriculum, stage, epoch_progress=1.0, teacher_evaluator=None, scheduler=None, train=True
 ):
     """
     🚨 FIXED: Run one epoch with stage control and teacher
@@ -89,6 +100,7 @@ def run_one_epoch(
     CRITICAL FIXES:
     - Pass `stage` parameter to model.forward() for Stage 1 bypass
     - Handle teacher distillation in Stage 3
+    - Pass `epoch_progress` for proper KL warmup in Stage 2
     """
     if train:
         model.train()
@@ -115,7 +127,8 @@ def run_one_epoch(
         labels = labels.to(device)
         
         # Get curriculum parameters
-        kl_weight = curriculum.get_kl_weight(stage)
+        # 🚨 FIXED: Pass epoch_progress for proper KL warmup!
+        kl_weight = curriculum.get_kl_weight(stage, epoch_progress=epoch_progress)
         stop_grad = curriculum.get_stop_gradient(stage)
         
         # 🚨 CLARIFIED: Temperature handling

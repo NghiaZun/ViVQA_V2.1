@@ -213,14 +213,14 @@ def main():
     model = FixedLatentReasoningVQA(
         dinov2_model_name='facebook/dinov2-base',
         bartpho_model_name='vinai/bartpho-syllable',
-        num_reasoning_tokens=6,
-        latent_dim=256,
-        num_reasoning_layers=2,
+        num_reasoning_tokens=3,  # 🔥 UPDATED: 6→3 (match training!)
+        latent_dim=320,          # 🔥 UPDATED: 256→320 (match training!)
+        num_reasoning_layers=4,  # 🔥 UPDATED: 2→4 (match training!)
         num_fusion_layers=2,
-        free_bits=0.5,
+        free_bits=0.23,          # 🔥 UPDATED: 0.5→0.23 (match training!)
         ortho_weight=0.1,
         image_dropout_prob=0.1,
-        token_dropout_prob=0.3,
+        token_dropout_prob=0.4,  # 🔥 UPDATED: 0.3→0.4 (match training!)
         gradient_checkpointing=False  # Disable for inference
     )
     

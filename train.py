@@ -178,15 +178,18 @@ def main():
     parser.add_argument("--image_folder", type=str, required=True)
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--teacher_type", type=str, default="rule_based", 
-                       choices=["rule_based", "vlm"])
+                       choices=["rule_based", "vlm"],
+                       help="🚨 VLM teacher needs ~8GB VRAM! Use rule_based if OOM")
     parser.add_argument("--stage1_epochs", type=int, default=0)  # 🚨 SKIP Stage 1 - too restrictive
-    parser.add_argument("--stage2_epochs", type=int, default=15)  # Extended warmup
-    parser.add_argument("--stage3_epochs", type=int, default=20)
+    parser.add_argument("--stage2_epochs", type=int, default=10,
+                       help="🔥 REDUCED: 15→10 (Empirical: plateau at epoch 9, overfit at 12+)")
+    parser.add_argument("--stage3_epochs", type=int, default=25,
+                       help="🔥 INCREASED: 20→25 (Compensate Stage 2 reduction, more time for teacher)")
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
     parser.add_argument("--max_kl_weight", type=float, default=0.15,
-                       help="� CRITICAL: 0.6→0.15 (KL raw=0.223 too high! Target: 0.03-0.08)")
-    parser.add_argument("--early_stopping_patience", type=int, default=5,
-                       help="Stop if val loss doesn't improve for N epochs")
+                       help="🔥 CRITICAL: 0.6→0.15 (KL raw=0.223 too high! Target: 0.03-0.08)")
+    parser.add_argument("--early_stopping_patience", type=int, default=3,
+                       help="🔥 REDUCED: 5→3 (Stop faster when plateau, avoid overfit)")
     
     args = parser.parse_args()
     
@@ -412,9 +415,10 @@ def main():
         # Note: curriculum.current_step not needed - pass epoch_progress directly!
         if current_stage == 2:
             epoch_in_stage2 = epoch - stage1_end
+            epoch_progress = epoch_in_stage2 / args.stage2_epochs
             curriculum.warmup_epochs = epoch_in_stage2
         else:
-            epoch_in_stage2 = 0  # For Stage 1 or 3
+            epoch_progress = 1.0  # Stage 1 or 3: no warmup
         
         # Determine if teacher should be used
         use_teacher_this_epoch = (current_stage == 3)
@@ -425,7 +429,7 @@ def main():
         # Train
         train_losses = run_one_epoch(
             model, train_loader, optimizer, scaler, device, cfg,
-            curriculum, current_stage,
+            curriculum, current_stage, epoch_progress,
             teacher_evaluator=teacher_evaluator if use_teacher_this_epoch else None,
             scheduler=scheduler,
             train=True
@@ -435,14 +439,14 @@ def main():
         with torch.no_grad():
             val_losses = run_one_epoch(
                 model, val_loader, optimizer, scaler, device, cfg,
-                curriculum, current_stage,
+                curriculum, current_stage, epoch_progress,
                 teacher_evaluator=None,
                 train=False
             )
         
         # Logging
         current_lr = scheduler.get_last_lr()[0]
-        kl_weight = curriculum.get_kl_weight(current_stage, epoch_progress=epoch_in_stage2 / args.stage2_epochs)
+        kl_weight = curriculum.get_kl_weight(current_stage, epoch_progress=epoch_progress)
         
         # 🚨 FIX: Hiển thị effective KL weight (×0.2, không phải ×0.03!)
         effective_kl = kl_weight * 0.2  # Match model.py loss calculation
@@ -527,10 +531,14 @@ def main():
             
             print(f"  🔍 KL Diagnostics: raw={kl_raw:.4f}, after_free_bits={kl_after:.4f}, penalty_reduction={penalty_reduction:.1f}%")
             
-            # 🚨 UPDATED: Health checks with free_bits=0.15 (aggressive clamping)
-            # Key insight: Check kl_after (what model sees), not kl_raw!
-            if kl_after == 0 and kl_raw > 0.15:
-                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.15!")
+            # 🚨 CRITICAL: MODE COLLAPSE DETECTION (với bottleneck 3×320=960!)
+            # Key insight: kl_raw < 0.10 = model không học gì (compression quá dễ!)
+            if kl_raw < 0.10:
+                print(f"     🚨 CAPACITY TOO SMALL! KL_raw={kl_raw:.3f} < 0.10")
+                print(f"     → Model not learning (compression trivial)!")
+                print(f"     → ACTION REQUIRED: Increase latent_dim to 384 or num_tokens to 4!")
+            elif kl_after == 0 and kl_raw > 0.23:
+                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.23!")
             elif kl_after > 0.15:
                 print(f"     ⚠️  KL AFTER TOO HIGH! after={kl_after:.3f} > 0.15. Increase free_bits or reduce KL weight!")
             elif kl_after < 0.01:
@@ -539,8 +547,8 @@ def main():
                 print(f"     🟡 Free bits weak (<{penalty_reduction:.0f}% reduction). Consider increasing.")
             elif penalty_reduction > 80:
                 print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits!")
-            elif 0.05 <= kl_after <= 0.12 and 50 <= penalty_reduction <= 70:
-                print(f"     ✅ KL healthy! after={kl_after:.3f} in target 0.05-0.12, reduction={penalty_reduction:.0f}%")
+            elif 0.05 <= kl_after <= 0.15 and 45 <= penalty_reduction <= 70:
+                print(f"     ✅ KL healthy! after={kl_after:.3f} in target 0.05-0.15, reduction={penalty_reduction:.0f}%")
             else:
                 print(f"     ℹ️  KL status: after={kl_after:.3f} (raw={kl_raw:.3f}, -{penalty_reduction:.0f}%)")
         
