@@ -52,13 +52,12 @@ class FixedTrainConfig:
     
     # Model
     num_reasoning_tokens: int = 6
-    latent_dim: int = 256
+    latent_dim: int = 512  # 🔥 CRITICAL FIX: 256→512 (KL=0.17 vì capacity không đủ!)
+    # Root cause: 6×256=1536 capacity < 1792 input (vision 768 + text 1024)
+    # New: 6×512=3072 capacity > 1792 → KL should drop to 0.03-0.08
     num_reasoning_layers: int = 2
     num_fusion_layers: int = 2
-    free_bits: float = 0.008  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02, not 0.05!)
-    # Observation: KLr=0.02-0.024 (lower than expected 0.05-0.08)
-    # With free_bits=0.02, fb%=91% (too high!) → Reduce to 0.005 for fb%=20-30%
-    # New calculation: KLr=0.022, free_bits=0.005 → KLa=0.017, fb%=23% ✅
+    free_bits: float = 0.005  # 🔥 REVERT: 0.003→0.005 (với latent_dim=512, không cần aggressive clamp)
     ortho_weight: float = 0.1
     token_dropout_prob: float = 0.3
     unfreeze_encoder_layers: int = 0
@@ -257,12 +256,16 @@ def run_one_epoch(
             kl_after_value = outputs.kl_loss.item() if outputs.kl_loss is not None else 0
             penalty_red = ((kl_raw_value - kl_after_value) / kl_raw_value * 100) if kl_raw_value > 1e-6 else 0
             
+            # 🚀 NEW: Add gate value monitoring
+            gate_value = getattr(model, 'last_text_gate', 0.0)
+            
             pbar.set_postfix({
                 'L': f"{loss.item() * cfg.accum_steps if train else loss.item():.3f}",
                 'A': f"{outputs.answer_loss.item():.3f}",
                 'KLr': f"{kl_raw_value:.3f}",  # Raw KL before free bits
                 'KLa': f"{kl_after_value:.3f}",  # After free bits
                 'fb%': f"{penalty_red:.0f}%",  # Free bits reduction
+                'gate': f"{gate_value:.3f}",  # 🚀 NEW: Text gate value
                 'T': f"{teacher_loss.item():.3f}",
                 'KLw': f"{kl_weight * 0.2:.4f}"
             })

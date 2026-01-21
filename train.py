@@ -183,8 +183,8 @@ def main():
     parser.add_argument("--stage2_epochs", type=int, default=15)  # Extended warmup
     parser.add_argument("--stage3_epochs", type=int, default=20)
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
-    parser.add_argument("--max_kl_weight", type=float, default=0.6,
-                       help="🚨 REDUCED: 7.5→0.6 (slow KL warmup, vision FROZEN)")
+    parser.add_argument("--max_kl_weight", type=float, default=0.15,
+                       help="� CRITICAL: 0.6→0.15 (KL raw=0.223 too high! Target: 0.03-0.08)")
     parser.add_argument("--early_stopping_patience", type=int, default=5,
                        help="Stop if val loss doesn't improve for N epochs")
     
@@ -315,7 +315,11 @@ def main():
     
     optimizer = AdamW(param_groups, weight_decay=cfg.weight_decay)
     
-    scheduler = CosineAnnealingLR(optimizer, T_max=total_epochs)
+    scheduler = CosineAnnealingLR(
+        optimizer, 
+        T_max=total_epochs,
+        eta_min=1e-6  # 🔥 FIX: Add minimum LR to prevent oscillation at high overfit
+    )
     scaler = GradScaler(enabled=cfg.use_amp)
     
     # 🚨 CRITICAL FIX: Curriculum với epoch-based KL warmup (không phải batch-based!)
@@ -347,7 +351,8 @@ def main():
         'val_total', 'val_answer', 'val_kl', 'val_kl_raw', 'val_ortho',
         'learning_rate', 'kl_weight', 'effective_kl_weight',
         'overfitting_ratio', 'answer_gap',
-        'best_val_answer', 'patience'
+        'best_val_answer', 'patience',
+        'text_gate'  # 🚀 NEW: Track text gate value
     ])
     print(f"[LOGGING] Training log will be saved to: {csv_log_path}")
     print(f"[LOGGING] Training curves will be plotted after each epoch\n")
@@ -451,7 +456,10 @@ def main():
               f"KL: {train_losses['kl']:.4f}, Teacher: {train_losses['teacher']:.4f}")
         print(f"  Val   - Total: {val_losses['total']:.4f}, Answer: {val_losses['answer']:.4f}, "
               f"KL: {val_losses['kl']:.4f}")
-        print(f"  LR: {current_lr:.6f}, KL weight: {effective_kl:.4f} (raw={kl_weight:.1f}), Stage: {current_stage}")
+        
+        # 🚀 NEW: Show text gate value
+        text_gate_value = getattr(model, 'last_text_gate', 0.0)
+        print(f"  LR: {current_lr:.6f}, KL weight: {effective_kl:.4f} (raw={kl_weight:.1f}), Stage: {current_stage}, Text Gate: {text_gate_value:.4f}")
         
         # 🚨 FIXED: Monitor overfitting với edge case handling
         # If train loss too small → ratio explodes (misleading!)
@@ -463,7 +471,16 @@ def main():
         
         answer_gap = val_answer_only / train_answer_only if train_answer_only > 1e-4 else 1.0
         print(f"  📊 Overfitting: {overfitting_ratio:.2f}x total, {answer_gap:.2f}x answer-only", end="")
-        if overfitting_ratio > 2.5:
+        
+        # 🔥 NEW: Adaptive LR reduction on high overfitting
+        if answer_gap > 2.5 and current_stage == 3:
+            # Halve LR when answer overfitting is severe
+            for param_group in optimizer.param_groups:
+                old_lr = param_group['lr']
+                param_group['lr'] *= 0.5
+            new_lr = optimizer.param_groups[0]['lr']
+            print(f" ⚠️  HIGH! 🔥 LR reduced: {old_lr:.2e} → {new_lr:.2e}")
+        elif overfitting_ratio > 2.5:
             print(" ⚠️  HIGH!")
         elif overfitting_ratio > 2.0:
             print(" 🟡 MODERATE")
@@ -471,6 +488,7 @@ def main():
             print(" ✅ OK")
         
         # 🚨 NEW: Log to CSV
+        text_gate_value = getattr(model, 'last_text_gate', 0.0)
         csv_writer.writerow([
             epoch + 1,
             current_stage,
@@ -491,7 +509,8 @@ def main():
             overfitting_ratio,
             answer_gap,
             best_val_answer_loss,
-            patience_counter
+            patience_counter,
+            text_gate_value  # 🚀 NEW: Text gate value
         ])
         csv_file.flush()  # Write immediately
         

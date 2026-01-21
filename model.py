@@ -138,9 +138,9 @@ class CompressedLatentReasoning(nn.Module):
         num_heads: int = 8,
         num_layers: int = 2,
         dropout: float = 0.1,
-        free_bits: float = 0.005,  # 🚨 EMERGENCY FIX: 0.02→0.005 (actual KLr=0.02!)
-        # Empirical observation: KLr=0.02-0.024 (not 0.05-0.08 as expected)
-        # With free_bits=0.005: KLr=0.022 → KLa=0.017 → fb%=23% ✅ Target!
+        free_bits: float = 0.003,  # � FIX: 0.005→0.003 (KL raw=0.22, need aggressive clamp)
+        # Current issue: KL raw=0.223 >> target 0.03-0.08!
+        # With free_bits=0.003: Stronger clamping to push KL down
     ):
         super().__init__()
         self.num_tokens = num_tokens
@@ -395,6 +395,82 @@ class FixedVQAOutput:
     attention_weights: Optional[torch.Tensor] = None
 
 
+# ============================================================================
+# GATED TEXT INJECTION - SOTA-aligned lightweight text conditioning
+# ============================================================================
+
+class GatedTextInjection(nn.Module):
+    """
+    Lightweight gated text injection into reasoning tokens.
+    
+    Design principles (SOTA-aligned with Flamingo, BLIP-2, Qwen-VL):
+    1. Minimal parameters (avoid overfitting on 11-15K samples)
+    2. Gate init very low (-4.0 → 0.018) to prevent shortcut learning
+    3. Text tokens PREPENDED (decoder sees hint first)
+    4. Asymmetric fusion: reasoning dominant, text as light hint
+    
+    Expected impact:
+    - +2-3% overall accuracy
+    - +7-10% on counting/why questions (text hint helps)
+    - No shortcut risk (gate starts at 1.8%)
+    """
+    
+    def __init__(self, hidden_dim: int = 1024, num_text_tokens: int = 2, init_gate: float = -4.0):
+        super().__init__()
+        self.num_text_tokens = num_text_tokens
+        self.hidden_dim = hidden_dim
+        
+        # Gate bias (learnable, init very negative → sigmoid(-4) ≈ 0.018)
+        self.gate_bias = nn.Parameter(torch.tensor(init_gate))
+        
+        # Lightweight normalization (NO heavy projection to avoid overfitting)
+        self.text_norm = nn.LayerNorm(hidden_dim)
+        
+        print(f"  ✅ GatedTextInjection: {num_text_tokens} tokens, gate_init={init_gate:.2f} (→ {torch.sigmoid(torch.tensor(init_gate)):.4f})")
+    
+    def forward(self, reasoning_tokens, text_features, text_mask):
+        """
+        Inject gated text summary into reasoning tokens.
+        
+        Args:
+            reasoning_tokens: (B, num_reasoning, D) - from VAE, e.g., (B, 6, 1024)
+            text_features: (B, seq_len, D) - from BART encoder
+            text_mask: (B, seq_len) - attention mask (1=valid, 0=padding)
+        
+        Returns:
+            conditioned_tokens: (B, num_text_tokens + num_reasoning, D)
+                               e.g., (B, 2+6=8, 1024) with text PREPENDED
+            gate_value: scalar for monitoring
+        """
+        B, num_reasoning, D = reasoning_tokens.shape
+        
+        # Mean pooling with proper masking (exclude padding)
+        text_mask_expanded = text_mask.unsqueeze(-1).float()  # (B, seq, 1)
+        text_sum = (text_features * text_mask_expanded).sum(dim=1)  # (B, D)
+        text_count = text_mask_expanded.sum(dim=1).clamp(min=1.0)  # (B, 1)
+        text_summary_single = text_sum / text_count  # (B, D)
+        
+        # Normalize for stable gradients
+        text_summary_single = self.text_norm(text_summary_single)
+        
+        # Repeat to create num_text_tokens (allows decoder to attend differently)
+        text_summary = text_summary_single.unsqueeze(1).repeat(1, self.num_text_tokens, 1)
+        # Shape: (B, num_text_tokens, D)
+        
+        # Compute gate (sigmoid → starts at ~0.018, can grow if beneficial)
+        gate = torch.sigmoid(self.gate_bias)  # Scalar tensor
+        
+        # Apply gate (very light contribution initially)
+        text_gated = gate * text_summary
+        
+        # PREPEND text tokens (decoder sees text hint first, then reasoning)
+        # This is better than APPEND because BART decoder is causal
+        output = torch.cat([text_gated, reasoning_tokens], dim=1)
+        # Shape: (B, num_text_tokens + num_reasoning, D)
+        
+        return output, gate
+
+
 class FixedLatentReasoningVQA(nn.Module):
     """
     FIXED Latent Reasoning VQA
@@ -499,6 +575,13 @@ class FixedLatentReasoningVQA(nn.Module):
         self.diversity_regularizer = DiversityRegularizer(
             ortho_weight=ortho_weight,
             token_dropout_prob=token_dropout_prob
+        )
+        
+        # 🚀 NEW: Gated text injection (SOTA-aligned)
+        self.gated_text_injection = GatedTextInjection(
+            hidden_dim=bart_hidden_dim,
+            num_text_tokens=2,  # 2 tokens: enough for hint, not enough for shortcut
+            init_gate=-4.0  # sigmoid(-4) ≈ 0.018 → very weak initially
         )
         
         # Config
@@ -670,8 +753,19 @@ class FixedLatentReasoningVQA(nn.Module):
             if noise_reasoning is not None:
                 reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
             
-            # 7. FIX #1: CRITICAL - Decoder sees ONLY reasoning (bottleneck!)
-            encoder_hidden_states = reasoning_latents  # NOT concat with fused!
+            # 7. 🚀 NEW: Inject gated text (SOTA-aligned, low risk)
+            # Apply gated text injection to give decoder lightweight text hints
+            # Gate starts at 0.018 → minimal contribution initially
+            # Can grow if beneficial (e.g., for "bao nhiêu", "tại sao" questions)
+            encoder_hidden_states, text_gate = self.gated_text_injection(
+                reasoning_latents,  # (B, 6, 1024)
+                text_features,      # (B, seq_len, 1024) - from BART encoder
+                attention_mask      # (B, seq_len) - mask padding
+            )
+            # encoder_hidden_states: (B, 2+6=8, 1024) with text PREPENDED
+            
+            # Store gate value for monitoring
+            self.last_text_gate = text_gate.item() if isinstance(text_gate, torch.Tensor) else text_gate
         
         # 8. Decode
         # NOTE: Skip decoder if no labels (will use generate_from_reasoning() instead)
@@ -797,7 +891,12 @@ class FixedLatentReasoningVQA(nn.Module):
             if noise_reasoning is not None:
                 reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
             
-            encoder_hidden_states = reasoning_latents
+            # 🚀 NEW: Apply gated text injection (same as forward)
+            encoder_hidden_states, _ = self.gated_text_injection(
+                reasoning_latents,
+                text_features,
+                attention_mask
+            )
         
         # Generate
         batch_size = pixel_values.size(0)
@@ -1188,16 +1287,20 @@ class TrainingCurriculum:
         if stage == 1:
             return 0.0
         elif stage == 2:
-            # 🚨 SAFE: Smoother warmup with sqrt + max=0.6 (vision FROZEN)
-            # With max_kl_weight=0.6:
-            #   Epoch 5: sqrt(5/15) * 0.6 = 0.35
-            #   Epoch 10: sqrt(10/15) * 0.6 = 0.49
-            #   Epoch 15: sqrt(15/15) * 0.6 = 0.6
-            # Effective weight = kl_weight × 0.2 (KL factor) → Max 0.12 ✅
+            # 🚨 SAFE: Smoother warmup with sqrt + max=0.15 (REDUCED!)
+            # With max_kl_weight=0.15:
+            #   Epoch 5: sqrt(5/15) * 0.15 = 0.087
+            #   Epoch 10: sqrt(10/15) * 0.15 = 0.122
+            #   Epoch 15: sqrt(15/15) * 0.15 = 0.15
+            # Effective weight = kl_weight × 0.2 (KL factor) → Max 0.03 ✅
+            # Target KL raw: 0.03-0.08 (not 0.22!)
             import math
             return self.max_kl_weight * math.sqrt(epoch_progress)  # Smoother warmup
         else:
-            return self.max_kl_weight    
+            # 🔥 FIX: FREEZE KL in Stage 3 (focus on answer quality)
+            # Rationale: Stage 3 = fine-tune answer, not regularization
+            # Increasing KL = worse task performance (objective mismatch!)
+            return self.max_kl_weight  # Frozen at Stage 2 final value    
     def get_stop_gradient(self, stage: int):
         """
         FIX #2: Stop gradient in early stages
