@@ -1033,21 +1033,23 @@ class TeacherEvaluator:
                 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
                 
                 print("[Teacher] Loading Qwen2.5-VL-7B-Instruct...")
-                # 🔥 CRITICAL: Load on CPU to save VRAM, move to GPU per-batch
+                # 🔥 CRITICAL: Load on CPU and RUN inference on CPU!
+                # Moving 14GB model to GPU causes OOM (model + VLM > 16GB)
+                # Trade-off: Slower inference but no OOM
                 self.vlm_model = Qwen2VLForConditionalGeneration.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct",
                     torch_dtype=torch.float16,
-                    device_map="cpu",  # 🚨 CHANGED: CPU to save VRAM
+                    device_map="cpu",  # 🚨 STAY ON CPU!
                     low_cpu_mem_usage=True
                 )
                 self.vlm_model.eval()  # Inference mode
-                print("[Teacher] ⚠️  VLM on CPU - will move to GPU per-batch (slower but no OOM)")
+                print("[Teacher] ⚠️  VLM on CPU - inference on CPU (slower but no OOM)")
                 
                 self.vlm_processor = AutoProcessor.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct"
                 )
                 
-                print("[Teacher] ✅ Qwen2.5-VL loaded on GPU (faster inference)")
+                print("[Teacher] ✅ Qwen2.5-VL loaded on CPU (slower but stable)")
                 
             except Exception as e:
                 print(f"[Teacher] ❌ Failed to load VLM: {e}")
@@ -1169,21 +1171,15 @@ class TeacherEvaluator:
                     text=[text],
                     images=image_inputs,
                     return_tensors="pt"
-                ).to(self.device)  # Use self.device
+                )  # 🔥 CRITICAL FIX: Keep on CPU! DO NOT move to GPU!
                 
-                # 🔥 CRITICAL: Move VLM to GPU temporarily
-                self.vlm_model.to(self.device)
-                
-                # Generate score
+                # 🔥 VLM inference on CPU (already loaded on CPU)
+                # Moving to GPU causes OOM (model + VLM = 15GB + 14GB > 16GB!)
                 outputs = self.vlm_model.generate(
                     **inputs,
                     max_new_tokens=10,
                     temperature=0.1  # Low temp for consistent scoring
                 )
-                
-                # 🔥 CRITICAL: Move VLM back to CPU to free VRAM
-                self.vlm_model.to('cpu')
-                torch.cuda.empty_cache()
                 
                 # Decode and parse score
                 response = self.vlm_processor.batch_decode(
@@ -1255,20 +1251,16 @@ Prediction: {pred}
 
 Score (number only):"""
         
+        # 🔥 CRITICAL FIX: Run inference on CPU (VLM already on CPU!)
+        # DO NOT move to GPU - causes OOM!
         inputs = self.vlm_processor(
             text=[prompt],
             return_tensors="pt"
-        ).to(self.device)  # 🚨 FIX: Use self.device
+        )  # Keep on CPU!
         
-        # 🔥 Move VLM to GPU temporarily
-        self.vlm_model.to(self.device)
-        
+        # VLM inference on CPU (slower but no OOM)
         outputs = self.vlm_model.generate(**inputs, max_new_tokens=5)
         response = self.vlm_processor.batch_decode(outputs, skip_special_tokens=True)[0]
-        
-        # 🔥 Move back to CPU
-        self.vlm_model.to('cpu')
-        torch.cuda.empty_cache()
         
         return self._parse_vlm_score(response)
     
