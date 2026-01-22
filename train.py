@@ -550,7 +550,8 @@ def main():
             elif penalty_reduction < 70:
                 print(f"     🟡 Penalty reduction low (<{penalty_reduction:.0f}%). Consider increasing free_bits slightly.")
             elif penalty_reduction > 90:
-                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.38!")
+                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.36-0.38!")
+                print(f"     → Latent not participating enough. Target: 75-85% reduction.")
             elif 0.08 <= kl_after <= 0.20 and 75 <= penalty_reduction <= 85:
                 print(f"     ✅ KL SWEET SPOT! after={kl_after:.3f} in target 0.08-0.20, reduction={penalty_reduction:.0f}%")
                 print(f"     → This is OPTIMAL for VQA semantic quality!")

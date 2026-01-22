@@ -217,7 +217,7 @@ def main():
         latent_dim=320,          # 🔥 UPDATED: 256→320 (match training!)
         num_reasoning_layers=4,  # 🔥 UPDATED: 2→4 (match training!)
         num_fusion_layers=2,
-        free_bits=0.42,          # 🔥 FINAL: 0.45→0.42 (empirical fix!)
+        free_bits=0.38,          # 🔥 ADJUSTED: 0.42→0.38 (Epoch 4 fix!)
         ortho_weight=0.1,
         image_dropout_prob=0.1,
         token_dropout_prob=0.4,  # 🔥 UPDATED: 0.3→0.4 (match training!)
