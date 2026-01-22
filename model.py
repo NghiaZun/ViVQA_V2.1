@@ -141,9 +141,9 @@ class CompressedLatentReasoning(nn.Module):
         num_layers: int = 4,  # 🔥 DEEPER REASONING: 4 layers (not 2!)
         # Enable multi-hop: "đường ray" → "phương tiện" → "xe lửa"
         dropout: float = 0.1,
-        free_bits: float = 0.45,  # 🔥 CRITICAL: 0.35→0.45 (Stage 2 analysis Epoch 1-11!)
-        # Epoch 3: KL_after=0.16 ✅, Epoch 10: KL_after=0.39 🚨
-        # Target: 0.15-0.25 (safe for VQA)
+        free_bits: float = 0.42,  # 🔥 FINAL FIX: 0.45→0.42 (empirical finding!)
+        # CRITICAL: Epoch 5 (KL_after=0.10) >> Epoch 10 (KL_after=0.43)
+        # Higher free_bits = worse semantic (mode collapse to numbers)
     ):
         super().__init__()
         self.num_tokens = num_tokens
@@ -502,7 +502,7 @@ class FixedLatentReasoningVQA(nn.Module):
         num_fusion_layers: int = 2,
         num_heads: int = 8,
         dropout: float = 0.1,
-        free_bits: float = 0.45,  # 🔥 CRITICAL: 0.35→0.45 (Stage 2 fix!)
+        free_bits: float = 0.42,  # 🔥 FINAL: 0.45→0.42 (empirical fix!)
         ortho_weight: float = 0.1,  # FIX #5
         image_dropout_prob: float = 0.1,  # FIX #3
         token_dropout_prob: float = 0.4,  # 🔥 FIXED: 0.3→0.4 (moderate regularization)

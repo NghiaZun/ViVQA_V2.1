@@ -64,13 +64,14 @@ class FixedTrainConfig:
     # 2 layers only learn surface features → shortcuts win
     # 4 layers can chain concepts → semantic reasoning possible
     num_fusion_layers: int = 2
-    free_bits: float = 0.45  # 🔥 CRITICAL FIX: 0.35→0.45 based on Stage 2 analysis!
-    # Observation from Epoch 1-11:
-    #   Epoch 3: KL_after=0.16 ✅ (sweet spot - good predictions)
-    #   Epoch 10: KL_after=0.39 🚨 (too high - counting errors!)
-    # New target with free_bits=0.45:
-    #   Expected KL_after = 0.15-0.25 (safe zone for VQA)
-    # Monitor: If KL_after < 0.05 → reduce to 0.40
+    free_bits: float = 0.42  # 🔥 FIXED (không auto-adjust): Based on Epoch 1-10 analysis!
+    # CRITICAL FINDING from training:
+    #   Epoch 5: KL_after=0.098, predictions GOOD ✅
+    #   Epoch 10: KL_after=0.425, predictions BAD (mode collapse to numbers) 🚨
+    # With free_bits=0.42:
+    #   Expected: KL_after = 0.10-0.18 (sweet spot for VQA)
+    #   Penalty reduction: 75-80%
+    # ⚠️  DO NOT increase! Higher free_bits = worse semantic quality
     ortho_weight: float = 0.05  # 🔥 KEEP: Diversity vs KL balance (don't reduce!)
     token_dropout_prob: float = 0.4  # 🔥 MODERATE: 0.5→0.4 (0.6 causes underfitting!)
     # Balance: Regularization without losing capacity

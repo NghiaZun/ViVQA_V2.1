@@ -181,13 +181,13 @@ def main():
                        choices=["rule_based", "vlm"],
                        help="🚨 VLM teacher needs ~8GB VRAM! Use rule_based if OOM")
     parser.add_argument("--stage1_epochs", type=int, default=0)  # 🚨 SKIP Stage 1 - too restrictive
-    parser.add_argument("--stage2_epochs", type=int, default=10,
-                       help="🔥 REDUCED: 15→10 (Empirical: plateau at epoch 9, overfit at 12+)")
+    parser.add_argument("--stage2_epochs", type=int, default=6,
+                       help="🔥 CRITICAL: 10→6 based on empirical finding! Epoch 5-6 is sweet spot, 7+ over-regularizes!")
     parser.add_argument("--stage3_epochs", type=int, default=25,
                        help="🔥 INCREASED: 20→25 (Compensate Stage 2 reduction, more time for teacher)")
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
     parser.add_argument("--max_kl_weight", type=float, default=0.05,
-                       help="🔥 CRITICAL: 0.08→0.05 based on Stage 2 Epoch 1-11 analysis! KL_raw already high (0.7-0.8), don't need strong weight!")
+                       help="🔥 FINAL FIX: 0.08→0.05! KL_raw naturally high (0.7-0.9), don't need strong weight. Target: KL_after=0.10-0.20")
     parser.add_argument("--early_stopping_patience", type=int, default=3,
                        help="🔥 REDUCED: 5→3 (Stop faster when plateau, avoid overfit)")
     
@@ -531,25 +531,29 @@ def main():
             
             print(f"  🔍 KL Diagnostics: raw={kl_raw:.4f}, after_free_bits={kl_after:.4f}, penalty_reduction={penalty_reduction:.1f}%")
             
-            # 🚨 UPDATED for free_bits=0.45, max_kl_weight=0.05 (Stage 2 analysis!)
-            # Target: KL_after = 0.10-0.25 (VQA-friendly compression)
-            # Expected penalty_reduction = 60-75% with free_bits=0.45
+            # 🚨 UPDATED for free_bits=0.42, max_kl_weight=0.05 (EMPIRICAL FINDINGS!)
+            # CRITICAL: Epoch 5 (KL_after=0.10) had BETTER semantics than Epoch 10 (KL_after=0.43)
+            # Target: KL_after = 0.08-0.20 (VQA sweet spot, NOT 0.30-0.40!)
+            # Expected penalty_reduction = 75-85% with free_bits=0.42
             if kl_raw < 0.10:
                 print(f"     🚨 CAPACITY TOO SMALL! KL_raw={kl_raw:.3f} < 0.10")
                 print(f"     → Model not learning (compression trivial)!")
                 print(f"     → ACTION REQUIRED: Increase latent_dim to 384 or num_tokens to 4!")
-            elif kl_after == 0 and kl_raw > 0.45:
-                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.45!")
-            elif kl_after > 0.30:
-                print(f"     🚨 KL AFTER TOO HIGH! after={kl_after:.3f} > 0.30. Increase free_bits to 0.50!")
+            elif kl_after == 0 and kl_raw > 0.42:
+                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.42!")
+            elif kl_after > 0.25:
+                print(f"     🚨 SEMANTIC DEGRADATION! after={kl_after:.3f} > 0.25. Model losing specificity (mode collapse risk)!")
+                print(f"     → Expected: counting errors, color→number, object→number")
+                print(f"     → ACTION: STOP Stage 2 NOW or increase free_bits to 0.48!")
             elif kl_after < 0.01:
                 print(f"     ⚠️  KL COLLAPSE! after < 0.01. Increase KL weight!")
-            elif penalty_reduction < 50:
-                print(f"     🟡 Free bits weak (<{penalty_reduction:.0f}% reduction). Consider increasing to 0.50.")
+            elif penalty_reduction < 70:
+                print(f"     🟡 Penalty reduction low (<{penalty_reduction:.0f}%). Consider increasing free_bits slightly.")
             elif penalty_reduction > 90:
-                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.40!")
-            elif 0.08 <= kl_after <= 0.25 and 60 <= penalty_reduction <= 80:
-                print(f"     ✅ KL healthy! after={kl_after:.3f} in target 0.08-0.25, reduction={penalty_reduction:.0f}%")
+                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.38!")
+            elif 0.08 <= kl_after <= 0.20 and 75 <= penalty_reduction <= 85:
+                print(f"     ✅ KL SWEET SPOT! after={kl_after:.3f} in target 0.08-0.20, reduction={penalty_reduction:.0f}%")
+                print(f"     → This is OPTIMAL for VQA semantic quality!")
             else:
                 print(f"     ℹ️  KL status: after={kl_after:.3f} (raw={kl_raw:.3f}, -{penalty_reduction:.0f}%)")
         
