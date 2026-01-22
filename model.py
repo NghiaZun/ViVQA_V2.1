@@ -1032,10 +1032,8 @@ class TeacherEvaluator:
             try:
                 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
                 
-                print("[Teacher] Loading Qwen2.5-VL-7B-Instruct...")
-                # 🔥 CRITICAL: Load on CPU and RUN inference on CPU!
-                # Moving 14GB model to GPU causes OOM (model + VLM > 16GB)
-                # Trade-off: Slower inference but no OOM
+                print("[Teacher] Loading Qwen2.5-VL-7B-Instruct on CPU...")
+                # 🔥 CRITICAL: Keep VLM on CPU PERMANENTLY (no GPU move!)
                 self.vlm_model = Qwen2VLForConditionalGeneration.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct",
                     torch_dtype=torch.float16,
@@ -1043,13 +1041,11 @@ class TeacherEvaluator:
                     low_cpu_mem_usage=True
                 )
                 self.vlm_model.eval()  # Inference mode
-                print("[Teacher] ⚠️  VLM on CPU - inference on CPU (slower but no OOM)")
+                print("[Teacher] ✅ VLM loaded on CPU (will stay on CPU to avoid OOM)")
                 
                 self.vlm_processor = AutoProcessor.from_pretrained(
                     "Qwen/Qwen2-VL-7B-Instruct"
                 )
-                
-                print("[Teacher] ✅ Qwen2.5-VL loaded on CPU (slower but stable)")
                 
             except Exception as e:
                 print(f"[Teacher] ❌ Failed to load VLM: {e}")
@@ -1120,79 +1116,17 @@ class TeacherEvaluator:
         questions: Optional[list] = None
     ) -> torch.Tensor:
         """
-        VLM-based evaluation (Qwen2.5-VL)
+        VLM-based evaluation (Qwen2.5-VL) - CPU inference only!
         
-        Uses vision-language model to score answer quality
-        More semantic understanding than rule-based
+        🚨 CRITICAL: VLM stays on CPU to avoid OOM!
+        Slower but won't crash with 16GB GPU
         """
         scores = []
         
         for i, (pred, gt) in enumerate(zip(predictions, ground_truths)):
-            # Construct prompt for VLM
-            if images is not None and questions is not None:
-                # Full multimodal evaluation
-                prompt = self._construct_vlm_prompt(
-                    question=questions[i] if i < len(questions) else "",
-                    prediction=pred,
-                    ground_truth=gt
-                )
-                
-                # Prepare inputs
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image",
-                                "image": images[i] if i < len(images) else None
-                            },
-                            {
-                                "type": "text",
-                                "text": prompt
-                            }
-                        ]
-                    }
-                ]
-                
-                # Process
-                text = self.vlm_processor.apply_chat_template(
-                    messages, tokenize=False, add_generation_prompt=True
-                )
-                
-                image_inputs = None
-                if images is not None and i < len(images):
-                    # Convert tensor to PIL
-                    import torchvision.transforms as T
-                    to_pil = T.ToPILImage()
-                    pil_image = to_pil(images[i].cpu())
-                    image_inputs = [pil_image]
-                
-                inputs = self.vlm_processor(
-                    text=[text],
-                    images=image_inputs,
-                    return_tensors="pt"
-                )  # 🔥 CRITICAL FIX: Keep on CPU! DO NOT move to GPU!
-                
-                # 🔥 VLM inference on CPU (already loaded on CPU)
-                # Moving to GPU causes OOM (model + VLM = 15GB + 14GB > 16GB!)
-                outputs = self.vlm_model.generate(
-                    **inputs,
-                    max_new_tokens=10,
-                    temperature=0.1  # Low temp for consistent scoring
-                )
-                
-                # Decode and parse score
-                response = self.vlm_processor.batch_decode(
-                    outputs, skip_special_tokens=True
-                )[0]
-                
-                # Extract score from response
-                score = self._parse_vlm_score(response)
-                
-            else:
-                # Text-only evaluation (fallback)
-                score = self._evaluate_text_only_vlm(pred, gt)
-            
+            # Text-only evaluation (skip multimodal to save time)
+            # Reason: Multimodal with CPU is VERY slow (30s+ per sample)
+            score = self._evaluate_text_only_vlm(pred, gt)
             scores.append(score)
         
         return torch.tensor(scores, dtype=torch.float32, device=self.device)
@@ -1244,21 +1178,20 @@ Score:"""
                 return 0.2
     
     def _evaluate_text_only_vlm(self, pred: str, gt: str) -> float:
-        """Text-only VLM evaluation (without image)"""
+        """Text-only VLM evaluation (without image) - CPU inference only!"""
         prompt = f"""Rate answer quality (0-100):
 Ground truth: {gt}
 Prediction: {pred}
 
 Score (number only):"""
         
-        # 🔥 CRITICAL FIX: Run inference on CPU (VLM already on CPU!)
-        # DO NOT move to GPU - causes OOM!
+        # 🚨 CRITICAL: VLM stays on CPU (no .to(device))!
         inputs = self.vlm_processor(
             text=[prompt],
             return_tensors="pt"
         )  # Keep on CPU!
         
-        # VLM inference on CPU (slower but no OOM)
+        # 🔥 VLM inference on CPU (slow but won't OOM)
         outputs = self.vlm_model.generate(**inputs, max_new_tokens=5)
         response = self.vlm_processor.batch_decode(outputs, skip_special_tokens=True)[0]
         
