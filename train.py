@@ -186,8 +186,8 @@ def main():
     parser.add_argument("--stage3_epochs", type=int, default=25,
                        help="🔥 INCREASED: 20→25 (Compensate Stage 2 reduction, more time for teacher)")
     parser.add_argument("--num_reasoning_samples", type=int, default=3)
-    parser.add_argument("--max_kl_weight", type=float, default=0.15,
-                       help="🔥 CRITICAL: 0.6→0.15 (KL raw=0.223 too high! Target: 0.03-0.08)")
+    parser.add_argument("--max_kl_weight", type=float, default=0.08,
+                       help="🔥 EMERGENCY FIX: 0.15→0.08! Bottleneck 960 needs MUCH lower KL pressure! Target: KL_after=0.08-0.12")
     parser.add_argument("--early_stopping_patience", type=int, default=3,
                        help="🔥 REDUCED: 5→3 (Stop faster when plateau, avoid overfit)")
     
@@ -531,24 +531,25 @@ def main():
             
             print(f"  🔍 KL Diagnostics: raw={kl_raw:.4f}, after_free_bits={kl_after:.4f}, penalty_reduction={penalty_reduction:.1f}%")
             
-            # 🚨 CRITICAL: MODE COLLAPSE DETECTION (với bottleneck 3×320=960!)
-            # Key insight: kl_raw < 0.10 = model không học gì (compression quá dễ!)
+            # 🚨 UPDATED THRESHOLDS for free_bits=0.35 and max_kl_weight=0.08
+            # Target: KL_after = 0.08-0.12 (healthy compression)
+            # Expected: penalty_reduction = 50-65% with free_bits=0.35
             if kl_raw < 0.10:
                 print(f"     🚨 CAPACITY TOO SMALL! KL_raw={kl_raw:.3f} < 0.10")
                 print(f"     → Model not learning (compression trivial)!")
                 print(f"     → ACTION REQUIRED: Increase latent_dim to 384 or num_tokens to 4!")
-            elif kl_after == 0 and kl_raw > 0.23:
-                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.23!")
-            elif kl_after > 0.15:
-                print(f"     ⚠️  KL AFTER TOO HIGH! after={kl_after:.3f} > 0.15. Increase free_bits or reduce KL weight!")
+            elif kl_after == 0 and kl_raw > 0.35:
+                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.35!")
+            elif kl_after > 0.20:
+                print(f"     🚨 KL AFTER TOO HIGH! after={kl_after:.3f} > 0.20. Increase free_bits to 0.40 or reduce max_kl_weight!")
             elif kl_after < 0.01:
                 print(f"     ⚠️  KL COLLAPSE! after < 0.01. Increase KL weight!")
-            elif penalty_reduction < 30:
-                print(f"     🟡 Free bits weak (<{penalty_reduction:.0f}% reduction). Consider increasing.")
-            elif penalty_reduction > 80:
-                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits!")
-            elif 0.05 <= kl_after <= 0.15 and 45 <= penalty_reduction <= 70:
-                print(f"     ✅ KL healthy! after={kl_after:.3f} in target 0.05-0.15, reduction={penalty_reduction:.0f}%")
+            elif penalty_reduction < 40:
+                print(f"     🟡 Free bits weak (<{penalty_reduction:.0f}% reduction). Consider increasing to 0.40.")
+            elif penalty_reduction > 85:
+                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.30!")
+            elif 0.06 <= kl_after <= 0.15 and 50 <= penalty_reduction <= 75:
+                print(f"     ✅ KL healthy! after={kl_after:.3f} in target 0.06-0.15, reduction={penalty_reduction:.0f}%")
             else:
                 print(f"     ℹ️  KL status: after={kl_after:.3f} (raw={kl_raw:.3f}, -{penalty_reduction:.0f}%)")
         
