@@ -57,4 +57,10 @@ class VQAGenDataset(Dataset):
         labels = a_enc['input_ids'].squeeze(0)
         labels[labels == self.tokenizer.pad_token_id] = -100  # important for loss masking
 
-        return pixel_values, input_ids, attention_mask, labels
+        # Return dict format for compatibility with training script
+        return {
+            'pixel_values': pixel_values,
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels
+        }

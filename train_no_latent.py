@@ -27,7 +27,8 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from collections import Counter
-from dataset import ViVQADataset
+from dataset import VQAGenDataset
+
 from model_no_latent import DeterministicVQA
 
 try:
@@ -558,13 +559,13 @@ def main():
             )
     else:
         print("[Data] Using data_dir + split structure")
-        train_dataset = ViVQADataset(
+        train_dataset = VQAGenDataset(
             data_dir=data_dir,
             split='train',
             bartpho_model_name=bartpho_model
         )
         
-        val_dataset = ViVQADataset(
+        val_dataset = VQAGenDataset(
             data_dir=data_dir,
             split='val',
             bartpho_model_name=bartpho_model
