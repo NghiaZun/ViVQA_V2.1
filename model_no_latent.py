@@ -263,6 +263,10 @@ class DeterministicVQA(nn.Module):
         vision_outputs = self.vision_encoder(pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
         
+        # Remove CLS token (DINOv2 returns [batch, 257, 768] where first token is CLS)
+        # We only need the 256 patch tokens for fusion
+        patch_tokens = patch_tokens[:, 1:, :]  # [batch, 256, 768]
+        
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
         vision_features = self.vision_proj(patch_tokens)
