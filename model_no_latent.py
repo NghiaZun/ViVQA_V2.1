@@ -382,30 +382,36 @@ class DeterministicVQA(nn.Module):
             torch.ones(batch_size, fused_vision.size(1), device=attention_mask.device)
         ], dim=1)
         
-        # 🔥 FIX: Use Hugging Face's generate() for PROPER beam search!
-        # Create a wrapper for encoder outputs
-        from transformers.modeling_outputs import BaseModelOutput
-        
-        encoder_outputs = BaseModelOutput(
-            last_hidden_state=encoder_hidden_states
+        # Greedy decoding (simple but effective)
+        device = pixel_values.device
+        generated_ids = torch.full(
+            (batch_size, 1),
+            self.config.decoder_start_token_id,
+            dtype=torch.long,
+            device=device
         )
         
-        # Generate with REAL beam search
-        generated_ids = self.decoder.generate(
-            encoder_outputs=encoder_outputs,
-            attention_mask=encoder_attention_mask,
-            max_length=max_length,
-            num_beams=num_beams,
-            do_sample=do_sample,
-            temperature=temperature if do_sample else 1.0,
-            top_p=top_p if do_sample else 1.0,
-            top_k=top_k if do_sample else 50,
-            early_stopping=True,
-            pad_token_id=self.config.pad_token_id,
-            eos_token_id=self.config.eos_token_id,
-            bos_token_id=self.config.decoder_start_token_id,
-            use_cache=True  # Speed up generation
-        )
+        for _ in range(max_length):
+            # Decode
+            decoder_outputs = self.decoder(
+                input_ids=generated_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask
+            )
+            
+            # Get logits for next token
+            logits = self.lm_head(decoder_outputs.last_hidden_state)
+            next_token_logits = logits[:, -1, :]
+            
+            # Greedy: take argmax
+            next_tokens = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+            
+            # Append to generated sequence
+            generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
+            
+            # Check if all sequences have generated EOS
+            if (next_tokens == self.config.eos_token_id).all():
+                break
         
         # Decode
         answers = []
