@@ -928,68 +928,13 @@ def main():
                 print(f"\n🛑 Early stopping at epoch {epoch}!")
                 break
         
-        # Save checkpoint every N epochs
-        if epoch % args.save_every == 0 or epoch == stage3_epochs:
-            is_best = val_metrics['loss'] < best_val_loss
-            if is_best:
-                best_val_loss = val_metrics['loss']
-                print(f"  ✅ NEW BEST! Saving checkpoint...")
-                
-                checkpoint = {
-                    'epoch': epoch,
-                    'stage': stage,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'train_loss': train_metrics['loss'],
-                    'val_loss': val_metrics['loss'],
-                    'best_val_loss': best_val_loss,
-                    'args': vars(args)
-                }
-                
-                if scaler is not None:
-                    checkpoint['scaler_state_dict'] = scaler.state_dict()
-                
-                if scheduler is not None:
-                    checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-                
-                # Only save best model to save disk space
-                best_path = os.path.join(output_dir, 'best_model.pt')
-                torch.save(checkpoint, best_path)
-                print(f"  💾 Saved to: {best_path}")
-            else:
-                # Only save periodic checkpoints if we have space
-                # Skip if not the best to save disk space on Kaggle
-                if epoch % (args.save_every * 5) == 0:  # Every 5x save_every
-                    print(f"  💾 Saving periodic checkpoint (epoch {epoch})...")
-                    checkpoint = {
-                        'epoch': epoch,
-                        'stage': stage,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'train_loss': train_metrics['loss'],
-                        'val_loss': val_metrics['loss'],
-                        'best_val_loss': best_val_loss,
-                        'args': vars(args)
-                    }
-                    
-                    if scaler is not None:
-                        checkpoint['scaler_state_dict'] = scaler.state_dict()
-                    
-                    if scheduler is not None:
-                        checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-                    
-                    checkpoint_path = os.path.join(output_dir, f'checkpoint_epoch{epoch}.pt')
-                    try:
-                        torch.save(checkpoint, checkpoint_path)
-                        print(f"  💾 Saved to: {checkpoint_path}")
-                    except OSError as e:
-                        print(f"  ⚠️  Failed to save periodic checkpoint: {e}")
-                        print(f"  💡 Continuing with best_model.pt only...")
-                else:
-                    print(f"  ⏭️  Skipping checkpoint save (not best, epoch {epoch})")
+        # Save best model checkpoint
+        is_best = val_metrics['loss'] < best_val_loss
+        if is_best:
+            best_val_loss = val_metrics['loss']
+            print(f"  ✅ NEW BEST! Saving checkpoint...")
             
-            # 🔥 ALWAYS save last model (for resume)
-            last_checkpoint = {
+            checkpoint = {
                 'epoch': epoch,
                 'stage': stage,
                 'model_state_dict': model.state_dict(),
@@ -997,22 +942,44 @@ def main():
                 'train_loss': train_metrics['loss'],
                 'val_loss': val_metrics['loss'],
                 'best_val_loss': best_val_loss,
-                'training_history': training_history,  # Include history for resume
                 'args': vars(args)
             }
             
             if scaler is not None:
-                last_checkpoint['scaler_state_dict'] = scaler.state_dict()
+                checkpoint['scaler_state_dict'] = scaler.state_dict()
             
             if scheduler is not None:
-                last_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+                checkpoint['scheduler_state_dict'] = scheduler.state_dict()
             
-            last_path = os.path.join(output_dir, 'last_model.pt')
-            try:
-                torch.save(last_checkpoint, last_path)
-                print(f"  💾 Saved last model to: {last_path} (for resume)")
-            except OSError as e:
-                print(f"  ⚠️  Failed to save last model: {e}")
+            best_path = os.path.join(output_dir, 'best_model.pt')
+            torch.save(checkpoint, best_path)
+            print(f"  💾 Saved to: {best_path}")
+        
+        # 🔥 ALWAYS save last model (for resume)
+        last_checkpoint = {
+            'epoch': epoch,
+            'stage': stage,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_metrics['loss'],
+            'val_loss': val_metrics['loss'],
+            'best_val_loss': best_val_loss,
+            'training_history': training_history,  # Include history for resume
+            'args': vars(args)
+        }
+        
+        if scaler is not None:
+            last_checkpoint['scaler_state_dict'] = scaler.state_dict()
+        
+        if scheduler is not None:
+            last_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+        
+        last_path = os.path.join(output_dir, 'last_model.pt')
+        try:
+            torch.save(last_checkpoint, last_path)
+            print(f"  💾 Saved last model to: {last_path} (for resume)")
+        except OSError as e:
+            print(f"  ⚠️  Failed to save last model: {e}")
         
         # 🔥 Save training curves and CSV after each epoch
         try:

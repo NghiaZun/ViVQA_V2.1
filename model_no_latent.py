@@ -359,6 +359,7 @@ class DeterministicVQA(nn.Module):
         # Encode vision
         vision_outputs = self.vision_encoder(pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
+        patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS token: [batch, 257, 768] -> [batch, 256, 768]
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
         vision_features = self.vision_proj(patch_tokens)
         
