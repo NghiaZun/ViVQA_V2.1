@@ -633,7 +633,16 @@ def main():
         weight_decay=weight_decay
     )
     
-    scaler = GradScaler() if use_amp else None
+    # Mixed precision scaler (use new API to avoid deprecation warning)
+    if use_amp:
+        try:
+            from torch.amp import GradScaler as NewGradScaler
+            scaler = NewGradScaler('cuda')
+        except (ImportError, AttributeError):
+            # Fallback to old API for older PyTorch versions
+            scaler = GradScaler()
+    else:
+        scaler = None
     
     # 🔥 LR Scheduler
     scheduler = None
@@ -643,7 +652,6 @@ def main():
             mode='min',
             factor=args.scheduler_factor,
             patience=args.scheduler_patience,
-            verbose=True,
             min_lr=1e-7
         )
         print(f"[Scheduler] ReduceLROnPlateau (patience={args.scheduler_patience}, factor={args.scheduler_factor})")
