@@ -27,6 +27,8 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from collections import Counter
+import csv
+import matplotlib.pyplot as plt
 from dataset import VQAGenDataset
 
 from model_no_latent import DeterministicVQA
@@ -183,6 +185,110 @@ def analyze_dataset(dataset, tokenizer, num_samples=1000):
     
     print(f"  Avg question length: {sum(question_lengths)/len(question_lengths):.1f} tokens")
     print(f"  Avg answer length: {sum(answer_lengths)/len(answer_lengths):.1f} tokens")
+
+
+def plot_training_curves(history, output_dir):
+    """
+    Plot and save training curves
+    
+    Args:
+        history: List of dicts with metrics per epoch
+        output_dir: Directory to save plots
+    """
+    if not history:
+        return
+    
+    epochs = [h['epoch'] for h in history]
+    train_losses = [h['train_loss'] for h in history]
+    val_losses = [h['val_loss'] for h in history]
+    learning_rates = [h['learning_rate'] for h in history]
+    
+    # Extract metrics if available
+    exact_matches = [h.get('exact_match', None) for h in history]
+    f1_scores = [h.get('f1_score', None) for h in history]
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle('Training Metrics', fontsize=16, fontweight='bold')
+    
+    # 1. Loss curves
+    axes[0, 0].plot(epochs, train_losses, 'b-o', label='Train Loss', linewidth=2)
+    axes[0, 0].plot(epochs, val_losses, 'r-o', label='Val Loss', linewidth=2)
+    axes[0, 0].set_xlabel('Epoch')
+    axes[0, 0].set_ylabel('Loss')
+    axes[0, 0].set_title('Training & Validation Loss')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Learning rate
+    axes[0, 1].plot(epochs, learning_rates, 'g-o', linewidth=2)
+    axes[0, 1].set_xlabel('Epoch')
+    axes[0, 1].set_ylabel('Learning Rate')
+    axes[0, 1].set_title('Learning Rate Schedule')
+    axes[0, 1].set_yscale('log')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Exact Match (if available)
+    if any(em is not None for em in exact_matches):
+        valid_epochs = [e for e, em in zip(epochs, exact_matches) if em is not None]
+        valid_ems = [em for em in exact_matches if em is not None]
+        axes[1, 0].plot(valid_epochs, valid_ems, 'm-o', linewidth=2)
+        axes[1, 0].set_xlabel('Epoch')
+        axes[1, 0].set_ylabel('Exact Match (%)')
+        axes[1, 0].set_title('Exact Match Score')
+        axes[1, 0].grid(True, alpha=0.3)
+    else:
+        axes[1, 0].text(0.5, 0.5, 'No EM data', ha='center', va='center')
+        axes[1, 0].set_title('Exact Match Score')
+    
+    # 4. F1 Score (if available)
+    if any(f1 is not None for f1 in f1_scores):
+        valid_epochs = [e for e, f1 in zip(epochs, f1_scores) if f1 is not None]
+        valid_f1s = [f1 for f1 in f1_scores if f1 is not None]
+        axes[1, 1].plot(valid_epochs, valid_f1s, 'c-o', linewidth=2)
+        axes[1, 1].set_xlabel('Epoch')
+        axes[1, 1].set_ylabel('F1 Score (%)')
+        axes[1, 1].set_title('F1 Score')
+        axes[1, 1].grid(True, alpha=0.3)
+    else:
+        axes[1, 1].text(0.5, 0.5, 'No F1 data', ha='center', va='center')
+        axes[1, 1].set_title('F1 Score')
+    
+    plt.tight_layout()
+    
+    # Save plot
+    plot_path = os.path.join(output_dir, 'training_curves.png')
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"  📊 Saved training curves to: {plot_path}")
+    plt.close()
+
+
+def save_metrics_csv(history, output_dir):
+    """
+    Save training metrics to CSV
+    
+    Args:
+        history: List of dicts with metrics per epoch
+        output_dir: Directory to save CSV
+    """
+    if not history:
+        return
+    
+    csv_path = os.path.join(output_dir, 'training_metrics.csv')
+    
+    # Get all possible keys
+    all_keys = set()
+    for h in history:
+        all_keys.update(h.keys())
+    all_keys = sorted(all_keys)
+    
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=all_keys)
+        writer.writeheader()
+        writer.writerows(history)
+    
+    print(f"  📊 Saved metrics CSV to: {csv_path}")
+
 
 
 # ============================================================================
@@ -703,6 +809,9 @@ def main():
     
     stage = 3
     
+    # Training history for plots and CSV
+    training_history = []
+    
     for epoch in range(start_epoch, stage3_epochs + 1):
         print(f"\n[Stage 3 | Epoch {epoch}/{stage3_epochs}]")
         
@@ -733,6 +842,16 @@ def main():
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
+        
+        # Track metrics in history
+        epoch_metrics = {
+            'epoch': epoch,
+            'train_loss': train_metrics['loss'],
+            'train_answer_loss': train_metrics['answer_loss'],
+            'val_loss': val_metrics['loss'],
+            'val_answer_loss': val_metrics['answer_loss'],
+            'learning_rate': optimizer.param_groups[0]['lr']
+        }
         
         # 🔥 Log to W&B
         if args.use_wandb:
@@ -770,6 +889,13 @@ def main():
                 else:
                     print()
                 
+                # Add to epoch metrics
+                epoch_metrics['exact_match'] = sample_metrics['exact_match']
+                epoch_metrics['f1_score'] = sample_metrics['f1_score']
+                if ROUGE_AVAILABLE:
+                    epoch_metrics['rouge1'] = sample_metrics['rouge1']
+                    epoch_metrics['rougeL'] = sample_metrics['rougeL']
+                
                 # 🔥 Log sample metrics to W&B
                 if args.use_wandb:
                     wandb_log.update({
@@ -793,6 +919,9 @@ def main():
         if args.use_wandb:
             wandb.log(wandb_log)
         
+        # Add to training history
+        training_history.append(epoch_metrics)
+        
         # 🔥 Early stopping check
         if early_stopping is not None:
             if early_stopping(val_metrics['loss']):
@@ -805,8 +934,62 @@ def main():
             if is_best:
                 best_val_loss = val_metrics['loss']
                 print(f"  ✅ NEW BEST! Saving checkpoint...")
+                
+                checkpoint = {
+                    'epoch': epoch,
+                    'stage': stage,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'train_loss': train_metrics['loss'],
+                    'val_loss': val_metrics['loss'],
+                    'best_val_loss': best_val_loss,
+                    'args': vars(args)
+                }
+                
+                if scaler is not None:
+                    checkpoint['scaler_state_dict'] = scaler.state_dict()
+                
+                if scheduler is not None:
+                    checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+                
+                # Only save best model to save disk space
+                best_path = os.path.join(output_dir, 'best_model.pt')
+                torch.save(checkpoint, best_path)
+                print(f"  💾 Saved to: {best_path}")
+            else:
+                # Only save periodic checkpoints if we have space
+                # Skip if not the best to save disk space on Kaggle
+                if epoch % (args.save_every * 5) == 0:  # Every 5x save_every
+                    print(f"  💾 Saving periodic checkpoint (epoch {epoch})...")
+                    checkpoint = {
+                        'epoch': epoch,
+                        'stage': stage,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'train_loss': train_metrics['loss'],
+                        'val_loss': val_metrics['loss'],
+                        'best_val_loss': best_val_loss,
+                        'args': vars(args)
+                    }
+                    
+                    if scaler is not None:
+                        checkpoint['scaler_state_dict'] = scaler.state_dict()
+                    
+                    if scheduler is not None:
+                        checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+                    
+                    checkpoint_path = os.path.join(output_dir, f'checkpoint_epoch{epoch}.pt')
+                    try:
+                        torch.save(checkpoint, checkpoint_path)
+                        print(f"  💾 Saved to: {checkpoint_path}")
+                    except OSError as e:
+                        print(f"  ⚠️  Failed to save periodic checkpoint: {e}")
+                        print(f"  💡 Continuing with best_model.pt only...")
+                else:
+                    print(f"  ⏭️  Skipping checkpoint save (not best, epoch {epoch})")
             
-            checkpoint = {
+            # 🔥 ALWAYS save last model (for resume)
+            last_checkpoint = {
                 'epoch': epoch,
                 'stage': stage,
                 'model_state_dict': model.state_dict(),
@@ -814,21 +997,29 @@ def main():
                 'train_loss': train_metrics['loss'],
                 'val_loss': val_metrics['loss'],
                 'best_val_loss': best_val_loss,
+                'training_history': training_history,  # Include history for resume
                 'args': vars(args)
             }
             
             if scaler is not None:
-                checkpoint['scaler_state_dict'] = scaler.state_dict()
+                last_checkpoint['scaler_state_dict'] = scaler.state_dict()
             
             if scheduler is not None:
-                checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+                last_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
             
-            checkpoint_path = os.path.join(output_dir, f'checkpoint_stage3_epoch{epoch}.pt')
-            torch.save(checkpoint, checkpoint_path)
-            
-            if is_best:
-                best_path = os.path.join(output_dir, 'best_model.pt')
-                torch.save(checkpoint, best_path)
+            last_path = os.path.join(output_dir, 'last_model.pt')
+            try:
+                torch.save(last_checkpoint, last_path)
+                print(f"  💾 Saved last model to: {last_path} (for resume)")
+            except OSError as e:
+                print(f"  ⚠️  Failed to save last model: {e}")
+        
+        # 🔥 Save training curves and CSV after each epoch
+        try:
+            plot_training_curves(training_history, output_dir)
+            save_metrics_csv(training_history, output_dir)
+        except Exception as e:
+            print(f"  ⚠️  Failed to save plots/CSV: {e}")
     
     print("\n" + "="*80)
     print("TRAINING COMPLETE!")
