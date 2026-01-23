@@ -297,7 +297,8 @@ def save_metrics_csv(history, output_dir):
 
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
-    is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1
+    is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
+    use_counting_penalty=False
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -331,7 +332,8 @@ def run_one_epoch_deterministic(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     labels=labels,
-                    stage=stage
+                    stage=stage,
+                    use_counting_penalty=use_counting_penalty  # 🔥 Pass counting penalty flag
                 )
                 
                 loss = outputs.total_loss
@@ -512,9 +514,17 @@ def main():
     parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
     
+    # Loss weighting
+    parser.add_argument('--use_counting_penalty', action='store_true', 
+                       help='Enable 2x loss weight for counting questions (improves counting accuracy)')
+    parser.add_argument('--counting_weight', type=float, default=2.0,
+                       help='Loss weight multiplier for counting questions (default: 2.0)')
+    
     # Freezing
     parser.add_argument('--unfreeze_encoder_layers', type=int, default=3, help='Number of text encoder layers to unfreeze')
     parser.add_argument('--freeze_decoder', action='store_true', help='Freeze decoder (default: unfrozen)')
+    parser.add_argument('--unfreeze_vision_layers', type=int, default=0, 
+                       help='Number of vision encoder layers to unfreeze (0=frozen, 2=recommended, 4=aggressive)')
     
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
@@ -592,6 +602,10 @@ def main():
     print(f"  Fusion layers: {num_fusion_layers}")
     print(f"  Unfreeze encoder layers: {unfreeze_encoder_layers}")
     print(f"  Unfreeze decoder: {unfreeze_decoder}")
+    if args.unfreeze_vision_layers > 0:
+        print(f"  🔥 Unfreeze vision layers: {args.unfreeze_vision_layers} (for counting/color)")
+    if args.use_counting_penalty:
+        print(f"  🔥 Counting penalty: {args.counting_weight}x (enabled)")
     print(f"  Output dir: {output_dir}")
     print(f"  Random seed: {args.seed}")
     print("="*80 + "\n")
@@ -721,7 +735,8 @@ def main():
     
     model.freeze_pretrained(
         unfreeze_encoder_layers=unfreeze_encoder_layers,
-        unfreeze_decoder=unfreeze_decoder
+        unfreeze_decoder=unfreeze_decoder,
+        unfreeze_vision_layers=args.unfreeze_vision_layers  # 🔥 Unfreeze vision layers
     )
     
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
@@ -825,7 +840,8 @@ def main():
             is_training=True,
             max_norm=max_norm,
             stage=stage,
-            gradient_accumulation_steps=args.gradient_accumulation_steps
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            use_counting_penalty=args.use_counting_penalty  # 🔥 Enable counting penalty
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")

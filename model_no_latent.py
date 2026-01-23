@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import re
 
 from transformers import (
     AutoModel,
@@ -33,6 +34,27 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
     shifted_input_ids[:, 0] = decoder_start_token_id
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
     return shifted_input_ids
+
+
+def is_counting_question(question: str) -> bool:
+    """Check if question asks for counting"""
+    counting_patterns = [
+        r'có bao nhiêu',
+        r'bao nhiêu',
+        r'số lượng',
+        r'mấy',
+    ]
+    
+    question_lower = question.lower()
+    for pattern in counting_patterns:
+        if re.search(pattern, question_lower):
+            return True
+    return False
+
+
+def is_color_question(question: str) -> bool:
+    """Check if question asks about color"""
+    return 'màu' in question.lower()
 
 
 # ============================================================================
@@ -211,12 +233,43 @@ class DeterministicVQA(nn.Module):
         
         print("[DETERMINISTIC VQA] ✓ Initialization complete (NO latent module!)")
     
-    def freeze_pretrained(self, unfreeze_encoder_layers: int = 3, unfreeze_decoder: bool = True):
-        """Freeze pretrained components"""
-        # Freeze vision
+    def freeze_pretrained(
+        self, 
+        unfreeze_encoder_layers: int = 3, 
+        unfreeze_decoder: bool = True,
+        unfreeze_vision_layers: int = 0  # 🔥 NEW: Unfreeze vision encoder layers
+    ):
+        """
+        Freeze pretrained components with optional vision unfreezing
+        
+        Args:
+            unfreeze_encoder_layers: Number of text encoder layers to unfreeze (from end)
+            unfreeze_decoder: Whether to unfreeze decoder
+            unfreeze_vision_layers: Number of vision encoder layers to unfreeze (from end)
+                                   0 = fully frozen (default, safe)
+                                   2 = unfreeze last 2 layers (recommended for counting/color)
+                                   4 = unfreeze last 4 layers (aggressive, may overfit)
+        """
+        # Freeze vision encoder
         for param in self.vision_encoder.parameters():
             param.requires_grad = False
-        print(f"[Freeze] Vision encoder: FROZEN")
+        
+        if unfreeze_vision_layers > 0:
+            # DINOv2 structure: encoder.layer[0-11] (12 layers total for base model)
+            # Unfreeze last N layers
+            if hasattr(self.vision_encoder, 'encoder') and hasattr(self.vision_encoder.encoder, 'layer'):
+                total_vision_layers = len(self.vision_encoder.encoder.layer)
+                layers_to_unfreeze = self.vision_encoder.encoder.layer[-unfreeze_vision_layers:]
+                
+                for layer in layers_to_unfreeze:
+                    for param in layer.parameters():
+                        param.requires_grad = True
+                
+                print(f"[Freeze] Vision encoder: Last {unfreeze_vision_layers}/{total_vision_layers} layers UNFROZEN")
+            else:
+                print(f"[Freeze] Vision encoder: Structure unknown, keeping FROZEN")
+        else:
+            print(f"[Freeze] Vision encoder: FULLY FROZEN")
         
         # Freeze text encoder
         for param in self.encoder.parameters():
@@ -250,12 +303,19 @@ class DeterministicVQA(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
-        stage: int = 3  # Kept for compatibility, but ignored
+        stage: int = 3,  # Kept for compatibility, but ignored
+        use_counting_penalty: bool = False,  # 🔥 NEW: Enable counting loss weight
+        counting_weight: float = 2.0  # 🔥 NEW: Weight for counting questions
     ):
         """
         Forward pass - deterministic fusion
         
         NO sampling, NO KL, just pure cross-attention!
+        
+        Args:
+            use_counting_penalty: If True, apply 2x weight to counting questions
+            counting_weight: Multiplier for counting question loss (default: 2.0)
+```
         """
         batch_size = pixel_values.size(0)
         
@@ -316,17 +376,52 @@ class DeterministicVQA(nn.Module):
         # 6. Generate answer logits
         answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
         
-        # 7. Compute loss
+        # 7. Compute loss (with optional counting penalty)
         answer_loss = None
         total_loss = None
         
         if labels is not None:
-            answer_loss = F.cross_entropy(
-                answer_logits.view(-1, answer_logits.size(-1)),
-                labels.view(-1),
-                ignore_index=-100,
-                label_smoothing=0.1  # 🔥 Prevent overfitting on small dataset!
-            )
+            if use_counting_penalty:
+                # Compute per-sample loss with counting penalty
+                loss_fct = nn.CrossEntropyLoss(
+                    ignore_index=-100,
+                    label_smoothing=0.1,
+                    reduction='none'  # Per-token loss
+                )
+                
+                # Compute loss per token
+                loss_per_token = loss_fct(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1)
+                )  # [batch * seq_len]
+                
+                # Reshape to [batch, seq_len]
+                loss_per_token = loss_per_token.view(batch_size, -1)
+                
+                # Average across sequence (only non-padding)
+                mask = (labels != -100).float()
+                loss_per_sample = (loss_per_token * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+                
+                # Apply counting penalty
+                weights = torch.ones(batch_size, device=pixel_values.device)
+                
+                # Decode questions to check if counting
+                for i in range(batch_size):
+                    question = self.tokenizer.decode(input_ids[i], skip_special_tokens=True)
+                    if is_counting_question(question):
+                        weights[i] = counting_weight
+                
+                # Weighted loss
+                answer_loss = (loss_per_sample * weights).mean()
+            else:
+                # Standard cross entropy loss
+                answer_loss = F.cross_entropy(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1),
+                    ignore_index=-100,
+                    label_smoothing=0.1
+                )
+            
             total_loss = answer_loss  # Only answer loss, no KL!
         
         return DeterministicVQAOutput(
