@@ -475,7 +475,8 @@ class DeterministicVQA(nn.Module):
         batch_size = pixel_values.size(0)
         
         # 1. Vision encoding
-        vision_outputs = self.vision_encoder(pixel_values)
+        # PEFT wraps the model and requires keyword argument
+        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
         
         # Remove CLS token (DINOv2 returns [batch, 257, 768] where first token is CLS)
