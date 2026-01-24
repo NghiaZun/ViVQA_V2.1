@@ -536,6 +536,17 @@ def main():
     parser.add_argument('--vision_lora_dropout', type=float, default=0.1,
                        help='LoRA dropout rate (default: 0.1)')
     
+    # 🔥 Text Encoder Adaptation (LoRA vs unfreeze layers)
+    parser.add_argument('--use_text_lora', action='store_true',
+                       help='Use LoRA for text encoder (BETTER than unfreezing layers for ~10K samples)')
+    parser.add_argument('--text_lora_r', type=int, default=16,
+                       help='LoRA rank for text encoder (default: 16, higher than vision)')
+    parser.add_argument('--text_lora_alpha', type=int, default=32,
+                       help='LoRA alpha scaling for text (default: 32)')
+    parser.add_argument('--text_lora_dropout', type=float, default=0.1,
+                       help='LoRA dropout for text encoder (default: 0.1)')
+
+    
     # 🔥 Answer-aware & Type-conditional Loss
     parser.add_argument('--answer_weights', type=str, default=None,
                        help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
@@ -620,6 +631,8 @@ def main():
     print(f"  Unfreeze decoder: {unfreeze_decoder}")
     if args.use_vision_lora:
         print(f"  🔥 Vision LoRA: r={args.vision_lora_r}, alpha={args.vision_lora_alpha}, dropout={args.vision_lora_dropout}")
+    if args.use_text_lora:
+        print(f"  🔥 Text LoRA: r={args.text_lora_r}, alpha={args.text_lora_alpha}, dropout={args.text_lora_dropout}")
     if args.answer_weights:
         print(f"  🔥 Answer-aware loss: {args.answer_weights}")
     if args.use_type_loss:
@@ -769,7 +782,11 @@ def main():
         use_vision_lora=args.use_vision_lora,  # 🔥 LoRA for vision encoder
         vision_lora_r=args.vision_lora_r,
         vision_lora_alpha=args.vision_lora_alpha,
-        vision_lora_dropout=args.vision_lora_dropout
+        vision_lora_dropout=args.vision_lora_dropout,
+        use_text_lora=args.use_text_lora,  # 🔥 NEW: LoRA for text encoder
+        text_lora_r=args.text_lora_r,  # 🔥 NEW
+        text_lora_alpha=args.text_lora_alpha,  # 🔥 NEW
+        text_lora_dropout=args.text_lora_dropout  # 🔥 NEW
     ).to(device)
     
     model.freeze_pretrained(

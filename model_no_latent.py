@@ -37,52 +37,10 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
 
 
 # ============================================================================
-# LORA LAYER (for efficient fine-tuning)
 # ============================================================================
-
-class LoRALayer(nn.Module):
-    """
-    LoRA: Low-Rank Adaptation
-    
-    Replaces W with W + (B @ A), where:
-    - W: frozen pretrained weights [d_out, d_in]
-    - A: trainable low-rank matrix [r, d_in]
-    - B: trainable low-rank matrix [d_out, r]
-    - r << min(d_out, d_in)
-    
-    Only ~0.1-1% parameters vs full fine-tuning!
-    """
-    def __init__(self, in_features: int, out_features: int, rank: int = 8, 
-                 alpha: int = 16, dropout: float = 0.1):
-        super().__init__()
-        self.rank = rank
-        self.alpha = alpha
-        self.scaling = alpha / rank
-        
-        # LoRA matrices (trainable)
-        self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
-        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
-        self.lora_dropout = nn.Dropout(dropout)
-        
-        # Initialize A with kaiming uniform, B with zeros
-        nn.init.kaiming_uniform_(self.lora_A, a=5**0.5)
-        nn.init.zeros_(self.lora_B)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: [..., in_features]
-        Returns:
-            lora_output: [..., out_features]
-        """
-        # x @ A^T @ B^T with dropout
-        lora_out = self.lora_dropout(x) @ self.lora_A.T @ self.lora_B.T
-        return lora_out * self.scaling
-
-
+# FLAMINGO-STYLE GATED CROSS ATTENTION
 # ============================================================================
-# FLAMINGO-STYLE GATED CROSS ATTENTION (kept from original)
-# ============================================================================
+# Note: Manual LoRALayer removed - PEFT library handles all LoRA functionality
 
 class FlamingoGatedCrossAttention(nn.Module):
     """Flamingo-style Gated Cross Attention"""
@@ -196,10 +154,14 @@ class DeterministicVQA(nn.Module):
         num_heads: int = 8,
         dropout: float = 0.1,
         gradient_checkpointing: bool = True,
-        use_vision_lora: bool = False,  # 🔥 NEW: Use LoRA for vision encoder
+        use_vision_lora: bool = False,  # 🔥 Use LoRA for vision encoder
         vision_lora_r: int = 8,  # 🔥 LoRA rank (8 recommended for ~10K samples)
         vision_lora_alpha: int = 16,  # 🔥 LoRA alpha scaling
-        vision_lora_dropout: float = 0.1  # 🔥 LoRA dropout
+        vision_lora_dropout: float = 0.1,  # 🔥 LoRA dropout
+        use_text_lora: bool = False,  # 🔥 NEW: Use LoRA for text encoder
+        text_lora_r: int = 16,  # 🔥 Text LoRA rank (higher than vision)
+        text_lora_alpha: int = 32,  # 🔥 Text LoRA alpha
+        text_lora_dropout: float = 0.1  # 🔥 Text LoRA dropout
     ):
         super().__init__()
         
@@ -212,6 +174,11 @@ class DeterministicVQA(nn.Module):
         self.vision_lora_r = vision_lora_r
         self.vision_lora_alpha = vision_lora_alpha
         self.vision_lora_dropout = vision_lora_dropout
+        
+        self.use_text_lora = use_text_lora  # 🔥 NEW
+        self.text_lora_r = text_lora_r  # 🔥 NEW
+        self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
+        self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
         
         # Vision encoder
         self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
@@ -241,6 +208,11 @@ class DeterministicVQA(nn.Module):
         self.config.eos_token_id = self.tokenizer.eos_token_id
         
         del bartpho_full
+        
+        # 🔥 Add LoRA to text encoder if requested
+        if use_text_lora:
+            self._inject_lora_to_text_encoder()
+            print(f"  🔥 Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}, dropout={text_lora_dropout}")
         
         # Vision position embeddings
         self.num_patches = 256
@@ -272,114 +244,88 @@ class DeterministicVQA(nn.Module):
     
     def _inject_lora_to_vision_encoder(self):
         """
-        Inject LoRA into vision encoder using HuggingFace PEFT library
+        Inject LoRA into vision encoder using HuggingFace PEFT library.
         
-        This is the PROPER way to do LoRA - PEFT handles all the complexity:
-        - Automatically hooks into attention modules
-        - Efficient forward pass with LoRA
-        - Battle-tested implementation
+        PEFT is the ONLY supported method - no manual fallback!
         
-        Fallback to manual implementation if PEFT not available.
+        Why PEFT only:
+        - Battle-tested by HuggingFace
+        - Handles all edge cases
+        - Efficient implementation
+        - Active maintenance & bug fixes
+        - No risk of custom bugs
+        """
+        try:
+            from peft import LoraConfig, get_peft_model
+        except ImportError:
+            raise RuntimeError(
+                "\n"
+                "❌ PEFT library is REQUIRED for LoRA!\n"
+                "   Install with: pip install peft\n"
+                "   Then retry training.\n"
+            )
+        
+        print(f"  [LoRA] Using PEFT library for vision encoder...")
+        
+        # LoRA config for vision encoder (DINOv2)
+        lora_config = LoraConfig(
+            r=self.vision_lora_r,
+            lora_alpha=self.vision_lora_alpha,
+            lora_dropout=self.vision_lora_dropout,
+            target_modules=["query", "key", "value"],  # Attention Q/K/V projections
+            bias="none",
+            task_type="FEATURE_EXTRACTION"  # DINOv2 is feature extractor
+        )
+        
+        # Apply LoRA (PEFT automatically hooks into forward pass!)
+        self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
+        
+        # Print trainable parameters summary
+        trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in self.vision_encoder.parameters())
+        print(f"  [LoRA] Vision - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+    
+    def _inject_lora_to_text_encoder(self):
+        """
+        Inject LoRA into BARTpho text encoder using PEFT library
+        
+        This adapts the encoder with low-rank matrices instead of unfreezing layers.
+        Benefits:
+        - 10x fewer parameters than unfreezing 3 layers (~1.5M vs ~18M)
+        - Adapts ALL 12 layers instead of just last 3
+        - More stable training (no gradient mismatch between frozen/unfrozen layers)
+        - Better generalization on low-resource datasets (~10K samples)
+        
+        Proven effective in LoRA paper: https://arxiv.org/abs/2106.09685
         """
         try:
             from peft import LoraConfig, get_peft_model
             
-            print(f"  [LoRA] Using PEFT library for proper LoRA injection...")
+            print(f"  [LoRA] Injecting into BARTpho encoder (r={self.text_lora_r})...")
             
-            # LoRA config for vision encoder (DINOv2)
+            # LoRA config for text encoder (BARTpho)
             lora_config = LoraConfig(
-                r=self.vision_lora_r,
-                lora_alpha=self.vision_lora_alpha,
-                lora_dropout=self.vision_lora_dropout,
-                target_modules=["query", "key", "value"],  # Attention Q/K/V projections
+                r=self.text_lora_r,
+                lora_alpha=self.text_lora_alpha,
+                lora_dropout=self.text_lora_dropout,
+                target_modules=["q_proj", "k_proj", "v_proj"],  # BART uses *_proj naming
                 bias="none",
-                task_type="FEATURE_EXTRACTION"  # Not CAUSAL_LM!
+                task_type="SEQ_2_SEQ_LM"  # BART is seq2seq model
             )
             
-            # Apply LoRA (PEFT automatically hooks into forward pass!)
-            self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
+            # Apply LoRA to encoder (PEFT handles everything!)
+            self.encoder = get_peft_model(self.encoder, lora_config)
             
-            # Print trainable parameters summary
-            trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
-            total_params = sum(p.numel() for p in self.vision_encoder.parameters())
-            print(f"  [LoRA] Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+            # Print trainable parameters
+            trainable_params = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.encoder.parameters())
+            print(f"  [LoRA] Text Encoder - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
             
         except ImportError:
-            print(f"  ⚠️  PEFT library not found! Installing...")
-            print(f"      Run: pip install peft")
-            print(f"  ⚠️  Falling back to manual LoRA implementation (less tested)...")
-            self._inject_lora_manual()
-    
-    def _inject_lora_manual(self):
-        """
-        Manual LoRA injection (fallback if PEFT not available)
-        
-        WARNING: This is more brittle than PEFT!
-        """
-        vision_hidden_dim = self.vision_encoder.config.hidden_size
-        
-        # Create LoRA adapters for all 12 DINOv2 layers
-        self.vision_lora_adapters = nn.ModuleList()
-        
-        for layer_idx in range(12):
-            layer_loras = nn.ModuleDict({
-                'query': LoRALayer(
-                    vision_hidden_dim, vision_hidden_dim,
-                    rank=self.vision_lora_r,
-                    alpha=self.vision_lora_alpha,
-                    dropout=self.vision_lora_dropout
-                ),
-                'key': LoRALayer(
-                    vision_hidden_dim, vision_hidden_dim,
-                    rank=self.vision_lora_r,
-                    alpha=self.vision_lora_alpha,
-                    dropout=self.vision_lora_dropout
-                ),
-                'value': LoRALayer(
-                    vision_hidden_dim, vision_hidden_dim,
-                    rank=self.vision_lora_r,
-                    alpha=self.vision_lora_alpha,
-                    dropout=self.vision_lora_dropout
-                )
-            })
-            self.vision_lora_adapters.append(layer_loras)
-        
-        # 🔥 CRITICAL: Hook LoRA into each attention layer's forward
-        for layer_idx, layer in enumerate(self.vision_encoder.encoder.layer):
-            attn_module = layer.attention.attention
-            lora_adapters = self.vision_lora_adapters[layer_idx]
-            
-            # Store originals
-            original_query_forward = attn_module.query.forward
-            original_key_forward = attn_module.key.forward
-            original_value_forward = attn_module.value.forward
-            
-            # Create LoRA-enhanced forwards
-            def make_lora_forward(original_forward, lora_layer):
-                def forward_with_lora(x):
-                    base_out = original_forward(x)
-                    lora_out = lora_layer(x)
-                    return base_out + lora_out  # ✅ BASE + LoRA
-                return forward_with_lora
-            
-            # Replace forwards
-            attn_module.query.forward = make_lora_forward(original_query_forward, lora_adapters['query'])
-            attn_module.key.forward = make_lora_forward(original_key_forward, lora_adapters['key'])
-            attn_module.value.forward = make_lora_forward(original_value_forward, lora_adapters['value'])
-        
-        trainable = sum(p.numel() for lora in self.vision_lora_adapters for layer in lora.values() for p in layer.parameters())
-        print(f"  [LoRA] Manual injection: {trainable:,} trainable params across 12 layers")
-    
-    def _count_lora_params(self):
-        """Count trainable LoRA parameters"""
-        if not hasattr(self, 'vision_lora_adapters'):
-            return 0
-        
-        count = 0
-        for layer_loras in self.vision_lora_adapters:
-            for lora in layer_loras.values():
-                count += sum(p.numel() for p in lora.parameters())
-        return count
+            print(f"  ⚠️  PEFT library not found!")
+            print(f"      Install with: pip install peft")
+            print(f"      Text encoder will remain frozen unless you unfreeze layers manually")
+            raise RuntimeError("PEFT required for text LoRA. Install: pip install peft")
     
     def freeze_pretrained(
         self, 
@@ -395,45 +341,53 @@ class DeterministicVQA(nn.Module):
         
         Note: Vision encoder is ALWAYS frozen except for LoRA adapters (if enabled)
         """
-        # 🔥 Freeze ALL vision encoder parameters (base weights)
-        for param in self.vision_encoder.parameters():
-            param.requires_grad = False
-        
-        # 🔥 Unfreeze LoRA adapters if they exist
+        # 🔥 Vision Encoder: PEFT LoRA handles freezing automatically
         if self.use_vision_lora:
-            # Check if using PEFT (LoRA is already handled)
             try:
                 from peft import PeftModel
                 if isinstance(self.vision_encoder, PeftModel):
-                    # PEFT automatically sets requires_grad for LoRA params
+                    # PEFT automatically freezes base weights and unfreezes LoRA adapters
                     trainable = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
-                    print(f"[Freeze] Vision encoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
+                    print(f"[Freeze] Vision encoder: FROZEN (base) + PEFT LoRA ({trainable/1e6:.2f}M params)")
                 else:
-                    raise ImportError  # Fallback to manual
+                    print(f"[Freeze] Vision encoder: WARNING - LoRA requested but not applied!")
             except ImportError:
-                # Manual LoRA injection
-                if hasattr(self, 'vision_lora_adapters'):
-                    lora_param_count = 0
-                    for layer_loras in self.vision_lora_adapters:
-                        for lora in layer_loras.values():
-                            for param in lora.parameters():
-                                param.requires_grad = True
-                                lora_param_count += param.numel()
-                    print(f"[Freeze] Vision encoder: FROZEN (base) + Manual LoRA TRAINABLE ({lora_param_count/1e6:.2f}M params)")
+                raise RuntimeError("PEFT not installed but vision LoRA requested!")
         else:
+            # Manually freeze if no LoRA
+            for param in self.vision_encoder.parameters():
+                param.requires_grad = False
             print(f"[Freeze] Vision encoder: FULLY FROZEN")
         
-        # Freeze text encoder
+        # 🔥 Text Encoder: Freeze base, unfreeze LoRA OR last N layers
         for param in self.encoder.parameters():
             param.requires_grad = False
         
-        if unfreeze_encoder_layers > 0:
+        # Handle text LoRA (RECOMMENDED for low-resource)
+        if self.use_text_lora:
+            try:
+                from peft import PeftModel
+                if isinstance(self.encoder, PeftModel):
+                    # PEFT automatically sets requires_grad for LoRA params
+                    trainable = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Text encoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
+                    print(f"         ✅ Adapting ALL 12 layers with low-rank matrices")
+                else:
+                    print(f"[Freeze] Text encoder: LoRA requested but PEFT not applied")
+            except ImportError:
+                print(f"[Freeze] Text encoder: LoRA requested but PEFT not installed")
+        
+        # Fallback: Unfreeze last N layers (OLD METHOD - less efficient)
+        elif unfreeze_encoder_layers > 0:
             for layer in self.encoder.layers[-unfreeze_encoder_layers:]:
                 for param in layer.parameters():
                     param.requires_grad = True
-            print(f"[Freeze] Text encoder: Last {unfreeze_encoder_layers} layers UNFROZEN")
+            trainable = sum(p.numel() for layer in self.encoder.layers[-unfreeze_encoder_layers:] 
+                          for p in layer.parameters() if p.requires_grad)
+            print(f"[Freeze] Text encoder: Last {unfreeze_encoder_layers} layers UNFROZEN ({trainable/1e6:.2f}M params)")
+            print(f"         ⚠️  Consider using --use_text_lora for better efficiency!")
         else:
-            print(f"[Freeze] Text encoder: FROZEN")
+            print(f"[Freeze] Text encoder: FULLY FROZEN")
         
         # Decoder
         if unfreeze_decoder:
