@@ -619,8 +619,8 @@ class DeterministicVQA(nn.Module):
         """
         batch_size = pixel_values.size(0)
         
-        # Encode vision
-        vision_outputs = self.vision_encoder(pixel_values)
+        # Encode vision (PEFT requires keyword argument)
+        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
         patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS token: [batch, 257, 768] -> [batch, 256, 768]
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
