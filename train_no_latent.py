@@ -298,7 +298,7 @@ def save_metrics_csv(history, output_dir):
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
-    use_counting_penalty=False
+    answer_weights=None, use_type_loss=False
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -306,6 +306,8 @@ def run_one_epoch_deterministic(
     Args:
         gradient_accumulation_steps: Accumulate gradients over multiple batches
                                      for effective larger batch size
+        answer_weights: Tensor of token-level weights for balanced loss
+        use_type_loss: Whether to apply type-conditional loss weighting
     
     Returns:
         dict with metrics: loss, answer_loss
@@ -325,6 +327,11 @@ def run_one_epoch_deterministic(
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
             
+            # 🔥 Extract question types if using type-conditional loss
+            question_types = None
+            if use_type_loss and 'question_type' in batch:
+                question_types = batch['question_type'].to(device)
+            
             # Forward pass with mixed precision
             with autocast(enabled=(scaler is not None)):
                 outputs = model(
@@ -333,7 +340,8 @@ def run_one_epoch_deterministic(
                     attention_mask=attention_mask,
                     labels=labels,
                     stage=stage,
-                    use_counting_penalty=use_counting_penalty  # 🔥 Pass counting penalty flag
+                    answer_weights=answer_weights,  # 🔥 Pass answer weights
+                    question_types=question_types   # 🔥 Pass question types
                 )
                 
                 loss = outputs.total_loss
@@ -514,17 +522,25 @@ def main():
     parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
     
-    # Loss weighting
-    parser.add_argument('--use_counting_penalty', action='store_true', 
-                       help='Enable 2x loss weight for counting questions (improves counting accuracy)')
-    parser.add_argument('--counting_weight', type=float, default=2.0,
-                       help='Loss weight multiplier for counting questions (default: 2.0)')
-    
     # Freezing
     parser.add_argument('--unfreeze_encoder_layers', type=int, default=3, help='Number of text encoder layers to unfreeze')
     parser.add_argument('--freeze_decoder', action='store_true', help='Freeze decoder (default: unfrozen)')
-    parser.add_argument('--unfreeze_vision_layers', type=int, default=0, 
-                       help='Number of vision encoder layers to unfreeze (0=frozen, 2=recommended, 4=aggressive)')
+    
+    # 🔥 Vision Adaptation (LoRA recommended for low-resource)
+    parser.add_argument('--use_vision_lora', action='store_true',
+                       help='Use LoRA for vision encoder adaptation (RECOMMENDED for ~10K samples)')
+    parser.add_argument('--vision_lora_r', type=int, default=8,
+                       help='LoRA rank for vision encoder (default: 8, safe for low-resource)')
+    parser.add_argument('--vision_lora_alpha', type=int, default=16,
+                       help='LoRA alpha scaling (default: 16)')
+    parser.add_argument('--vision_lora_dropout', type=float, default=0.1,
+                       help='LoRA dropout rate (default: 0.1)')
+    
+    # 🔥 Answer-aware & Type-conditional Loss
+    parser.add_argument('--answer_weights', type=str, default=None,
+                       help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
+    parser.add_argument('--use_type_loss', action='store_true',
+                       help='Enable type-conditional loss (1.5x counting, 1.4x location, 1.3x color)')
     
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
@@ -602,13 +618,30 @@ def main():
     print(f"  Fusion layers: {num_fusion_layers}")
     print(f"  Unfreeze encoder layers: {unfreeze_encoder_layers}")
     print(f"  Unfreeze decoder: {unfreeze_decoder}")
-    if args.unfreeze_vision_layers > 0:
-        print(f"  🔥 Unfreeze vision layers: {args.unfreeze_vision_layers} (for counting/color)")
-    if args.use_counting_penalty:
-        print(f"  🔥 Counting penalty: {args.counting_weight}x (enabled)")
+    if args.use_vision_lora:
+        print(f"  🔥 Vision LoRA: r={args.vision_lora_r}, alpha={args.vision_lora_alpha}, dropout={args.vision_lora_dropout}")
+    if args.answer_weights:
+        print(f"  🔥 Answer-aware loss: {args.answer_weights}")
+    if args.use_type_loss:
+        print(f"  🔥 Type-conditional loss: 1.5x counting, 1.4x location, 1.3x color")
     print(f"  Output dir: {output_dir}")
     print(f"  Random seed: {args.seed}")
     print("="*80 + "\n")
+    
+    # 🔥 Load answer weights if provided
+    answer_weights_tensor = None
+    if args.answer_weights:
+        print(f"[Answer Weights] Loading from {args.answer_weights}...")
+        import json
+        with open(args.answer_weights, 'r', encoding='utf-8') as f:
+            weights_data = json.load(f)
+        
+        token_weights = weights_data['token_weights']
+        answer_weights_tensor = torch.tensor(token_weights, dtype=torch.float32, device=device)
+        
+        print(f"  Loaded {len(token_weights)} token weights")
+        print(f"  Weight range: [{min(token_weights):.2f}, {max(token_weights):.2f}]")
+        print(f"  Weighted tokens: {(answer_weights_tensor > 1.0).sum().item()}/{len(token_weights)}")
     
     # 🔥 Initialize Weights & Biases (optional)
     if args.use_wandb:
@@ -648,7 +681,8 @@ def main():
             csv_path=args.train_csv,
             image_folder=args.image_dir,
             vision_processor=vision_processor,
-            tokenizer_name=bartpho_model
+            tokenizer_name=bartpho_model,
+            include_question_type=args.use_type_loss  # 🔥 Enable question type if using type loss
         )
         
         # Check if val_csv provided
@@ -658,7 +692,8 @@ def main():
                 csv_path=args.val_csv,
                 image_folder=args.image_dir,
                 vision_processor=vision_processor,
-                tokenizer_name=bartpho_model
+                tokenizer_name=bartpho_model,
+                include_question_type=args.use_type_loss  # 🔥 Enable question type if using type loss
             )
             train_dataset = full_train_dataset
         else:
@@ -730,13 +765,16 @@ def main():
         num_fusion_layers=num_fusion_layers,
         num_heads=args.num_heads,
         dropout=args.dropout,
-        gradient_checkpointing=not args.no_gradient_checkpointing
+        gradient_checkpointing=not args.no_gradient_checkpointing,
+        use_vision_lora=args.use_vision_lora,  # 🔥 LoRA for vision encoder
+        vision_lora_r=args.vision_lora_r,
+        vision_lora_alpha=args.vision_lora_alpha,
+        vision_lora_dropout=args.vision_lora_dropout
     ).to(device)
     
     model.freeze_pretrained(
         unfreeze_encoder_layers=unfreeze_encoder_layers,
-        unfreeze_decoder=unfreeze_decoder,
-        unfreeze_vision_layers=args.unfreeze_vision_layers  # 🔥 Unfreeze vision layers
+        unfreeze_decoder=unfreeze_decoder
     )
     
     total_params = sum(p.numel() for p in model.parameters()) / 1e6
@@ -841,7 +879,8 @@ def main():
             max_norm=max_norm,
             stage=stage,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            use_counting_penalty=args.use_counting_penalty  # 🔥 Enable counting penalty
+            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -854,7 +893,9 @@ def main():
             scaler=None,
             device=device,
             is_training=False,
-            stage=stage
+            stage=stage,
+            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")

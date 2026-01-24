@@ -36,25 +36,48 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
     return shifted_input_ids
 
 
-def is_counting_question(question: str) -> bool:
-    """Check if question asks for counting"""
-    counting_patterns = [
-        r'có bao nhiêu',
-        r'bao nhiêu',
-        r'số lượng',
-        r'mấy',
-    ]
+# ============================================================================
+# LORA LAYER (for efficient fine-tuning)
+# ============================================================================
+
+class LoRALayer(nn.Module):
+    """
+    LoRA: Low-Rank Adaptation
     
-    question_lower = question.lower()
-    for pattern in counting_patterns:
-        if re.search(pattern, question_lower):
-            return True
-    return False
-
-
-def is_color_question(question: str) -> bool:
-    """Check if question asks about color"""
-    return 'màu' in question.lower()
+    Replaces W with W + (B @ A), where:
+    - W: frozen pretrained weights [d_out, d_in]
+    - A: trainable low-rank matrix [r, d_in]
+    - B: trainable low-rank matrix [d_out, r]
+    - r << min(d_out, d_in)
+    
+    Only ~0.1-1% parameters vs full fine-tuning!
+    """
+    def __init__(self, in_features: int, out_features: int, rank: int = 8, 
+                 alpha: int = 16, dropout: float = 0.1):
+        super().__init__()
+        self.rank = rank
+        self.alpha = alpha
+        self.scaling = alpha / rank
+        
+        # LoRA matrices (trainable)
+        self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
+        self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
+        self.lora_dropout = nn.Dropout(dropout)
+        
+        # Initialize A with kaiming uniform, B with zeros
+        nn.init.kaiming_uniform_(self.lora_A, a=5**0.5)
+        nn.init.zeros_(self.lora_B)
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x: [..., in_features]
+        Returns:
+            lora_output: [..., out_features]
+        """
+        # x @ A^T @ B^T with dropout
+        lora_out = self.lora_dropout(x) @ self.lora_A.T @ self.lora_B.T
+        return lora_out * self.scaling
 
 
 # ============================================================================
@@ -172,7 +195,11 @@ class DeterministicVQA(nn.Module):
         num_fusion_layers: int = 2,
         num_heads: int = 8,
         dropout: float = 0.1,
-        gradient_checkpointing: bool = True
+        gradient_checkpointing: bool = True,
+        use_vision_lora: bool = False,  # 🔥 NEW: Use LoRA for vision encoder
+        vision_lora_r: int = 8,  # 🔥 LoRA rank (8 recommended for ~10K samples)
+        vision_lora_alpha: int = 16,  # 🔥 LoRA alpha scaling
+        vision_lora_dropout: float = 0.1  # 🔥 LoRA dropout
     ):
         super().__init__()
         
@@ -181,10 +208,20 @@ class DeterministicVQA(nn.Module):
         print("  ✅ Direct cross-attention fusion")
         print("  ✅ Optimized for accuracy & stability")
         
+        self.use_vision_lora = use_vision_lora
+        self.vision_lora_r = vision_lora_r
+        self.vision_lora_alpha = vision_lora_alpha
+        self.vision_lora_dropout = vision_lora_dropout
+        
         # Vision encoder
         self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
         vision_hidden_dim = self.vision_encoder.config.hidden_size
         print(f"  📊 DINOv2 hidden_dim: {vision_hidden_dim}")
+        
+        # 🔥 Add LoRA to vision encoder if requested
+        if use_vision_lora:
+            self._inject_lora_to_vision_encoder()
+            print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
         
         # Language model
         bartpho_full = MBartForConditionalGeneration.from_pretrained(bartpho_model_name)
@@ -233,41 +270,156 @@ class DeterministicVQA(nn.Module):
         
         print("[DETERMINISTIC VQA] ✓ Initialization complete (NO latent module!)")
     
+    def _inject_lora_to_vision_encoder(self):
+        """
+        Inject LoRA into vision encoder using HuggingFace PEFT library
+        
+        This is the PROPER way to do LoRA - PEFT handles all the complexity:
+        - Automatically hooks into attention modules
+        - Efficient forward pass with LoRA
+        - Battle-tested implementation
+        
+        Fallback to manual implementation if PEFT not available.
+        """
+        try:
+            from peft import LoraConfig, get_peft_model
+            
+            print(f"  [LoRA] Using PEFT library for proper LoRA injection...")
+            
+            # LoRA config for vision encoder (DINOv2)
+            lora_config = LoraConfig(
+                r=self.vision_lora_r,
+                lora_alpha=self.vision_lora_alpha,
+                lora_dropout=self.vision_lora_dropout,
+                target_modules=["query", "key", "value"],  # Attention Q/K/V projections
+                bias="none",
+                task_type="FEATURE_EXTRACTION"  # Not CAUSAL_LM!
+            )
+            
+            # Apply LoRA (PEFT automatically hooks into forward pass!)
+            self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
+            
+            # Print trainable parameters summary
+            trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.vision_encoder.parameters())
+            print(f"  [LoRA] Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+            
+        except ImportError:
+            print(f"  ⚠️  PEFT library not found! Installing...")
+            print(f"      Run: pip install peft")
+            print(f"  ⚠️  Falling back to manual LoRA implementation (less tested)...")
+            self._inject_lora_manual()
+    
+    def _inject_lora_manual(self):
+        """
+        Manual LoRA injection (fallback if PEFT not available)
+        
+        WARNING: This is more brittle than PEFT!
+        """
+        vision_hidden_dim = self.vision_encoder.config.hidden_size
+        
+        # Create LoRA adapters for all 12 DINOv2 layers
+        self.vision_lora_adapters = nn.ModuleList()
+        
+        for layer_idx in range(12):
+            layer_loras = nn.ModuleDict({
+                'query': LoRALayer(
+                    vision_hidden_dim, vision_hidden_dim,
+                    rank=self.vision_lora_r,
+                    alpha=self.vision_lora_alpha,
+                    dropout=self.vision_lora_dropout
+                ),
+                'key': LoRALayer(
+                    vision_hidden_dim, vision_hidden_dim,
+                    rank=self.vision_lora_r,
+                    alpha=self.vision_lora_alpha,
+                    dropout=self.vision_lora_dropout
+                ),
+                'value': LoRALayer(
+                    vision_hidden_dim, vision_hidden_dim,
+                    rank=self.vision_lora_r,
+                    alpha=self.vision_lora_alpha,
+                    dropout=self.vision_lora_dropout
+                )
+            })
+            self.vision_lora_adapters.append(layer_loras)
+        
+        # 🔥 CRITICAL: Hook LoRA into each attention layer's forward
+        for layer_idx, layer in enumerate(self.vision_encoder.encoder.layer):
+            attn_module = layer.attention.attention
+            lora_adapters = self.vision_lora_adapters[layer_idx]
+            
+            # Store originals
+            original_query_forward = attn_module.query.forward
+            original_key_forward = attn_module.key.forward
+            original_value_forward = attn_module.value.forward
+            
+            # Create LoRA-enhanced forwards
+            def make_lora_forward(original_forward, lora_layer):
+                def forward_with_lora(x):
+                    base_out = original_forward(x)
+                    lora_out = lora_layer(x)
+                    return base_out + lora_out  # ✅ BASE + LoRA
+                return forward_with_lora
+            
+            # Replace forwards
+            attn_module.query.forward = make_lora_forward(original_query_forward, lora_adapters['query'])
+            attn_module.key.forward = make_lora_forward(original_key_forward, lora_adapters['key'])
+            attn_module.value.forward = make_lora_forward(original_value_forward, lora_adapters['value'])
+        
+        trainable = sum(p.numel() for lora in self.vision_lora_adapters for layer in lora.values() for p in layer.parameters())
+        print(f"  [LoRA] Manual injection: {trainable:,} trainable params across 12 layers")
+    
+    def _count_lora_params(self):
+        """Count trainable LoRA parameters"""
+        if not hasattr(self, 'vision_lora_adapters'):
+            return 0
+        
+        count = 0
+        for layer_loras in self.vision_lora_adapters:
+            for lora in layer_loras.values():
+                count += sum(p.numel() for p in lora.parameters())
+        return count
+    
     def freeze_pretrained(
         self, 
         unfreeze_encoder_layers: int = 3, 
-        unfreeze_decoder: bool = True,
-        unfreeze_vision_layers: int = 0  # 🔥 NEW: Unfreeze vision encoder layers
+        unfreeze_decoder: bool = True
     ):
         """
-        Freeze pretrained components with optional vision unfreezing
+        Freeze pretrained components (vision frozen, optionally with LoRA)
         
         Args:
             unfreeze_encoder_layers: Number of text encoder layers to unfreeze (from end)
             unfreeze_decoder: Whether to unfreeze decoder
-            unfreeze_vision_layers: Number of vision encoder layers to unfreeze (from end)
-                                   0 = fully frozen (default, safe)
-                                   2 = unfreeze last 2 layers (recommended for counting/color)
-                                   4 = unfreeze last 4 layers (aggressive, may overfit)
+        
+        Note: Vision encoder is ALWAYS frozen except for LoRA adapters (if enabled)
         """
-        # Freeze vision encoder
+        # 🔥 Freeze ALL vision encoder parameters (base weights)
         for param in self.vision_encoder.parameters():
             param.requires_grad = False
         
-        if unfreeze_vision_layers > 0:
-            # DINOv2 structure: encoder.layer[0-11] (12 layers total for base model)
-            # Unfreeze last N layers
-            if hasattr(self.vision_encoder, 'encoder') and hasattr(self.vision_encoder.encoder, 'layer'):
-                total_vision_layers = len(self.vision_encoder.encoder.layer)
-                layers_to_unfreeze = self.vision_encoder.encoder.layer[-unfreeze_vision_layers:]
-                
-                for layer in layers_to_unfreeze:
-                    for param in layer.parameters():
-                        param.requires_grad = True
-                
-                print(f"[Freeze] Vision encoder: Last {unfreeze_vision_layers}/{total_vision_layers} layers UNFROZEN")
-            else:
-                print(f"[Freeze] Vision encoder: Structure unknown, keeping FROZEN")
+        # 🔥 Unfreeze LoRA adapters if they exist
+        if self.use_vision_lora:
+            # Check if using PEFT (LoRA is already handled)
+            try:
+                from peft import PeftModel
+                if isinstance(self.vision_encoder, PeftModel):
+                    # PEFT automatically sets requires_grad for LoRA params
+                    trainable = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Vision encoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
+                else:
+                    raise ImportError  # Fallback to manual
+            except ImportError:
+                # Manual LoRA injection
+                if hasattr(self, 'vision_lora_adapters'):
+                    lora_param_count = 0
+                    for layer_loras in self.vision_lora_adapters:
+                        for lora in layer_loras.values():
+                            for param in lora.parameters():
+                                param.requires_grad = True
+                                lora_param_count += param.numel()
+                    print(f"[Freeze] Vision encoder: FROZEN (base) + Manual LoRA TRAINABLE ({lora_param_count/1e6:.2f}M params)")
         else:
             print(f"[Freeze] Vision encoder: FULLY FROZEN")
         
@@ -304,8 +456,8 @@ class DeterministicVQA(nn.Module):
         attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
         stage: int = 3,  # Kept for compatibility, but ignored
-        use_counting_penalty: bool = False,  # 🔥 NEW: Enable counting loss weight
-        counting_weight: float = 2.0  # 🔥 NEW: Weight for counting questions
+        answer_weights: Optional[torch.Tensor] = None,  # 🔥 NEW: Token-level weights for balanced loss
+        question_types: Optional[torch.Tensor] = None   # 🔥 NEW: Question type (0=object_id, 1=counting, 2=color, 3=location)
     ):
         """
         Forward pass - deterministic fusion
@@ -313,9 +465,12 @@ class DeterministicVQA(nn.Module):
         NO sampling, NO KL, just pure cross-attention!
         
         Args:
-            use_counting_penalty: If True, apply 2x weight to counting questions
-            counting_weight: Multiplier for counting question loss (default: 2.0)
-```
+            answer_weights: [vocab_size] tensor with per-token loss weights (inverse freq)
+            question_types: [batch] tensor with question type:
+                0 = object identification (Đây là gì?)
+                1 = counting (Có bao nhiêu?)
+                2 = color (Màu gì?)
+                3 = location (Ở đâu? Trên bàn?)
         """
         batch_size = pixel_values.size(0)
         
@@ -376,43 +531,21 @@ class DeterministicVQA(nn.Module):
         # 6. Generate answer logits
         answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
         
-        # 7. Compute loss (with optional counting penalty)
+        # 7. Compute loss (with optional answer-aware weighting and type-conditional loss)
         answer_loss = None
         total_loss = None
         
         if labels is not None:
-            if use_counting_penalty:
-                # Compute per-sample loss with counting penalty
-                loss_fct = nn.CrossEntropyLoss(
-                    ignore_index=-100,
-                    label_smoothing=0.1,
-                    reduction='none'  # Per-token loss
-                )
-                
-                # Compute loss per token
-                loss_per_token = loss_fct(
+            # 🔥 (A) Answer-aware loss: Use token-level weights if provided
+            if answer_weights is not None:
+                # CrossEntropy with per-token weights (inverse frequency)
+                answer_loss = F.cross_entropy(
                     answer_logits.view(-1, answer_logits.size(-1)),
-                    labels.view(-1)
-                )  # [batch * seq_len]
-                
-                # Reshape to [batch, seq_len]
-                loss_per_token = loss_per_token.view(batch_size, -1)
-                
-                # Average across sequence (only non-padding)
-                mask = (labels != -100).float()
-                loss_per_sample = (loss_per_token * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
-                
-                # Apply counting penalty
-                weights = torch.ones(batch_size, device=pixel_values.device)
-                
-                # Decode questions to check if counting
-                for i in range(batch_size):
-                    question = self.tokenizer.decode(input_ids[i], skip_special_tokens=True)
-                    if is_counting_question(question):
-                        weights[i] = counting_weight
-                
-                # Weighted loss
-                answer_loss = (loss_per_sample * weights).mean()
+                    labels.view(-1),
+                    ignore_index=-100,
+                    weight=answer_weights,  # 🔥 Reweight by answer frequency
+                    label_smoothing=0.1
+                )
             else:
                 # Standard cross entropy loss
                 answer_loss = F.cross_entropy(
@@ -421,6 +554,40 @@ class DeterministicVQA(nn.Module):
                     ignore_index=-100,
                     label_smoothing=0.1
                 )
+            
+            # 🔥 (B) Type-conditional loss: Apply extra weight to counting/color questions
+            if question_types is not None:
+                # Compute per-sample loss for type-conditional weighting
+                loss_fct = nn.CrossEntropyLoss(
+                    ignore_index=-100,
+                    weight=answer_weights if answer_weights is not None else None,
+                    label_smoothing=0.1,
+                    reduction='none'
+                )
+                
+                # Per-token loss
+                loss_per_token = loss_fct(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1)
+                )  # [batch * seq_len]
+                
+                # Reshape and average per sample
+                loss_per_token = loss_per_token.view(batch_size, -1)
+                mask = (labels != -100).float()
+                loss_per_sample = (loss_per_token * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+                
+                # Apply type-conditional weights
+                # question_types: 0=object_id, 1=counting, 2=color, 3=location
+                type_weights = torch.ones(batch_size, device=pixel_values.device)
+                
+                # Weight harder question types more (need stronger gradient signal)
+                type_weights[question_types == 1] = 1.5  # 1.5x for counting (hard!)
+                type_weights[question_types == 2] = 1.3  # 1.3x for color
+                type_weights[question_types == 3] = 1.4  # 1.4x for spatial location (also hard!)
+                # type 0 (object_id) keeps weight = 1.0 (baseline)
+                
+                # Final weighted loss
+                answer_loss = (loss_per_sample * type_weights).mean()
             
             total_loss = answer_loss  # Only answer loss, no KL!
         

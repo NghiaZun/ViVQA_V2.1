@@ -5,11 +5,13 @@ from PIL import Image
 import pandas as pd
 import os
 
+
 class VQAGenDataset(Dataset):
     def __init__(self, csv_path, image_folder,
                  vision_processor,
                  tokenizer_name='vinai/bartpho-syllable',
-                 max_q_len=32, max_a_len=10):
+                 max_q_len=32, max_a_len=10,
+                 include_question_type=False):  # 🔥 Enable question type from CSV
 
         self.data = pd.read_csv(csv_path)
         self.image_folder = image_folder
@@ -18,6 +20,7 @@ class VQAGenDataset(Dataset):
         self.tokenizer = BartphoTokenizer.from_pretrained(tokenizer_name)
         self.max_q_len = max_q_len
         self.max_a_len = max_a_len
+        self.include_question_type = include_question_type
 
     def __len__(self):
         return len(self.data)
@@ -57,10 +60,23 @@ class VQAGenDataset(Dataset):
         labels = a_enc['input_ids'].squeeze(0)
         labels[labels == self.tokenizer.pad_token_id] = -100  # important for loss masking
 
-        # Return dict format for compatibility with training script
-        return {
+        # 🔥 Return dict format with optional question_type from CSV
+        result = {
             'pixel_values': pixel_values,
             'input_ids': input_ids,
             'attention_mask': attention_mask,
             'labels': labels
         }
+        
+        # Add question type if requested (must exist in CSV: 0=object_id, 1=counting, 2=color, 3=location)
+        if self.include_question_type:
+            if 'type' in row:
+                question_type = int(row['type'])
+            elif 'question_type' in row:
+                question_type = int(row['question_type'])
+            else:
+                raise ValueError("CSV must have 'type' or 'question_type' column when include_question_type=True")
+            
+            result['question_type'] = question_type
+        
+        return result
