@@ -116,6 +116,87 @@ class GatedTextInjection(nn.Module):
 
 
 # ============================================================================
+# VISION GATING (Learnable Attention-Based)
+# ============================================================================
+
+class VisionGating(nn.Module):
+    """
+    Learnable vision gating with attention mechanism
+    
+    Instead of: gated_vision = scalar * vision  (too simple!)
+    Do:         gated_vision = alpha * vision + (1-alpha) * text_context
+    
+    Where alpha is learned per-patch based on vision+text interaction
+    """
+    def __init__(self, hidden_dim=1024, init_bias=1.5):
+        super().__init__()
+        
+        # Project vision features
+        self.vision_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+        # Project text features  
+        self.text_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+        # Gating network: learns α ∈ [0, 1] per position
+        self.gate_net = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim // 2, 1),
+            nn.Sigmoid()  # α ∈ [0, 1]
+        )
+        
+        # Learnable bias to prefer vision
+        # Higher bias → higher α → prefer vision more
+        self.vision_bias = nn.Parameter(torch.tensor(init_bias))
+        
+        # Layer norm for stability
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+    
+    def forward(self, vision_features, text_features):
+        """
+        Args:
+            vision_features: [B, num_patches, D]  (e.g. [B, 256, 1024])
+            text_features: [B, seq_len, D]         (e.g. [B, 20, 1024])
+        
+        Returns:
+            gated_vision: [B, num_patches, D]  # Enhanced vision
+            gate_values: [B, num_patches]      # α values for monitoring
+        """
+        batch_size, num_patches, hidden_dim = vision_features.shape
+        
+        # 1. Project features
+        v_proj = self.vision_proj(vision_features)  # [B, P, D]
+        t_proj = self.text_proj(text_features)      # [B, L, D]
+        
+        # 2. Pool text to match vision patches
+        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
+        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
+        
+        # 3. Compute gating scores
+        # Concatenate vision + text context for each patch
+        gate_input = torch.cat([v_proj, text_pooled], dim=-1)  # [B, P, 2D]
+        
+        # Learn α per patch (which patches are important?)
+        alpha = self.gate_net(gate_input)  # [B, P, 1]
+        
+        # 4. Apply vision bias (learnable parameter)
+        # Higher bias → prefer vision more globally
+        alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P]
+        alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
+        
+        # 5. Gated combination
+        # α close to 1 → use vision features
+        # α close to 0 → use text context
+        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
+        
+        # 6. Layer norm for stability
+        gated_vision = self.layer_norm(gated_vision)
+        
+        return gated_vision, alpha  # Return alpha for monitoring
+
+
+# ============================================================================
 # OUTPUT DATACLASS (simplified)
 # ============================================================================
 
@@ -126,6 +207,7 @@ class DeterministicVQAOutput:
     answer_loss: Optional[torch.Tensor] = None
     total_loss: Optional[torch.Tensor] = None
     attention_weights: Optional[torch.Tensor] = None
+    gate_stats: Optional[dict] = None  # 🔥 NEW: Vision gate statistics
 
 
 # ============================================================================
@@ -182,11 +264,9 @@ class DeterministicVQA(nn.Module):
         self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
         self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
         
-        # 🔥 Vision gating parameters
+        # 🔥 Vision gating (will be initialized after knowing bart_hidden_dim)
         self.use_vision_gate = use_vision_gate
-        if use_vision_gate:
-            self.vision_gate = nn.Parameter(torch.tensor(vision_gate_init))
-            print(f"  🔥 Vision Gate: init={vision_gate_init:.2f} (learnable)")
+        self.vision_gate_init = vision_gate_init  # Store for later init
         
         # Vision encoder
         self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
@@ -242,6 +322,14 @@ class DeterministicVQA(nn.Module):
             for _ in range(num_fusion_layers)
         ])
         print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers")
+        
+        # 🔥 Initialize VisionGating NOW (after bart_hidden_dim is known)
+        if self.use_vision_gate:
+            self.vision_gating = VisionGating(
+                hidden_dim=bart_hidden_dim,
+                init_bias=self.vision_gate_init
+            )
+            print(f"  🔥 Vision Gating: init_bias={self.vision_gate_init:.2f} (learnable attention)")
         
         # Gradient checkpointing
         if gradient_checkpointing:
@@ -461,10 +549,19 @@ class DeterministicVQA(nn.Module):
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
-        # 🔥 Vision Gating: Scale vision features before decoder
+        # 🔥 Vision Gating: Apply learnable attention-based gating
+        gate_stats = None
         if self.use_vision_gate:
-            # Learnable gate parameter (init > 1.0 means prefer vision)
-            gated_vision = self.vision_gate * fused_vision
+            # NEW: Attention-based gating that learns per-patch importance
+            gated_vision, gate_values = self.vision_gating(fused_vision, text_features)
+            
+            # Compute statistics for monitoring
+            gate_stats = {
+                'mean': gate_values.mean().item(),
+                'std': gate_values.std().item(),
+                'min': gate_values.min().item(),
+                'max': gate_values.max().item()
+            }
         else:
             gated_vision = fused_vision
         
@@ -565,7 +662,8 @@ class DeterministicVQA(nn.Module):
         return DeterministicVQAOutput(
             answer_logits=answer_logits,
             answer_loss=answer_loss,
-            total_loss=total_loss
+            total_loss=total_loss,
+            gate_stats=gate_stats  # 🔥 NEW: Return gate statistics for monitoring
         )
     
     @torch.inference_mode()  # Faster than @torch.no_grad()!
@@ -608,9 +706,9 @@ class DeterministicVQA(nn.Module):
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
-        # 🔥 Vision Gating (same as forward pass)
+        # 🔥 Vision Gating: Apply attention-based gating (same as forward)
         if self.use_vision_gate:
-            gated_vision = self.vision_gate * fused_vision
+            gated_vision, _ = self.vision_gating(fused_vision, text_features)
         else:
             gated_vision = fused_vision
         

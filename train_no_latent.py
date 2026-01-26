@@ -376,10 +376,20 @@ def run_one_epoch_deterministic(
                 total_answer_loss += outputs.answer_loss.item()
                 num_batches += 1
                 
-                pbar.set_postfix({
+                # 🔥 Extract gate statistics if available
+                postfix = {
                     'loss': f"{actual_loss:.3f}",
                     'ans': f"{outputs.answer_loss.item():.3f}"
-                })
+                }
+                
+                if outputs.gate_stats is not None:
+                    stats = outputs.gate_stats
+                    postfix.update({
+                        'α_mean': f"{stats['mean']:.2f}",
+                        'α_std': f"{stats['std']:.2f}"
+                    })
+                
+                pbar.set_postfix(postfix)
     
     if num_batches == 0:
         return {
