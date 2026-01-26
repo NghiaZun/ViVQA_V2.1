@@ -546,6 +546,11 @@ def main():
     parser.add_argument('--text_lora_dropout', type=float, default=0.1,
                        help='LoRA dropout for text encoder (default: 0.1)')
 
+    # 🔥 Vision Dependency (combat text shortcut)
+    parser.add_argument('--use_vision_gate', action='store_true',
+                       help='Enable learnable vision gating (boost vision importance)')
+    parser.add_argument('--vision_gate_init', type=float, default=1.5,
+                       help='Initial vision gate value (>1.0 = prefer vision, default=1.5)')
     
     # 🔥 Answer-aware & Type-conditional Loss
     parser.add_argument('--answer_weights', type=str, default=None,
@@ -786,7 +791,9 @@ def main():
         use_text_lora=args.use_text_lora,  # 🔥 NEW: LoRA for text encoder
         text_lora_r=args.text_lora_r,  # 🔥 NEW
         text_lora_alpha=args.text_lora_alpha,  # 🔥 NEW
-        text_lora_dropout=args.text_lora_dropout  # 🔥 NEW
+        text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
+        use_vision_gate=args.use_vision_gate,  # 🔥 NEW: Vision gating
+        vision_gate_init=args.vision_gate_init  # 🔥 NEW
     ).to(device)
     
     model.freeze_pretrained(

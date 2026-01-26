@@ -161,7 +161,9 @@ class DeterministicVQA(nn.Module):
         use_text_lora: bool = False,  # 🔥 NEW: Use LoRA for text encoder
         text_lora_r: int = 16,  # 🔥 Text LoRA rank (higher than vision)
         text_lora_alpha: int = 32,  # 🔥 Text LoRA alpha
-        text_lora_dropout: float = 0.1  # 🔥 Text LoRA dropout
+        text_lora_dropout: float = 0.1,  # 🔥 Text LoRA dropout
+        use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
+        vision_gate_init: float = 1.5  # 🔥 Initial vision boost (>1.0 = prefer vision)
     ):
         super().__init__()
         
@@ -179,6 +181,12 @@ class DeterministicVQA(nn.Module):
         self.text_lora_r = text_lora_r  # 🔥 NEW
         self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
         self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
+        
+        # 🔥 Vision gating parameters
+        self.use_vision_gate = use_vision_gate
+        if use_vision_gate:
+            self.vision_gate = nn.Parameter(torch.tensor(vision_gate_init))
+            print(f"  🔥 Vision Gate: init={vision_gate_init:.2f} (learnable)")
         
         # Vision encoder
         self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
@@ -453,6 +461,13 @@ class DeterministicVQA(nn.Module):
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
+        # 🔥 Vision Gating: Scale vision features before decoder
+        if self.use_vision_gate:
+            # Learnable gate parameter (init > 1.0 means prefer vision)
+            gated_vision = self.vision_gate * fused_vision
+        else:
+            gated_vision = fused_vision
+        
         # 4. Prepare decoder inputs
         if labels is not None:
             decoder_input_ids = shift_tokens_right(
@@ -469,11 +484,12 @@ class DeterministicVQA(nn.Module):
             )
         
         # 5. Decoder: Cross-attend to fused vision features
-        # Create encoder_hidden_states by concatenating text + vision
-        encoder_hidden_states = torch.cat([text_features, fused_vision], dim=1)
+        # 🔥 Vision-First Ordering: Put vision tokens BEFORE text
+        # Reason: Decoder attends to earlier tokens first, increasing vision usage
+        encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
         encoder_attention_mask = torch.cat([
-            attention_mask,
-            torch.ones(batch_size, fused_vision.size(1), device=attention_mask.device)
+            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            attention_mask
         ], dim=1)
         
         decoder_outputs = self.decoder(
@@ -592,11 +608,18 @@ class DeterministicVQA(nn.Module):
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
+        # 🔥 Vision Gating (same as forward pass)
+        if self.use_vision_gate:
+            gated_vision = self.vision_gate * fused_vision
+        else:
+            gated_vision = fused_vision
+        
         # Prepare encoder hidden states
-        encoder_hidden_states = torch.cat([text_features, fused_vision], dim=1)
+        # 🔥 Vision-First Ordering (same as forward pass)
+        encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
         encoder_attention_mask = torch.cat([
-            attention_mask,
-            torch.ones(batch_size, fused_vision.size(1), device=attention_mask.device)
+            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            attention_mask
         ], dim=1)
         
         # Greedy decoding (simple but effective)

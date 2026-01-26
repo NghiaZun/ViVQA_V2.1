@@ -1,0 +1,3189 @@
+,question,answer,img_id,type
+0,hình có mấy cái ghế,năm,600000,1
+1,có bao nhiêu tòa nhà trong hình,bốn,600001,1
+2,có bao nhiêu cái bàn trong hình,một,600002,1
+3,số lượng máy tính xách tay là bao nhiêu,bốn,600003,1
+4,trong hình có bao nhiêu điện thoại,sáu,600004,1
+5,trong hình có bao nhiêu con chim,một,600005,1
+6,có bao nhiêu xe ô tô,bốn,600006,1
+7,hình có mấy con cừu,năm,600007,1
+8,trong hình có bao nhiêu con chim,sáu,600008,1
+9,có bao nhiêu con chim trong hình,năm,600009,1
+10,có bao nhiêu cái ghế trong hình,năm,600010,1
+11,hình có mấy con chim,bốn,600011,1
+12,hình có mấy cái bàn,năm,600012,1
+13,trong hình có bao nhiêu máy tính xách tay,một,600013,1
+14,trong hình có bao nhiêu chai,bốn,600014,1
+15,hình có mấy máy tính xách tay,hai,600015,1
+16,hình có mấy tòa nhà,ba,600016,1
+17,số lượng người là bao nhiêu,năm,600017,1
+18,số lượng cái bàn là bao nhiêu,sáu,600018,1
+19,có bao nhiêu cái bàn trong hình,năm,600019,1
+20,có bao nhiêu cái bàn,sáu,600020,1
+21,hình có mấy cái cây,sáu,600021,1
+22,hình có mấy cái cây,một,600022,1
+23,có bao nhiêu cái cây trong hình,tám,600023,1
+24,có bao nhiêu tòa nhà,bốn,600024,1
+25,hình có mấy con mèo,ba,600025,1
+26,trong hình có bao nhiêu cái bàn,sáu,600026,1
+27,có bao nhiêu người,bảy,600027,1
+28,số lượng cái cây là bao nhiêu,ba,600028,1
+29,có bao nhiêu con chim trong hình,hai,600029,1
+30,hình có mấy con ngựa,sáu,600030,1
+31,trong hình có bao nhiêu cái cây,bốn,600031,1
+32,số lượng cốc là bao nhiêu,một,600032,1
+33,có bao nhiêu xe ô tô,bảy,600033,1
+34,có bao nhiêu tòa nhà trong hình,một,600034,1
+35,hình có mấy điện thoại,năm,600035,1
+36,số lượng cái cây là bao nhiêu,năm,600036,1
+37,có bao nhiêu cốc,năm,600037,1
+38,số lượng cốc là bao nhiêu,bốn,600038,1
+39,hình có mấy chai,ba,600039,1
+40,có bao nhiêu điện thoại,sáu,600040,1
+41,có bao nhiêu con cừu trong hình,hai,600041,1
+42,có bao nhiêu cái cây trong hình,năm,600042,1
+43,hình có mấy cái ghế,tám,600043,1
+44,hình có mấy quyển sách,ba,600044,1
+45,hình có mấy con gà,ba,600045,1
+46,hình có mấy người,một,600046,1
+47,có bao nhiêu cái cây trong hình,ba,600047,1
+48,hình có mấy con bò,một,600048,1
+49,trong hình có bao nhiêu xe ô tô,hai,600049,1
+50,số lượng con ngựa vằn là bao nhiêu,hai,600050,1
+51,có bao nhiêu con cừu trong hình,năm,600051,1
+52,số lượng cái ghế là bao nhiêu,sáu,600052,1
+53,trong hình có bao nhiêu máy tính xách tay,bốn,600053,1
+54,có bao nhiêu con chim,bốn,600054,1
+55,hình có mấy cốc,một,600055,1
+56,có bao nhiêu người,năm,600056,1
+57,có bao nhiêu con bò trong hình,tám,600057,1
+58,có bao nhiêu điện thoại,tám,600058,1
+59,trong hình có bao nhiêu điện thoại,bảy,600059,1
+60,trong hình có bao nhiêu cốc,bảy,600060,1
+61,có bao nhiêu cái ghế,năm,600061,1
+62,có bao nhiêu chai,bốn,600062,1
+63,số lượng cốc là bao nhiêu,hai,600063,1
+64,trong hình có bao nhiêu cái bàn,ba,600064,1
+65,có bao nhiêu xe ô tô trong hình,năm,600065,1
+66,trong hình có bao nhiêu cái bàn,tám,600066,1
+67,có bao nhiêu cái cây,tám,600067,1
+68,trong hình có bao nhiêu tòa nhà,ba,600068,1
+69,hình có mấy máy tính xách tay,năm,600069,1
+70,có bao nhiêu con gà trong hình,bốn,600070,1
+71,số lượng con chim là bao nhiêu,ba,600071,1
+72,số lượng cái bàn là bao nhiêu,một,600072,1
+73,có bao nhiêu tòa nhà trong hình,bốn,600073,1
+74,số lượng con chim là bao nhiêu,hai,600074,1
+75,có bao nhiêu con voi,bốn,600075,1
+76,hình có mấy máy tính xách tay,tám,600076,1
+77,hình có mấy quyển sách,tám,600077,1
+78,số lượng xe ô tô là bao nhiêu,bốn,600078,1
+79,số lượng chai là bao nhiêu,bốn,600079,1
+80,có bao nhiêu cốc trong hình,một,600080,1
+81,hình có mấy cốc,tám,600081,1
+82,hình có mấy điện thoại,bảy,600082,1
+83,có bao nhiêu cái cây trong hình,hai,600083,1
+84,hình có mấy tòa nhà,tám,600084,1
+85,số lượng con chó là bao nhiêu,một,600085,1
+86,trong hình có bao nhiêu cái bàn,sáu,600086,1
+87,có bao nhiêu con voi,tám,600087,1
+88,số lượng con chim là bao nhiêu,năm,600088,1
+89,số lượng cốc là bao nhiêu,bảy,600089,1
+90,số lượng cái bàn là bao nhiêu,sáu,600090,1
+91,số lượng con mèo là bao nhiêu,sáu,600091,1
+92,hình có mấy con ngựa,năm,600092,1
+93,có bao nhiêu con ngựa trong hình,hai,600093,1
+94,có bao nhiêu con chim,ba,600094,1
+95,trong hình có bao nhiêu máy tính xách tay,sáu,600095,1
+96,số lượng con mèo là bao nhiêu,một,600096,1
+97,số lượng tòa nhà là bao nhiêu,sáu,600097,1
+98,có bao nhiêu điện thoại,bốn,600098,1
+99,có bao nhiêu cốc trong hình,sáu,600099,1
+100,có bao nhiêu con chó trong hình,ba,600100,1
+101,hình có mấy điện thoại,sáu,600101,1
+102,trong hình có bao nhiêu cái cây,hai,600102,1
+103,hình có mấy máy tính xách tay,bảy,600103,1
+104,hình có mấy con cừu,một,600104,1
+105,hình có mấy con chim,một,600105,1
+106,hình có mấy con mèo,tám,600106,1
+107,có bao nhiêu người trong hình,sáu,600107,1
+108,hình có mấy chai,sáu,600108,1
+109,trong hình có bao nhiêu cái cây,một,600109,1
+110,trong hình có bao nhiêu người,một,600110,1
+111,hình có mấy máy tính xách tay,hai,600111,1
+112,số lượng điện thoại là bao nhiêu,một,600112,1
+113,hình có mấy cái cây,năm,600113,1
+114,hình có mấy con bò,năm,600114,1
+115,có bao nhiêu con chó,hai,600115,1
+116,trong hình có bao nhiêu xe ô tô,sáu,600116,1
+117,có bao nhiêu con chim,hai,600117,1
+118,trong hình có bao nhiêu cái ghế,hai,600118,1
+119,có bao nhiêu điện thoại trong hình,sáu,600119,1
+120,số lượng máy tính xách tay là bao nhiêu,bảy,600120,1
+121,trong hình có bao nhiêu cái ghế,bảy,600121,1
+122,có bao nhiêu chai trong hình,năm,600122,1
+123,trong hình có bao nhiêu con chim,tám,600123,1
+124,có bao nhiêu tòa nhà,ba,600124,1
+125,trong hình có bao nhiêu chai,bảy,600125,1
+126,có bao nhiêu người trong hình,một,600126,1
+127,có bao nhiêu điện thoại trong hình,tám,600127,1
+128,trong hình có bao nhiêu cốc,hai,600128,1
+129,hình có mấy quyển sách,năm,600129,1
+130,hình có mấy chai,bảy,600130,1
+131,số lượng cái bàn là bao nhiêu,năm,600131,1
+132,hình có mấy tòa nhà,bốn,600132,1
+133,có bao nhiêu cái cây,năm,600133,1
+134,trong hình có bao nhiêu chai,sáu,600134,1
+135,có bao nhiêu con chim trong hình,tám,600135,1
+136,trong hình có bao nhiêu con chim,một,600136,1
+137,có bao nhiêu điện thoại trong hình,hai,600137,1
+138,hình có mấy tòa nhà,sáu,600138,1
+139,số lượng cái cây là bao nhiêu,một,600139,1
+140,có bao nhiêu người trong hình,tám,600140,1
+141,có bao nhiêu con bò trong hình,bảy,600141,1
+142,trong hình có bao nhiêu xe ô tô,ba,600142,1
+143,hình có mấy con voi,sáu,600143,1
+144,trong hình có bao nhiêu cái cây,bảy,600144,1
+145,hình có mấy con ngựa vằn,một,600145,1
+146,số lượng con hươu cao cổ là bao nhiêu,tám,600146,1
+147,có bao nhiêu tòa nhà trong hình,năm,600147,1
+148,có bao nhiêu cái bàn,tám,600148,1
+149,có bao nhiêu con voi trong hình,sáu,600149,1
+150,trong hình có bao nhiêu xe ô tô,ba,600150,1
+151,có bao nhiêu cái ghế trong hình,tám,600151,1
+152,trong hình có bao nhiêu con chim,bốn,600152,1
+153,số lượng quyển sách là bao nhiêu,bốn,600153,1
+154,số lượng người là bao nhiêu,sáu,600154,1
+155,trong hình có bao nhiêu con ngựa,ba,600155,1
+156,trong hình có bao nhiêu cái cây,hai,600156,1
+157,trong hình có bao nhiêu con gà,bảy,600157,1
+158,số lượng xe ô tô là bao nhiêu,sáu,600158,1
+159,có bao nhiêu cái ghế trong hình,bảy,600159,1
+160,trong hình có bao nhiêu con chim,tám,600160,1
+161,có bao nhiêu điện thoại,tám,600161,1
+162,có bao nhiêu cái bàn,năm,600162,1
+163,có bao nhiêu con hươu cao cổ,ba,600163,1
+164,có bao nhiêu người,một,600164,1
+165,trong hình có bao nhiêu người,bốn,600165,1
+166,số lượng xe ô tô là bao nhiêu,một,600166,1
+167,có bao nhiêu con chim trong hình,hai,600167,1
+168,có bao nhiêu con chó,bốn,600168,1
+169,trong hình có bao nhiêu cái cây,bốn,600169,1
+170,có bao nhiêu người trong hình,bảy,600170,1
+171,hình có mấy cái bàn,ba,600171,1
+172,có bao nhiêu chai trong hình,bốn,600172,1
+173,có bao nhiêu tòa nhà,tám,600173,1
+174,có bao nhiêu con gà trong hình,một,600174,1
+175,trong hình có bao nhiêu quyển sách,tám,600175,1
+176,có bao nhiêu chai,bảy,600176,1
+177,có bao nhiêu con mèo,bảy,600177,1
+178,có bao nhiêu con bò,bốn,600178,1
+179,trong hình có bao nhiêu con cừu,sáu,600179,1
+180,hình có mấy con voi,một,600180,1
+181,có bao nhiêu con hươu cao cổ trong hình,tám,600181,1
+182,trong hình có bao nhiêu người,sáu,600182,1
+183,trong hình có bao nhiêu con chó,năm,600183,1
+184,số lượng điện thoại là bao nhiêu,sáu,600184,1
+185,có bao nhiêu người trong hình,ba,600185,1
+186,hình có mấy con ngựa vằn,hai,600186,1
+187,có bao nhiêu cái ghế trong hình,sáu,600187,1
+188,có bao nhiêu quyển sách trong hình,bảy,600188,1
+189,số lượng cái ghế là bao nhiêu,một,600189,1
+190,có bao nhiêu người,bảy,600190,1
+191,có bao nhiêu điện thoại,ba,600191,1
+192,có bao nhiêu con voi trong hình,năm,600192,1
+193,trong hình có bao nhiêu con ngựa vằn,năm,600193,1
+194,số lượng quyển sách là bao nhiêu,bốn,600194,1
+195,có bao nhiêu cốc trong hình,sáu,600195,1
+196,hình có mấy máy tính xách tay,bảy,600196,1
+197,trong hình có bao nhiêu xe ô tô,hai,600197,1
+198,có bao nhiêu máy tính xách tay,năm,600198,1
+199,số lượng cốc là bao nhiêu,sáu,600199,1
+200,trong hình có bao nhiêu cái ghế,tám,600200,1
+201,có bao nhiêu con voi trong hình,năm,600201,1
+202,có bao nhiêu xe ô tô,một,600202,1
+203,số lượng cốc là bao nhiêu,ba,600203,1
+204,hình có mấy cái cây,hai,600204,1
+205,có bao nhiêu cái cây trong hình,năm,600205,1
+206,hình có mấy người,ba,600206,1
+207,hình có mấy con cừu,ba,600207,1
+208,có bao nhiêu cái ghế,hai,600208,1
+209,số lượng quyển sách là bao nhiêu,tám,600209,1
+210,có bao nhiêu cái cây,bốn,600210,1
+211,hình có mấy cốc,ba,600211,1
+212,có bao nhiêu cái cây trong hình,tám,600212,1
+213,có bao nhiêu cái bàn trong hình,bốn,600213,1
+214,số lượng con bò là bao nhiêu,bốn,600214,1
+215,số lượng cốc là bao nhiêu,tám,600215,1
+216,có bao nhiêu con chim trong hình,bảy,600216,1
+217,số lượng tòa nhà là bao nhiêu,ba,600217,1
+218,có bao nhiêu con gà,tám,600218,1
+219,trong hình có bao nhiêu cái cây,tám,600219,1
+220,số lượng cái cây là bao nhiêu,bốn,600220,1
+221,có bao nhiêu quyển sách,năm,600221,1
+222,số lượng cái ghế là bao nhiêu,năm,600222,1
+223,trong hình có bao nhiêu cái ghế,sáu,600223,1
+224,số lượng xe ô tô là bao nhiêu,năm,600224,1
+225,có bao nhiêu cái bàn,sáu,600225,1
+226,có bao nhiêu con cừu,một,600226,1
+227,trong hình có bao nhiêu cốc,một,600227,1
+228,số lượng cái bàn là bao nhiêu,tám,600228,1
+229,số lượng chai là bao nhiêu,hai,600229,1
+230,có bao nhiêu điện thoại,năm,600230,1
+231,số lượng cái bàn là bao nhiêu,bốn,600231,1
+232,số lượng cái ghế là bao nhiêu,tám,600232,1
+233,trong hình có bao nhiêu con cừu,bốn,600233,1
+234,hình có mấy chai,năm,600234,1
+235,số lượng cái ghế là bao nhiêu,hai,600235,1
+236,có bao nhiêu máy tính xách tay,một,600236,1
+237,hình có mấy cái cây,năm,600237,1
+238,có bao nhiêu xe ô tô,hai,600238,1
+239,có bao nhiêu quyển sách,ba,600239,1
+240,có bao nhiêu con gà,hai,600240,1
+241,số lượng điện thoại là bao nhiêu,sáu,600241,1
+242,số lượng con chim là bao nhiêu,sáu,600242,1
+243,số lượng cái bàn là bao nhiêu,bốn,600243,1
+244,có bao nhiêu cái ghế,ba,600244,1
+245,có bao nhiêu con chim trong hình,hai,600245,1
+246,có bao nhiêu cái bàn trong hình,một,600246,1
+247,hình có mấy tòa nhà,bảy,600247,1
+248,có bao nhiêu con chó trong hình,bảy,600248,1
+249,hình có mấy người,một,600249,1
+250,có bao nhiêu con voi trong hình,một,600250,1
+251,số lượng người là bao nhiêu,bảy,600251,1
+252,trong hình có bao nhiêu con chim,tám,600252,1
+253,số lượng cốc là bao nhiêu,bảy,600253,1
+254,trong hình có bao nhiêu tòa nhà,tám,600254,1
+255,hình có mấy xe ô tô,sáu,600255,1
+256,có bao nhiêu con chó,một,600256,1
+257,có bao nhiêu người trong hình,ba,600257,1
+258,có bao nhiêu cốc,hai,600258,1
+259,số lượng con mèo là bao nhiêu,hai,600259,1
+260,hình có mấy người,năm,600260,1
+261,trong hình có bao nhiêu cái cây,tám,600261,1
+262,hình có mấy cái bàn,bảy,600262,1
+263,trong hình có bao nhiêu con cừu,tám,600263,1
+264,có bao nhiêu điện thoại,bảy,600264,1
+265,số lượng cái cây là bao nhiêu,hai,600265,1
+266,có bao nhiêu con gà trong hình,năm,600266,1
+267,có bao nhiêu con chó trong hình,ba,600267,1
+268,trong hình có bao nhiêu quyển sách,năm,600268,1
+269,trong hình có bao nhiêu người,bảy,600269,1
+270,có bao nhiêu người,năm,600270,1
+271,có bao nhiêu cái ghế,hai,600271,1
+272,trong hình có bao nhiêu quyển sách,một,600272,1
+273,trong hình có bao nhiêu người,tám,600273,1
+274,hình có mấy tòa nhà,một,600274,1
+275,trong hình có bao nhiêu cái cây,bốn,600275,1
+276,có bao nhiêu cái cây,sáu,600276,1
+277,số lượng người là bao nhiêu,một,600277,1
+278,hình có mấy con cừu,tám,600278,1
+279,hình có mấy cái bàn,bảy,600279,1
+280,có bao nhiêu con chim trong hình,sáu,600280,1
+281,hình có mấy cái ghế,bốn,600281,1
+282,có bao nhiêu cái ghế,bảy,600282,1
+283,số lượng cái bàn là bao nhiêu,năm,600283,1
+284,số lượng cái ghế là bao nhiêu,bốn,600284,1
+285,hình có mấy người,bốn,600285,1
+286,số lượng con ngựa là bao nhiêu,bảy,600286,1
+287,trong hình có bao nhiêu con chim,bảy,600287,1
+288,hình có mấy quyển sách,một,600288,1
+289,có bao nhiêu người,tám,600289,1
+290,có bao nhiêu tòa nhà trong hình,năm,600290,1
+291,số lượng máy tính xách tay là bao nhiêu,bảy,600291,1
+292,hình có mấy cái bàn,bảy,600292,1
+293,trong hình có bao nhiêu cái bàn,bảy,600293,1
+294,có bao nhiêu máy tính xách tay,bảy,600294,1
+295,số lượng con chim là bao nhiêu,năm,600295,1
+296,có bao nhiêu cái bàn,bảy,600296,1
+297,hình có mấy cái ghế,tám,600297,1
+298,trong hình có bao nhiêu con chim,bốn,600298,1
+299,có bao nhiêu cái bàn,bảy,600299,1
+300,có bao nhiêu con gà trong hình,năm,600300,1
+301,trong hình có bao nhiêu cái bàn,hai,600301,1
+302,số lượng con chim là bao nhiêu,hai,600302,1
+303,hình có mấy cái ghế,bốn,600303,1
+304,có bao nhiêu tòa nhà,tám,600304,1
+305,có bao nhiêu cái ghế,bảy,600305,1
+306,có bao nhiêu con ngựa trong hình,một,600306,1
+307,có bao nhiêu cái bàn trong hình,hai,600307,1
+308,số lượng con chó là bao nhiêu,năm,600308,1
+309,có bao nhiêu chai trong hình,bảy,600309,1
+310,có bao nhiêu quyển sách trong hình,một,600310,1
+311,trong hình có bao nhiêu con chim,ba,600311,1
+312,có bao nhiêu cái cây trong hình,một,600312,1
+313,có bao nhiêu chai,năm,600313,1
+314,số lượng quyển sách là bao nhiêu,bảy,600314,1
+315,có bao nhiêu điện thoại trong hình,năm,600315,1
+316,có bao nhiêu con mèo,một,600316,1
+317,số lượng con voi là bao nhiêu,hai,600317,1
+318,hình có mấy tòa nhà,sáu,600318,1
+319,số lượng quyển sách là bao nhiêu,ba,600319,1
+320,có bao nhiêu cái cây trong hình,sáu,600320,1
+321,hình có mấy cốc,bảy,600321,1
+322,có bao nhiêu tòa nhà,một,600322,1
+323,có bao nhiêu cái bàn trong hình,hai,600323,1
+324,có bao nhiêu máy tính xách tay trong hình,ba,600324,1
+325,có bao nhiêu người,sáu,600325,1
+326,số lượng con chim là bao nhiêu,ba,600326,1
+327,trong hình có bao nhiêu điện thoại,năm,600327,1
+328,hình có mấy cái ghế,bốn,600328,1
+329,số lượng cốc là bao nhiêu,năm,600329,1
+330,có bao nhiêu con chim trong hình,hai,600330,1
+331,có bao nhiêu cái bàn,bốn,600331,1
+332,hình có mấy con voi,sáu,600332,1
+333,có bao nhiêu xe ô tô,năm,600333,1
+334,có bao nhiêu con chim trong hình,tám,600334,1
+335,số lượng con hươu cao cổ là bao nhiêu,bảy,600335,1
+336,có bao nhiêu quyển sách,một,600336,1
+337,trong hình có bao nhiêu chai,sáu,600337,1
+338,trong hình có bao nhiêu xe ô tô,bảy,600338,1
+339,có bao nhiêu người,tám,600339,1
+340,có bao nhiêu cái cây trong hình,hai,600340,1
+341,hình có mấy con chim,hai,600341,1
+342,trong hình có bao nhiêu con ngựa,sáu,600342,1
+343,số lượng con mèo là bao nhiêu,một,600343,1
+344,hình có mấy con voi,tám,600344,1
+345,hình có mấy xe ô tô,bảy,600345,1
+346,hình có mấy máy tính xách tay,bốn,600346,1
+347,hình có mấy quyển sách,một,600347,1
+348,có bao nhiêu con chim,ba,600348,1
+349,hình có mấy máy tính xách tay,bốn,600349,1
+350,hình có mấy điện thoại,ba,600350,1
+351,hình có mấy chai,bảy,600351,1
+352,có bao nhiêu xe ô tô,sáu,600352,1
+353,hình có mấy con ngựa,bốn,600353,1
+354,hình có mấy cái bàn,một,600354,1
+355,có bao nhiêu con ngựa vằn,năm,600355,1
+356,số lượng máy tính xách tay là bao nhiêu,năm,600356,1
+357,có bao nhiêu cốc trong hình,năm,600357,1
+358,trong hình có bao nhiêu con chim,sáu,600358,1
+359,trong hình có bao nhiêu máy tính xách tay,ba,600359,1
+360,trong hình có bao nhiêu tòa nhà,ba,600360,1
+361,trong hình có bao nhiêu xe ô tô,năm,600361,1
+362,có bao nhiêu điện thoại trong hình,hai,600362,1
+363,trong hình có bao nhiêu con chim,một,600363,1
+364,có bao nhiêu con ngựa,tám,600364,1
+365,trong hình có bao nhiêu máy tính xách tay,sáu,600365,1
+366,có bao nhiêu máy tính xách tay,năm,600366,1
+367,trong hình có bao nhiêu con chim,năm,600367,1
+368,có bao nhiêu xe ô tô trong hình,bốn,600368,1
+369,trong hình có bao nhiêu điện thoại,bảy,600369,1
+370,có bao nhiêu điện thoại trong hình,hai,600370,1
+371,số lượng xe ô tô là bao nhiêu,sáu,600371,1
+372,có bao nhiêu điện thoại,bảy,600372,1
+373,có bao nhiêu con voi trong hình,sáu,600373,1
+374,có bao nhiêu con gà,một,600374,1
+375,số lượng tòa nhà là bao nhiêu,bốn,600375,1
+376,trong hình có bao nhiêu tòa nhà,ba,600376,1
+377,có bao nhiêu điện thoại trong hình,tám,600377,1
+378,hình có mấy cái bàn,sáu,600378,1
+379,có bao nhiêu quyển sách trong hình,một,600379,1
+380,hình có mấy người,một,600380,1
+381,hình có mấy con chim,hai,600381,1
+382,hình có mấy cái ghế,ba,600382,1
+383,có bao nhiêu con mèo,ba,600383,1
+384,có bao nhiêu máy tính xách tay trong hình,hai,600384,1
+385,có bao nhiêu con chim trong hình,năm,600385,1
+386,hình có mấy con ngựa vằn,hai,600386,1
+387,hình có mấy cái bàn,năm,600387,1
+388,trong hình có bao nhiêu cái bàn,bảy,600388,1
+389,có bao nhiêu cái cây,tám,600389,1
+390,số lượng con voi là bao nhiêu,ba,600390,1
+391,trong hình có bao nhiêu cái ghế,hai,600391,1
+392,hình có mấy con ngựa vằn,bảy,600392,1
+393,trong hình có bao nhiêu người,năm,600393,1
+394,trong hình có bao nhiêu cốc,ba,600394,1
+395,có bao nhiêu con cừu,năm,600395,1
+396,hình có mấy máy tính xách tay,một,600396,1
+397,hình có mấy quyển sách,tám,600397,1
+398,có bao nhiêu con voi trong hình,năm,600398,1
+399,có bao nhiêu con ngựa,năm,600399,1
+400,trong hình có bao nhiêu cái bàn,bảy,600400,1
+401,có bao nhiêu cái ghế,sáu,600401,1
+402,hình có mấy con ngựa,một,600402,1
+403,có bao nhiêu quyển sách trong hình,sáu,600403,1
+404,hình có mấy cái ghế,tám,600404,1
+405,hình có mấy cái ghế,một,600405,1
+406,có bao nhiêu con chim trong hình,bốn,600406,1
+407,trong hình có bao nhiêu xe ô tô,hai,600407,1
+408,số lượng cái bàn là bao nhiêu,sáu,600408,1
+409,có bao nhiêu điện thoại,năm,600409,1
+410,trong hình có bao nhiêu quyển sách,hai,600410,1
+411,có bao nhiêu chai,một,600411,1
+412,số lượng cái cây là bao nhiêu,một,600412,1
+413,số lượng cốc là bao nhiêu,hai,600413,1
+414,số lượng máy tính xách tay là bao nhiêu,hai,600414,1
+415,trong hình có bao nhiêu con ngựa,ba,600415,1
+416,có bao nhiêu người trong hình,bảy,600416,1
+417,có bao nhiêu tòa nhà,tám,600417,1
+418,có bao nhiêu con cừu,bốn,600418,1
+419,trong hình có bao nhiêu con chim,sáu,600419,1
+420,hình có mấy con gà,ba,600420,1
+421,có bao nhiêu con ngựa trong hình,sáu,600421,1
+422,số lượng máy tính xách tay là bao nhiêu,bảy,600422,1
+423,có bao nhiêu con hươu cao cổ trong hình,năm,600423,1
+424,hình có mấy con ngựa,ba,600424,1
+425,có bao nhiêu con chó trong hình,bốn,600425,1
+426,trong hình có bao nhiêu cái ghế,năm,600426,1
+427,có bao nhiêu người trong hình,sáu,600427,1
+428,có bao nhiêu máy tính xách tay trong hình,một,600428,1
+429,trong hình có bao nhiêu cái bàn,ba,600429,1
+430,có bao nhiêu cốc trong hình,bảy,600430,1
+431,hình có mấy con hươu cao cổ,ba,600431,1
+432,có bao nhiêu con gà trong hình,bảy,600432,1
+433,trong hình có bao nhiêu máy tính xách tay,bảy,600433,1
+434,trong hình có bao nhiêu chai,hai,600434,1
+435,trong hình có bao nhiêu con ngựa,sáu,600435,1
+436,có bao nhiêu cốc,tám,600436,1
+437,trong hình có bao nhiêu chai,bốn,600437,1
+438,có bao nhiêu tòa nhà trong hình,sáu,600438,1
+439,số lượng chai là bao nhiêu,hai,600439,1
+440,có bao nhiêu con voi trong hình,một,600440,1
+441,có bao nhiêu máy tính xách tay trong hình,ba,600441,1
+442,số lượng cái ghế là bao nhiêu,bảy,600442,1
+443,có bao nhiêu quyển sách trong hình,bảy,600443,1
+444,có bao nhiêu điện thoại,ba,600444,1
+445,có bao nhiêu tòa nhà,bốn,600445,1
+446,số lượng xe ô tô là bao nhiêu,bảy,600446,1
+447,có bao nhiêu cái cây,tám,600447,1
+448,trong hình có bao nhiêu con chim,sáu,600448,1
+449,có bao nhiêu xe ô tô trong hình,sáu,600449,1
+450,trong hình có bao nhiêu con bò,hai,600450,1
+451,số lượng con hươu cao cổ là bao nhiêu,hai,600451,1
+452,có bao nhiêu xe ô tô trong hình,năm,600452,1
+453,có bao nhiêu chai,bảy,600453,1
+454,trong hình có bao nhiêu điện thoại,ba,600454,1
+455,có bao nhiêu quyển sách,một,600455,1
+456,có bao nhiêu quyển sách trong hình,ba,600456,1
+457,hình có mấy người,sáu,600457,1
+458,số lượng quyển sách là bao nhiêu,hai,600458,1
+459,trong hình có bao nhiêu con bò,năm,600459,1
+460,trong hình có bao nhiêu cốc,hai,600460,1
+461,số lượng người là bao nhiêu,ba,600461,1
+462,hình có mấy cái bàn,năm,600462,1
+463,có bao nhiêu quyển sách,bảy,600463,1
+464,có bao nhiêu cái ghế trong hình,bốn,600464,1
+465,trong hình có bao nhiêu người,tám,600465,1
+466,có bao nhiêu cốc,tám,600466,1
+467,có bao nhiêu tòa nhà trong hình,năm,600467,1
+468,có bao nhiêu con voi trong hình,sáu,600468,1
+469,hình có mấy cái ghế,ba,600469,1
+470,hình có mấy điện thoại,tám,600470,1
+471,hình có mấy máy tính xách tay,tám,600471,1
+472,số lượng xe ô tô là bao nhiêu,sáu,600472,1
+473,hình có mấy máy tính xách tay,năm,600473,1
+474,có bao nhiêu điện thoại,tám,600474,1
+475,hình có mấy con mèo,ba,600475,1
+476,số lượng tòa nhà là bao nhiêu,bảy,600476,1
+477,có bao nhiêu con gà,sáu,600477,1
+478,hình có mấy con ngựa,bảy,600478,1
+479,trong hình có bao nhiêu tòa nhà,năm,600479,1
+480,số lượng con voi là bao nhiêu,ba,600480,1
+481,hình có mấy người,năm,600481,1
+482,có bao nhiêu tòa nhà trong hình,sáu,600482,1
+483,trong hình có bao nhiêu con ngựa,năm,600483,1
+484,có bao nhiêu tòa nhà trong hình,tám,600484,1
+485,có bao nhiêu con voi trong hình,tám,600485,1
+486,có bao nhiêu con gà trong hình,năm,600486,1
+487,có bao nhiêu máy tính xách tay trong hình,bảy,600487,1
+488,có bao nhiêu con gà,ba,600488,1
+489,có bao nhiêu tòa nhà,một,600489,1
+490,hình có mấy tòa nhà,một,600490,1
+491,số lượng con cừu là bao nhiêu,năm,600491,1
+492,số lượng xe ô tô là bao nhiêu,hai,600492,1
+493,có bao nhiêu máy tính xách tay trong hình,tám,600493,1
+494,trong hình có bao nhiêu cái bàn,tám,600494,1
+495,có bao nhiêu con ngựa,ba,600495,1
+496,hình có mấy quyển sách,ba,600496,1
+497,có bao nhiêu cốc trong hình,bốn,600497,1
+498,trong hình có bao nhiêu người,sáu,600498,1
+499,trong hình có bao nhiêu con ngựa vằn,năm,600499,1
+500,có bao nhiêu con ngựa vằn,bốn,600500,1
+501,hình có mấy con mèo,bốn,600501,1
+502,có bao nhiêu xe ô tô,sáu,600502,1
+503,số lượng máy tính xách tay là bao nhiêu,một,600503,1
+504,số lượng quyển sách là bao nhiêu,ba,600504,1
+505,có bao nhiêu con voi trong hình,tám,600505,1
+506,trong hình có bao nhiêu máy tính xách tay,tám,600506,1
+507,có bao nhiêu con cừu,năm,600507,1
+508,trong hình có bao nhiêu con hươu cao cổ,sáu,600508,1
+509,có bao nhiêu điện thoại,năm,600509,1
+510,trong hình có bao nhiêu con gà,năm,600510,1
+511,trong hình có bao nhiêu điện thoại,một,600511,1
+512,trong hình có bao nhiêu con ngựa vằn,hai,600512,1
+513,hình có mấy con ngựa vằn,ba,600513,1
+514,hình có mấy tòa nhà,ba,600514,1
+515,hình có mấy quyển sách,ba,600515,1
+516,số lượng cái cây là bao nhiêu,ba,600516,1
+517,có bao nhiêu máy tính xách tay,hai,600517,1
+518,hình có mấy cốc,ba,600518,1
+519,hình có mấy cái bàn,ba,600519,1
+520,hình có mấy người,ba,600520,1
+521,trong hình có bao nhiêu cái bàn,bảy,600521,1
+522,có bao nhiêu cái cây trong hình,sáu,600522,1
+523,trong hình có bao nhiêu quyển sách,ba,600523,1
+524,trong hình có bao nhiêu chai,bảy,600524,1
+525,trong hình có bao nhiêu con chó,bảy,600525,1
+526,hình có mấy quyển sách,bảy,600526,1
+527,trong hình có bao nhiêu cốc,bốn,600527,1
+528,có bao nhiêu con mèo trong hình,sáu,600528,1
+529,có bao nhiêu máy tính xách tay trong hình,hai,600529,1
+530,có bao nhiêu tòa nhà trong hình,tám,600530,1
+531,có bao nhiêu cái ghế trong hình,một,600531,1
+532,hình có mấy cái ghế,sáu,600532,1
+533,có bao nhiêu con ngựa vằn trong hình,sáu,600533,1
+534,có bao nhiêu quyển sách,bốn,600534,1
+535,số lượng chai là bao nhiêu,ba,600535,1
+536,trong hình có bao nhiêu quyển sách,năm,600536,1
+537,số lượng con chim là bao nhiêu,sáu,600537,1
+538,trong hình có bao nhiêu xe ô tô,hai,600538,1
+539,có bao nhiêu con chim trong hình,bốn,600539,1
+540,trong hình có bao nhiêu tòa nhà,một,600540,1
+541,có bao nhiêu con bò,hai,600541,1
+542,có bao nhiêu con chim trong hình,bảy,600542,1
+543,hình có mấy xe ô tô,năm,600543,1
+544,hình có mấy con ngựa vằn,sáu,600544,1
+545,hình có mấy con gà,bảy,600545,1
+546,có bao nhiêu con cừu,bảy,600546,1
+547,có bao nhiêu con chim,một,600547,1
+548,có bao nhiêu cái cây trong hình,ba,600548,1
+549,có bao nhiêu con gà,ba,600549,1
+550,trong hình có bao nhiêu người,một,600550,1
+551,có bao nhiêu điện thoại trong hình,hai,600551,1
+552,hình có mấy cốc,một,600552,1
+553,trong hình có bao nhiêu con gà,hai,600553,1
+554,có bao nhiêu cái ghế trong hình,ba,600554,1
+555,có bao nhiêu điện thoại trong hình,tám,600555,1
+556,có bao nhiêu cốc trong hình,tám,600556,1
+557,có bao nhiêu cốc,sáu,600557,1
+558,số lượng cốc là bao nhiêu,hai,600558,1
+559,số lượng tòa nhà là bao nhiêu,năm,600559,1
+560,hình có mấy con ngựa vằn,một,600560,1
+561,có bao nhiêu con chó trong hình,năm,600561,1
+562,số lượng điện thoại là bao nhiêu,ba,600562,1
+563,hình có mấy con chim,sáu,600563,1
+564,trong hình có bao nhiêu con gà,bốn,600564,1
+565,trong hình có bao nhiêu con ngựa vằn,tám,600565,1
+566,có bao nhiêu cái cây,bốn,600566,1
+567,có bao nhiêu con chim trong hình,bảy,600567,1
+568,có bao nhiêu điện thoại,bốn,600568,1
+569,hình có mấy con chó,hai,600569,1
+570,hình có mấy cái bàn,hai,600570,1
+571,hình có mấy cốc,một,600571,1
+572,hình có mấy con bò,năm,600572,1
+573,hình có mấy con hươu cao cổ,sáu,600573,1
+574,có bao nhiêu con chó trong hình,sáu,600574,1
+575,hình có mấy con chó,sáu,600575,1
+576,số lượng tòa nhà là bao nhiêu,một,600576,1
+577,hình có mấy điện thoại,ba,600577,1
+578,số lượng con voi là bao nhiêu,sáu,600578,1
+579,số lượng cốc là bao nhiêu,bảy,600579,1
+580,có bao nhiêu con chim trong hình,hai,600580,1
+581,hình có mấy con chim,năm,600581,1
+582,số lượng chai là bao nhiêu,tám,600582,1
+583,hình có mấy con ngựa vằn,năm,600583,1
+584,số lượng cái cây là bao nhiêu,ba,600584,1
+585,số lượng máy tính xách tay là bao nhiêu,tám,600585,1
+586,trong hình có bao nhiêu cốc,hai,600586,1
+587,số lượng con chim là bao nhiêu,sáu,600587,1
+588,số lượng cái cây là bao nhiêu,năm,600588,1
+589,số lượng máy tính xách tay là bao nhiêu,bốn,600589,1
+590,trong hình có bao nhiêu cái ghế,bốn,600590,1
+591,có bao nhiêu máy tính xách tay trong hình,bảy,600591,1
+592,hình có mấy xe ô tô,ba,600592,1
+593,có bao nhiêu con bò,hai,600593,1
+594,có bao nhiêu điện thoại,một,600594,1
+595,có bao nhiêu con chim trong hình,bốn,600595,1
+596,trong hình có bao nhiêu con bò,hai,600596,1
+597,số lượng con gà là bao nhiêu,năm,600597,1
+598,có bao nhiêu điện thoại,tám,600598,1
+599,có bao nhiêu con chim trong hình,bốn,600599,1
+600,số lượng cốc là bao nhiêu,một,600600,1
+601,có bao nhiêu con ngựa vằn,sáu,600601,1
+602,có bao nhiêu cái bàn,ba,600602,1
+603,số lượng chai là bao nhiêu,sáu,600603,1
+604,số lượng con chim là bao nhiêu,tám,600604,1
+605,hình có mấy con chó,bảy,600605,1
+606,hình có mấy con mèo,ba,600606,1
+607,trong hình có bao nhiêu quyển sách,bốn,600607,1
+608,có bao nhiêu cái bàn,hai,600608,1
+609,có bao nhiêu máy tính xách tay,hai,600609,1
+610,hình có mấy cái ghế,một,600610,1
+611,có bao nhiêu chai trong hình,bốn,600611,1
+612,số lượng máy tính xách tay là bao nhiêu,bảy,600612,1
+613,số lượng cái ghế là bao nhiêu,tám,600613,1
+614,hình có mấy tòa nhà,ba,600614,1
+615,có bao nhiêu cái bàn,bảy,600615,1
+616,số lượng con ngựa vằn là bao nhiêu,năm,600616,1
+617,trong hình có bao nhiêu cái bàn,một,600617,1
+618,có bao nhiêu con cừu,sáu,600618,1
+619,có bao nhiêu người trong hình,ba,600619,1
+620,hình có mấy người,ba,600620,1
+621,có bao nhiêu cái ghế trong hình,sáu,600621,1
+622,số lượng con ngựa là bao nhiêu,bảy,600622,1
+623,hình có mấy máy tính xách tay,bảy,600623,1
+624,trong hình có bao nhiêu con voi,ba,600624,1
+625,có bao nhiêu con hươu cao cổ trong hình,bốn,600625,1
+626,số lượng máy tính xách tay là bao nhiêu,bảy,600626,1
+627,có bao nhiêu chai,năm,600627,1
+628,trong hình có bao nhiêu con chim,bảy,600628,1
+629,có bao nhiêu tòa nhà,sáu,600629,1
+630,trong hình có bao nhiêu con gà,năm,600630,1
+631,hình có mấy con chim,sáu,600631,1
+632,có bao nhiêu con mèo,hai,600632,1
+633,số lượng điện thoại là bao nhiêu,bốn,600633,1
+634,có bao nhiêu chai,ba,600634,1
+635,số lượng cốc là bao nhiêu,sáu,600635,1
+636,có bao nhiêu xe ô tô,một,600636,1
+637,hình có mấy điện thoại,hai,600637,1
+638,có bao nhiêu cái cây trong hình,bảy,600638,1
+639,có bao nhiêu con voi,năm,600639,1
+640,trong hình có bao nhiêu quyển sách,năm,600640,1
+641,có bao nhiêu xe ô tô trong hình,bảy,600641,1
+642,trong hình có bao nhiêu cái cây,một,600642,1
+643,hình có mấy cái cây,sáu,600643,1
+644,có bao nhiêu con ngựa,năm,600644,1
+645,số lượng cái bàn là bao nhiêu,bảy,600645,1
+646,có bao nhiêu cái ghế,ba,600646,1
+647,số lượng con cừu là bao nhiêu,bốn,600647,1
+648,có bao nhiêu con chim trong hình,sáu,600648,1
+649,trong hình có bao nhiêu con hươu cao cổ,tám,600649,1
+650,có bao nhiêu cái cây trong hình,một,600650,1
+651,hình có mấy cốc,một,600651,1
+652,trong hình có bao nhiêu xe ô tô,bảy,600652,1
+653,có bao nhiêu tòa nhà trong hình,năm,600653,1
+654,hình có mấy con ngựa vằn,sáu,600654,1
+655,số lượng con gà là bao nhiêu,một,600655,1
+656,có bao nhiêu con voi,hai,600656,1
+657,hình có mấy chai,sáu,600657,1
+658,hình có mấy cái bàn,bảy,600658,1
+659,có bao nhiêu điện thoại trong hình,một,600659,1
+660,hình có mấy cái bàn,năm,600660,1
+661,có bao nhiêu điện thoại,một,600661,1
+662,có bao nhiêu xe ô tô,sáu,600662,1
+663,số lượng cái cây là bao nhiêu,ba,600663,1
+664,có bao nhiêu chai,sáu,600664,1
+665,trong hình có bao nhiêu cái ghế,năm,600665,1
+666,có bao nhiêu xe ô tô,bốn,600666,1
+667,có bao nhiêu con cừu trong hình,một,600667,1
+668,có bao nhiêu cốc,tám,600668,1
+669,trong hình có bao nhiêu điện thoại,một,600669,1
+670,hình có mấy cốc,một,600670,1
+671,trong hình có bao nhiêu cái bàn,sáu,600671,1
+672,trong hình có bao nhiêu xe ô tô,tám,600672,1
+673,có bao nhiêu con voi,hai,600673,1
+674,số lượng cái ghế là bao nhiêu,bốn,600674,1
+675,trong hình có bao nhiêu chai,một,600675,1
+676,hình có mấy máy tính xách tay,hai,600676,1
+677,trong hình có bao nhiêu cái cây,bốn,600677,1
+678,số lượng cốc là bao nhiêu,sáu,600678,1
+679,số lượng xe ô tô là bao nhiêu,năm,600679,1
+680,có bao nhiêu con chim trong hình,hai,600680,1
+681,số lượng cái cây là bao nhiêu,ba,600681,1
+682,hình có mấy con gà,năm,600682,1
+683,có bao nhiêu quyển sách trong hình,một,600683,1
+684,số lượng cái ghế là bao nhiêu,bốn,600684,1
+685,có bao nhiêu điện thoại,năm,600685,1
+686,trong hình có bao nhiêu điện thoại,bảy,600686,1
+687,hình có mấy chai,năm,600687,1
+688,số lượng xe ô tô là bao nhiêu,bảy,600688,1
+689,số lượng con mèo là bao nhiêu,một,600689,1
+690,số lượng điện thoại là bao nhiêu,sáu,600690,1
+691,số lượng cái ghế là bao nhiêu,hai,600691,1
+692,có bao nhiêu máy tính xách tay trong hình,ba,600692,1
+693,hình có mấy máy tính xách tay,sáu,600693,1
+694,có bao nhiêu xe ô tô,năm,600694,1
+695,trong hình có bao nhiêu quyển sách,hai,600695,1
+696,có bao nhiêu xe ô tô trong hình,năm,600696,1
+697,có bao nhiêu người trong hình,tám,600697,1
+698,hình có mấy con chim,một,600698,1
+699,hình có mấy con ngựa,sáu,600699,1
+700,hình có mấy máy tính xách tay,bảy,600700,1
+701,số lượng cốc là bao nhiêu,bốn,600701,1
+702,trong hình có bao nhiêu con chim,bảy,600702,1
+703,số lượng máy tính xách tay là bao nhiêu,bảy,600703,1
+704,trong hình có bao nhiêu con ngựa vằn,ba,600704,1
+705,số lượng con ngựa vằn là bao nhiêu,sáu,600705,1
+706,có bao nhiêu con chim,hai,600706,1
+707,có bao nhiêu con hươu cao cổ,bốn,600707,1
+708,hình có mấy điện thoại,một,600708,1
+709,có bao nhiêu tòa nhà,tám,600709,1
+710,trong hình có bao nhiêu con ngựa,sáu,600710,1
+711,có bao nhiêu con cừu,năm,600711,1
+712,trong hình có bao nhiêu con chó,ba,600712,1
+713,số lượng con chim là bao nhiêu,sáu,600713,1
+714,số lượng máy tính xách tay là bao nhiêu,sáu,600714,1
+715,số lượng chai là bao nhiêu,bảy,600715,1
+716,có bao nhiêu quyển sách trong hình,sáu,600716,1
+717,trong hình có bao nhiêu xe ô tô,ba,600717,1
+718,hình có mấy điện thoại,bốn,600718,1
+719,hình có mấy con bò,một,600719,1
+720,có bao nhiêu máy tính xách tay trong hình,bảy,600720,1
+721,có bao nhiêu máy tính xách tay,bảy,600721,1
+722,số lượng cái cây là bao nhiêu,một,600722,1
+723,hình có mấy con hươu cao cổ,ba,600723,1
+724,hình có mấy con chim,bảy,600724,1
+725,hình có mấy điện thoại,hai,600725,1
+726,có bao nhiêu người trong hình,hai,600726,1
+727,số lượng chai là bao nhiêu,sáu,600727,1
+728,trong hình có bao nhiêu chai,ba,600728,1
+729,hình có mấy con bò,năm,600729,1
+730,số lượng xe ô tô là bao nhiêu,năm,600730,1
+731,có bao nhiêu máy tính xách tay,bảy,600731,1
+732,có bao nhiêu con chim trong hình,bảy,600732,1
+733,trong hình có bao nhiêu con chim,ba,600733,1
+734,hình có mấy tòa nhà,năm,600734,1
+735,có bao nhiêu chai,bảy,600735,1
+736,có bao nhiêu điện thoại,một,600736,1
+737,hình có mấy con chim,ba,600737,1
+738,có bao nhiêu con chim trong hình,năm,600738,1
+739,số lượng tòa nhà là bao nhiêu,bảy,600739,1
+740,trong hình có bao nhiêu cái ghế,bảy,600740,1
+741,có bao nhiêu máy tính xách tay trong hình,sáu,600741,1
+742,trong hình có bao nhiêu người,bốn,600742,1
+743,trong hình có bao nhiêu cái bàn,sáu,600743,1
+744,hình có mấy điện thoại,bốn,600744,1
+745,trong hình có bao nhiêu cái bàn,một,600745,1
+746,trong hình có bao nhiêu cái bàn,bảy,600746,1
+747,có bao nhiêu con chim,bốn,600747,1
+748,hình có mấy máy tính xách tay,bốn,600748,1
+749,hình có mấy con bò,một,600749,1
+750,hình có mấy chai,bốn,600750,1
+751,có bao nhiêu cái bàn,hai,600751,1
+752,hình có mấy cốc,ba,600752,1
+753,số lượng con chim là bao nhiêu,sáu,600753,1
+754,hình có mấy con chim,bảy,600754,1
+755,hình có mấy chai,sáu,600755,1
+756,hình có mấy xe ô tô,tám,600756,1
+757,hình có mấy con chó,bốn,600757,1
+758,trong hình có bao nhiêu xe ô tô,năm,600758,1
+759,có bao nhiêu máy tính xách tay,sáu,600759,1
+760,có bao nhiêu cốc,ba,600760,1
+761,số lượng con chim là bao nhiêu,sáu,600761,1
+762,hình có mấy con chim,hai,600762,1
+763,trong hình có bao nhiêu con chim,tám,600763,1
+764,số lượng cái cây là bao nhiêu,hai,600764,1
+765,trong hình có bao nhiêu cái ghế,ba,600765,1
+766,có bao nhiêu cốc trong hình,một,600766,1
+767,hình có mấy máy tính xách tay,ba,600767,1
+768,có bao nhiêu con chim,hai,600768,1
+769,hình có mấy con gà,ba,600769,1
+770,có bao nhiêu con chim trong hình,sáu,600770,1
+771,có bao nhiêu người trong hình,hai,600771,1
+772,hình có mấy cái bàn,năm,600772,1
+773,có bao nhiêu người,tám,600773,1
+774,có bao nhiêu xe ô tô,một,600774,1
+775,có bao nhiêu tòa nhà trong hình,ba,600775,1
+776,trong hình có bao nhiêu cái ghế,ba,600776,1
+777,hình có mấy con mèo,bốn,600777,1
+778,trong hình có bao nhiêu cái bàn,một,600778,1
+779,trong hình có bao nhiêu cái cây,ba,600779,1
+780,có bao nhiêu xe ô tô,một,600780,1
+781,có bao nhiêu cái ghế trong hình,sáu,600781,1
+782,trong hình có bao nhiêu chai,ba,600782,1
+783,số lượng xe ô tô là bao nhiêu,bốn,600783,1
+784,hình có mấy xe ô tô,ba,600784,1
+785,số lượng cốc là bao nhiêu,sáu,600785,1
+786,trong hình có bao nhiêu máy tính xách tay,tám,600786,1
+787,hình có mấy cái ghế,bảy,600787,1
+788,có bao nhiêu cái bàn trong hình,năm,600788,1
+789,trong hình có bao nhiêu máy tính xách tay,hai,600789,1
+790,trong hình có bao nhiêu xe ô tô,ba,600790,1
+791,số lượng máy tính xách tay là bao nhiêu,một,600791,1
+792,số lượng con chim là bao nhiêu,bảy,600792,1
+793,có bao nhiêu tòa nhà trong hình,năm,600793,1
+794,hình có mấy cốc,bảy,600794,1
+795,có bao nhiêu cái cây,hai,600795,1
+796,trong hình có bao nhiêu cái bàn,ba,600796,1
+797,trong hình có bao nhiêu chai,tám,600797,1
+798,số lượng người là bao nhiêu,sáu,600798,1
+799,trong hình có bao nhiêu cái ghế,ba,600799,1
+800,số lượng con gà là bao nhiêu,ba,600800,1
+801,hình có mấy xe ô tô,năm,600801,1
+802,trong hình có bao nhiêu điện thoại,bốn,600802,1
+803,có bao nhiêu con ngựa trong hình,một,600803,1
+804,có bao nhiêu cái bàn trong hình,một,600804,1
+805,hình có mấy cái cây,ba,600805,1
+806,trong hình có bao nhiêu con bò,tám,600806,1
+807,số lượng con bò là bao nhiêu,bảy,600807,1
+808,hình có mấy cốc,ba,600808,1
+809,trong hình có bao nhiêu quyển sách,năm,600809,1
+810,có bao nhiêu cái ghế trong hình,tám,600810,1
+811,số lượng điện thoại là bao nhiêu,năm,600811,1
+812,có bao nhiêu xe ô tô,bốn,600812,1
+813,có bao nhiêu cái ghế,một,600813,1
+814,có bao nhiêu con voi trong hình,bốn,600814,1
+815,có bao nhiêu con ngựa vằn trong hình,bảy,600815,1
+816,trong hình có bao nhiêu điện thoại,một,600816,1
+817,trong hình có bao nhiêu con hươu cao cổ,tám,600817,1
+818,số lượng con chim là bao nhiêu,năm,600818,1
+819,hình có mấy con mèo,ba,600819,1
+820,số lượng con voi là bao nhiêu,sáu,600820,1
+821,có bao nhiêu cốc,một,600821,1
+822,số lượng điện thoại là bao nhiêu,tám,600822,1
+823,số lượng cái bàn là bao nhiêu,một,600823,1
+824,có bao nhiêu cái ghế,ba,600824,1
+825,trong hình có bao nhiêu cái bàn,tám,600825,1
+826,có bao nhiêu cốc trong hình,bốn,600826,1
+827,có bao nhiêu cái cây,hai,600827,1
+828,số lượng máy tính xách tay là bao nhiêu,hai,600828,1
+829,hình có mấy tòa nhà,năm,600829,1
+830,hình có mấy điện thoại,sáu,600830,1
+831,có bao nhiêu xe ô tô trong hình,hai,600831,1
+832,số lượng xe ô tô là bao nhiêu,tám,600832,1
+833,số lượng quyển sách là bao nhiêu,tám,600833,1
+834,số lượng con bò là bao nhiêu,năm,600834,1
+835,hình có mấy cái cây,sáu,600835,1
+836,số lượng quyển sách là bao nhiêu,sáu,600836,1
+837,trong hình có bao nhiêu cốc,bảy,600837,1
+838,có bao nhiêu con mèo trong hình,sáu,600838,1
+839,số lượng con mèo là bao nhiêu,tám,600839,1
+840,có bao nhiêu con hươu cao cổ trong hình,ba,600840,1
+841,có bao nhiêu xe ô tô,bốn,600841,1
+842,hình có mấy cốc,tám,600842,1
+843,có bao nhiêu cái cây trong hình,bảy,600843,1
+844,số lượng chai là bao nhiêu,hai,600844,1
+845,có bao nhiêu xe ô tô trong hình,bốn,600845,1
+846,số lượng cái bàn là bao nhiêu,bảy,600846,1
+847,hình có mấy quyển sách,bốn,600847,1
+848,có bao nhiêu tòa nhà trong hình,sáu,600848,1
+849,trong hình có bao nhiêu cái cây,ba,600849,1
+850,có bao nhiêu máy tính xách tay trong hình,tám,600850,1
+851,hình có mấy con ngựa vằn,tám,600851,1
+852,hình có mấy con cừu,sáu,600852,1
+853,trong hình có bao nhiêu con chó,hai,600853,1
+854,hình có mấy máy tính xách tay,hai,600854,1
+855,số lượng con bò là bao nhiêu,tám,600855,1
+856,hình có mấy xe ô tô,tám,600856,1
+857,có bao nhiêu cái ghế trong hình,năm,600857,1
+858,trong hình có bao nhiêu con ngựa,bốn,600858,1
+859,trong hình có bao nhiêu con mèo,tám,600859,1
+860,có bao nhiêu điện thoại,hai,600860,1
+861,số lượng con ngựa vằn là bao nhiêu,một,600861,1
+862,có bao nhiêu điện thoại trong hình,tám,600862,1
+863,có bao nhiêu cái bàn,sáu,600863,1
+864,số lượng cái cây là bao nhiêu,bảy,600864,1
+865,hình có mấy chai,sáu,600865,1
+866,hình có mấy con cừu,ba,600866,1
+867,số lượng xe ô tô là bao nhiêu,tám,600867,1
+868,trong hình có bao nhiêu máy tính xách tay,sáu,600868,1
+869,trong hình có bao nhiêu con mèo,bảy,600869,1
+870,số lượng cái cây là bao nhiêu,bảy,600870,1
+871,số lượng con chim là bao nhiêu,hai,600871,1
+872,số lượng quyển sách là bao nhiêu,hai,600872,1
+873,có bao nhiêu máy tính xách tay,tám,600873,1
+874,có bao nhiêu cái ghế,sáu,600874,1
+875,hình có mấy điện thoại,tám,600875,1
+876,trong hình có bao nhiêu quyển sách,bốn,600876,1
+877,trong hình có bao nhiêu người,một,600877,1
+878,hình có mấy máy tính xách tay,ba,600878,1
+879,số lượng người là bao nhiêu,năm,600879,1
+880,hình có mấy con bò,bảy,600880,1
+881,có bao nhiêu cái ghế trong hình,bảy,600881,1
+882,số lượng chai là bao nhiêu,năm,600882,1
+883,có bao nhiêu người trong hình,năm,600883,1
+884,số lượng cái ghế là bao nhiêu,một,600884,1
+885,có bao nhiêu cái cây trong hình,bảy,600885,1
+886,số lượng quyển sách là bao nhiêu,tám,600886,1
+887,có bao nhiêu cái cây trong hình,hai,600887,1
+888,có bao nhiêu máy tính xách tay trong hình,năm,600888,1
+889,trong hình có bao nhiêu người,năm,600889,1
+890,trong hình có bao nhiêu cốc,tám,600890,1
+891,số lượng cái bàn là bao nhiêu,một,600891,1
+892,có bao nhiêu quyển sách,sáu,600892,1
+893,hình có mấy cái ghế,bốn,600893,1
+894,có bao nhiêu con ngựa,sáu,600894,1
+895,hình có mấy tòa nhà,ba,600895,1
+896,có bao nhiêu con mèo,một,600896,1
+897,trong hình có bao nhiêu cốc,bốn,600897,1
+898,số lượng con cừu là bao nhiêu,năm,600898,1
+899,có bao nhiêu con voi,bảy,600899,1
+900,số lượng xe ô tô là bao nhiêu,một,600900,1
+901,số lượng con chim là bao nhiêu,bảy,600901,1
+902,trong hình có bao nhiêu con ngựa vằn,bảy,600902,1
+903,có bao nhiêu cốc trong hình,một,600903,1
+904,có bao nhiêu con gà,ba,600904,1
+905,có bao nhiêu con hươu cao cổ trong hình,năm,600905,1
+906,có bao nhiêu cốc,bảy,600906,1
+907,trong hình có bao nhiêu cốc,ba,600907,1
+908,trong hình có bao nhiêu con chim,sáu,600908,1
+909,trong hình có bao nhiêu cốc,bốn,600909,1
+910,hình có mấy con ngựa,năm,600910,1
+911,hình có mấy người,hai,600911,1
+912,có bao nhiêu con chim trong hình,sáu,600912,1
+913,trong hình có bao nhiêu xe ô tô,bốn,600913,1
+914,trong hình có bao nhiêu điện thoại,bảy,600914,1
+915,có bao nhiêu cái ghế trong hình,sáu,600915,1
+916,trong hình có bao nhiêu quyển sách,hai,600916,1
+917,có bao nhiêu cái ghế,bốn,600917,1
+918,có bao nhiêu điện thoại,sáu,600918,1
+919,hình có mấy con ngựa vằn,ba,600919,1
+920,hình có mấy cái ghế,ba,600920,1
+921,có bao nhiêu điện thoại,một,600921,1
+922,hình có mấy tòa nhà,sáu,600922,1
+923,có bao nhiêu cái bàn trong hình,hai,600923,1
+924,có bao nhiêu con chim trong hình,bảy,600924,1
+925,có bao nhiêu máy tính xách tay trong hình,hai,600925,1
+926,hình có mấy con voi,ba,600926,1
+927,có bao nhiêu con bò,năm,600927,1
+928,có bao nhiêu điện thoại trong hình,bảy,600928,1
+929,số lượng cốc là bao nhiêu,năm,600929,1
+930,có bao nhiêu con ngựa vằn,sáu,600930,1
+931,hình có mấy điện thoại,năm,600931,1
+932,trong hình có bao nhiêu con chim,tám,600932,1
+933,có bao nhiêu con cừu trong hình,bảy,600933,1
+934,hình có mấy con cừu,tám,600934,1
+935,trong hình có bao nhiêu con hươu cao cổ,bốn,600935,1
+936,số lượng con hươu cao cổ là bao nhiêu,ba,600936,1
+937,hình có mấy cái ghế,một,600937,1
+938,trong hình có bao nhiêu con gà,một,600938,1
+939,hình có mấy cái cây,hai,600939,1
+940,hình có mấy con bò,một,600940,1
+941,hình có mấy cái ghế,ba,600941,1
+942,có bao nhiêu người,tám,600942,1
+943,có bao nhiêu tòa nhà,một,600943,1
+944,số lượng cốc là bao nhiêu,tám,600944,1
+945,số lượng con mèo là bao nhiêu,bốn,600945,1
+946,hình có mấy điện thoại,tám,600946,1
+947,hình có mấy máy tính xách tay,bốn,600947,1
+948,có bao nhiêu con ngựa trong hình,bảy,600948,1
+949,hình có mấy con gà,bốn,600949,1
+950,hình có mấy con hươu cao cổ,hai,600950,1
+951,có bao nhiêu quyển sách trong hình,một,600951,1
+952,có bao nhiêu con mèo trong hình,bảy,600952,1
+953,trong hình có bao nhiêu chai,một,600953,1
+954,hình có mấy người,hai,600954,1
+955,có bao nhiêu máy tính xách tay,hai,600955,1
+956,số lượng cốc là bao nhiêu,bốn,600956,1
+957,trong hình có bao nhiêu quyển sách,một,600957,1
+958,số lượng cái bàn là bao nhiêu,hai,600958,1
+959,hình có mấy cái bàn,tám,600959,1
+960,số lượng máy tính xách tay là bao nhiêu,ba,600960,1
+961,số lượng điện thoại là bao nhiêu,sáu,600961,1
+962,có bao nhiêu con bò,sáu,600962,1
+963,có bao nhiêu điện thoại,bốn,600963,1
+964,trong hình có bao nhiêu người,tám,600964,1
+965,hình có mấy cái ghế,một,600965,1
+966,có bao nhiêu máy tính xách tay,sáu,600966,1
+967,có bao nhiêu con chim trong hình,năm,600967,1
+968,có bao nhiêu con chim trong hình,bảy,600968,1
+969,hình có mấy cái bàn,một,600969,1
+970,có bao nhiêu cái cây trong hình,hai,600970,1
+971,số lượng người là bao nhiêu,ba,600971,1
+972,trong hình có bao nhiêu quyển sách,sáu,600972,1
+973,có bao nhiêu cốc,hai,600973,1
+974,trong hình có bao nhiêu quyển sách,bốn,600974,1
+975,hình có mấy máy tính xách tay,bảy,600975,1
+976,có bao nhiêu con mèo trong hình,sáu,600976,1
+977,có bao nhiêu người,bảy,600977,1
+978,hình có mấy tòa nhà,ba,600978,1
+979,có bao nhiêu cái cây,sáu,600979,1
+980,có bao nhiêu tòa nhà trong hình,năm,600980,1
+981,số lượng người là bao nhiêu,tám,600981,1
+982,hình có mấy xe ô tô,ba,600982,1
+983,hình có mấy cái ghế,ba,600983,1
+984,có bao nhiêu xe ô tô,năm,600984,1
+985,hình có mấy con hươu cao cổ,hai,600985,1
+986,trong hình có bao nhiêu người,ba,600986,1
+987,số lượng điện thoại là bao nhiêu,sáu,600987,1
+988,có bao nhiêu điện thoại trong hình,sáu,600988,1
+989,có bao nhiêu cái bàn,sáu,600989,1
+990,trong hình có bao nhiêu con cừu,sáu,600990,1
+991,có bao nhiêu con chim trong hình,sáu,600991,1
+992,có bao nhiêu con hươu cao cổ,bốn,600992,1
+993,hình có mấy cốc,ba,600993,1
+994,số lượng cái bàn là bao nhiêu,bảy,600994,1
+995,có bao nhiêu con mèo,sáu,600995,1
+996,trong hình có bao nhiêu xe ô tô,hai,600996,1
+997,có bao nhiêu xe ô tô trong hình,hai,600997,1
+998,có bao nhiêu xe ô tô,năm,600998,1
+999,trong hình có bao nhiêu điện thoại,ba,600999,1
+1000,hình có mấy máy tính xách tay,bảy,601000,1
+1001,hình có mấy chai,một,601001,1
+1002,hình có mấy cái cây,tám,601002,1
+1003,số lượng cốc là bao nhiêu,hai,601003,1
+1004,trong hình có bao nhiêu cái cây,hai,601004,1
+1005,trong hình có bao nhiêu tòa nhà,bốn,601005,1
+1006,có bao nhiêu máy tính xách tay trong hình,một,601006,1
+1007,có bao nhiêu con mèo trong hình,một,601007,1
+1008,trong hình có bao nhiêu con chó,hai,601008,1
+1009,trong hình có bao nhiêu con cừu,một,601009,1
+1010,có bao nhiêu cái ghế trong hình,bốn,601010,1
+1011,hình có mấy chai,bốn,601011,1
+1012,trong hình có bao nhiêu cái bàn,ba,601012,1
+1013,có bao nhiêu con chim trong hình,bốn,601013,1
+1014,số lượng con chim là bao nhiêu,một,601014,1
+1015,số lượng con chim là bao nhiêu,năm,601015,1
+1016,có bao nhiêu chai trong hình,bảy,601016,1
+1017,có bao nhiêu con ngựa,một,601017,1
+1018,có bao nhiêu tòa nhà,một,601018,1
+1019,trong hình có bao nhiêu chai,một,601019,1
+1020,trong hình có bao nhiêu cái cây,bảy,601020,1
+1021,số lượng cái bàn là bao nhiêu,tám,601021,1
+1022,trong hình có bao nhiêu con chim,một,601022,1
+1023,số lượng con ngựa là bao nhiêu,bảy,601023,1
+1024,có bao nhiêu quyển sách,ba,601024,1
+1025,số lượng máy tính xách tay là bao nhiêu,ba,601025,1
+1026,có bao nhiêu quyển sách trong hình,tám,601026,1
+1027,có bao nhiêu con hươu cao cổ trong hình,năm,601027,1
+1028,có bao nhiêu máy tính xách tay,tám,601028,1
+1029,số lượng con ngựa vằn là bao nhiêu,sáu,601029,1
+1030,số lượng quyển sách là bao nhiêu,ba,601030,1
+1031,hình có mấy cái bàn,năm,601031,1
+1032,trong hình có bao nhiêu con chim,hai,601032,1
+1033,có bao nhiêu máy tính xách tay,năm,601033,1
+1034,số lượng con chim là bao nhiêu,sáu,601034,1
+1035,trong hình có bao nhiêu con mèo,một,601035,1
+1036,có bao nhiêu máy tính xách tay,bốn,601036,1
+1037,số lượng cái cây là bao nhiêu,bốn,601037,1
+1038,có bao nhiêu cái bàn trong hình,một,601038,1
+1039,có bao nhiêu con gà,hai,601039,1
+1040,số lượng cái ghế là bao nhiêu,tám,601040,1
+1041,số lượng con ngựa vằn là bao nhiêu,năm,601041,1
+1042,có bao nhiêu chai trong hình,tám,601042,1
+1043,trong hình có bao nhiêu quyển sách,năm,601043,1
+1044,trong hình có bao nhiêu quyển sách,ba,601044,1
+1045,hình có mấy máy tính xách tay,bốn,601045,1
+1046,số lượng chai là bao nhiêu,tám,601046,1
+1047,có bao nhiêu quyển sách trong hình,ba,601047,1
+1048,trong hình có bao nhiêu cái bàn,một,601048,1
+1049,trong hình có bao nhiêu máy tính xách tay,bốn,601049,1
+1050,trong hình có bao nhiêu con ngựa vằn,năm,601050,1
+1051,có bao nhiêu cốc trong hình,bảy,601051,1
+1052,số lượng tòa nhà là bao nhiêu,một,601052,1
+1053,số lượng chai là bao nhiêu,bốn,601053,1
+1054,trong hình có bao nhiêu cái bàn,tám,601054,1
+1055,trong hình có bao nhiêu con bò,năm,601055,1
+1056,trong hình có bao nhiêu xe ô tô,bốn,601056,1
+1057,hình có mấy cái bàn,ba,601057,1
+1058,có bao nhiêu xe ô tô trong hình,bảy,601058,1
+1059,trong hình có bao nhiêu con chim,năm,601059,1
+1060,số lượng điện thoại là bao nhiêu,năm,601060,1
+1061,trong hình có bao nhiêu chai,sáu,601061,1
+1062,hình có mấy quyển sách,bảy,601062,1
+1063,trong hình có bao nhiêu tòa nhà,tám,601063,1
+1064,có bao nhiêu con chim trong hình,tám,601064,1
+1065,có bao nhiêu con voi trong hình,bốn,601065,1
+1066,số lượng cốc là bao nhiêu,bảy,601066,1
+1067,trong hình có bao nhiêu con mèo,ba,601067,1
+1068,số lượng con bò là bao nhiêu,bảy,601068,1
+1069,trong hình có bao nhiêu điện thoại,bảy,601069,1
+1070,số lượng máy tính xách tay là bao nhiêu,hai,601070,1
+1071,số lượng con cừu là bao nhiêu,một,601071,1
+1072,hình có mấy người,năm,601072,1
+1073,hình có mấy xe ô tô,hai,601073,1
+1074,hình có mấy chai,bốn,601074,1
+1075,hình có mấy quyển sách,sáu,601075,1
+1076,số lượng con ngựa là bao nhiêu,sáu,601076,1
+1077,hình có mấy người,hai,601077,1
+1078,số lượng con ngựa vằn là bao nhiêu,bốn,601078,1
+1079,hình có mấy con bò,tám,601079,1
+1080,có bao nhiêu cái bàn,hai,601080,1
+1081,số lượng tòa nhà là bao nhiêu,một,601081,1
+1082,số lượng con mèo là bao nhiêu,tám,601082,1
+1083,có bao nhiêu điện thoại,bảy,601083,1
+1084,có bao nhiêu máy tính xách tay,năm,601084,1
+1085,có bao nhiêu con gà trong hình,hai,601085,1
+1086,có bao nhiêu cái bàn trong hình,một,601086,1
+1087,có bao nhiêu con hươu cao cổ trong hình,một,601087,1
+1088,hình có mấy người,một,601088,1
+1089,hình có mấy chai,năm,601089,1
+1090,số lượng con hươu cao cổ là bao nhiêu,sáu,601090,1
+1091,có bao nhiêu cái cây trong hình,một,601091,1
+1092,trong hình có bao nhiêu con bò,một,601092,1
+1093,hình có mấy cái ghế,ba,601093,1
+1094,số lượng con ngựa vằn là bao nhiêu,hai,601094,1
+1095,hình có mấy con chó,sáu,601095,1
+1096,số lượng người là bao nhiêu,năm,601096,1
+1097,hình có mấy con mèo,bảy,601097,1
+1098,trong hình có bao nhiêu người,bốn,601098,1
+1099,hình có mấy tòa nhà,một,601099,1
+1100,số lượng con ngựa vằn là bao nhiêu,hai,601100,1
+1101,hình có mấy con bò,sáu,601101,1
+1102,có bao nhiêu con bò trong hình,bảy,601102,1
+1103,hình có mấy cái cây,một,601103,1
+1104,có bao nhiêu quyển sách trong hình,bảy,601104,1
+1105,hình có mấy cái cây,sáu,601105,1
+1106,có bao nhiêu cái bàn trong hình,một,601106,1
+1107,hình có mấy cái cây,sáu,601107,1
+1108,số lượng quyển sách là bao nhiêu,năm,601108,1
+1109,số lượng cái cây là bao nhiêu,bảy,601109,1
+1110,trong hình có bao nhiêu con voi,bốn,601110,1
+1111,trong hình có bao nhiêu quyển sách,một,601111,1
+1112,có bao nhiêu điện thoại,bảy,601112,1
+1113,có bao nhiêu con mèo trong hình,một,601113,1
+1114,có bao nhiêu xe ô tô,tám,601114,1
+1115,trong hình có bao nhiêu người,một,601115,1
+1116,trong hình có bao nhiêu cái cây,một,601116,1
+1117,có bao nhiêu con bò,bảy,601117,1
+1118,có bao nhiêu điện thoại trong hình,ba,601118,1
+1119,số lượng cái bàn là bao nhiêu,năm,601119,1
+1120,trong hình có bao nhiêu quyển sách,năm,601120,1
+1121,số lượng con ngựa là bao nhiêu,năm,601121,1
+1122,có bao nhiêu chai trong hình,một,601122,1
+1123,trong hình có bao nhiêu con voi,bốn,601123,1
+1124,số lượng cốc là bao nhiêu,ba,601124,1
+1125,có bao nhiêu cốc,ba,601125,1
+1126,có bao nhiêu con hươu cao cổ trong hình,tám,601126,1
+1127,số lượng cốc là bao nhiêu,sáu,601127,1
+1128,hình có mấy máy tính xách tay,hai,601128,1
+1129,hình có mấy con voi,bốn,601129,1
+1130,trong hình có bao nhiêu cái bàn,hai,601130,1
+1131,có bao nhiêu tòa nhà,ba,601131,1
+1132,trong hình có bao nhiêu quyển sách,một,601132,1
+1133,có bao nhiêu con mèo,một,601133,1
+1134,hình có mấy con ngựa,năm,601134,1
+1135,có bao nhiêu tòa nhà,tám,601135,1
+1136,số lượng cái cây là bao nhiêu,ba,601136,1
+1137,hình có mấy điện thoại,ba,601137,1
+1138,số lượng điện thoại là bao nhiêu,một,601138,1
+1139,có bao nhiêu cái ghế,hai,601139,1
+1140,có bao nhiêu con cừu trong hình,sáu,601140,1
+1141,có bao nhiêu tòa nhà trong hình,ba,601141,1
+1142,trong hình có bao nhiêu quyển sách,bốn,601142,1
+1143,trong hình có bao nhiêu con ngựa,bảy,601143,1
+1144,có bao nhiêu điện thoại trong hình,bảy,601144,1
+1145,có bao nhiêu con chim trong hình,sáu,601145,1
+1146,trong hình có bao nhiêu con mèo,hai,601146,1
+1147,hình có mấy cái cây,một,601147,1
+1148,số lượng con ngựa là bao nhiêu,một,601148,1
+1149,có bao nhiêu cái bàn trong hình,năm,601149,1
+1150,hình có mấy cái ghế,sáu,601150,1
+1151,trong hình có bao nhiêu cái cây,sáu,601151,1
+1152,có bao nhiêu xe ô tô,hai,601152,1
+1153,số lượng cái cây là bao nhiêu,một,601153,1
+1154,số lượng tòa nhà là bao nhiêu,bốn,601154,1
+1155,hình có mấy chai,ba,601155,1
+1156,số lượng cái cây là bao nhiêu,ba,601156,1
+1157,hình có mấy điện thoại,bốn,601157,1
+1158,số lượng quyển sách là bao nhiêu,ba,601158,1
+1159,có bao nhiêu chai,năm,601159,1
+1160,trong hình có bao nhiêu người,tám,601160,1
+1161,hình có mấy con chim,bốn,601161,1
+1162,hình có mấy con cừu,tám,601162,1
+1163,hình có mấy con voi,bảy,601163,1
+1164,hình có mấy máy tính xách tay,bảy,601164,1
+1165,có bao nhiêu quyển sách,tám,601165,1
+1166,hình có mấy con chim,một,601166,1
+1167,có bao nhiêu cái bàn,một,601167,1
+1168,hình có mấy điện thoại,năm,601168,1
+1169,hình có mấy con ngựa vằn,bảy,601169,1
+1170,số lượng con chim là bao nhiêu,bốn,601170,1
+1171,hình có mấy người,hai,601171,1
+1172,có bao nhiêu cốc,bảy,601172,1
+1173,có bao nhiêu máy tính xách tay,năm,601173,1
+1174,trong hình có bao nhiêu xe ô tô,bảy,601174,1
+1175,có bao nhiêu xe ô tô trong hình,bảy,601175,1
+1176,có bao nhiêu quyển sách trong hình,bảy,601176,1
+1177,trong hình có bao nhiêu con hươu cao cổ,năm,601177,1
+1178,số lượng con bò là bao nhiêu,sáu,601178,1
+1179,trong hình có bao nhiêu máy tính xách tay,năm,601179,1
+1180,trong hình có bao nhiêu cái ghế,bảy,601180,1
+1181,hình có mấy cái bàn,bảy,601181,1
+1182,số lượng cái bàn là bao nhiêu,bảy,601182,1
+1183,có bao nhiêu cái cây trong hình,hai,601183,1
+1184,có bao nhiêu người,hai,601184,1
+1185,có bao nhiêu quyển sách trong hình,tám,601185,1
+1186,số lượng xe ô tô là bao nhiêu,ba,601186,1
+1187,số lượng người là bao nhiêu,một,601187,1
+1188,số lượng người là bao nhiêu,một,601188,1
+1189,có bao nhiêu người,ba,601189,1
+1190,có bao nhiêu tòa nhà,hai,601190,1
+1191,có bao nhiêu con ngựa trong hình,tám,601191,1
+1192,số lượng máy tính xách tay là bao nhiêu,một,601192,1
+1193,hình có mấy cốc,một,601193,1
+1194,có bao nhiêu chai trong hình,ba,601194,1
+1195,có bao nhiêu tòa nhà trong hình,sáu,601195,1
+1196,hình có mấy quyển sách,ba,601196,1
+1197,có bao nhiêu xe ô tô,hai,601197,1
+1198,số lượng quyển sách là bao nhiêu,ba,601198,1
+1199,trong hình có bao nhiêu con bò,năm,601199,1
+1200,số lượng người là bao nhiêu,bốn,601200,1
+1201,hình có mấy người,ba,601201,1
+1202,số lượng cái cây là bao nhiêu,tám,601202,1
+1203,trong hình có bao nhiêu con cừu,sáu,601203,1
+1204,trong hình có bao nhiêu tòa nhà,một,601204,1
+1205,có bao nhiêu người,hai,601205,1
+1206,trong hình có bao nhiêu xe ô tô,ba,601206,1
+1207,số lượng điện thoại là bao nhiêu,một,601207,1
+1208,có bao nhiêu con ngựa vằn trong hình,sáu,601208,1
+1209,trong hình có bao nhiêu cái ghế,năm,601209,1
+1210,có bao nhiêu quyển sách trong hình,bốn,601210,1
+1211,hình có mấy cái bàn,bốn,601211,1
+1212,có bao nhiêu cái cây trong hình,một,601212,1
+1213,có bao nhiêu cốc,ba,601213,1
+1214,hình có mấy xe ô tô,bảy,601214,1
+1215,có bao nhiêu cái cây,một,601215,1
+1216,số lượng con voi là bao nhiêu,tám,601216,1
+1217,có bao nhiêu cái ghế,một,601217,1
+1218,có bao nhiêu điện thoại,bảy,601218,1
+1219,trong hình có bao nhiêu cái bàn,năm,601219,1
+1220,có bao nhiêu con ngựa trong hình,hai,601220,1
+1221,hình có mấy con ngựa vằn,tám,601221,1
+1222,có bao nhiêu xe ô tô,hai,601222,1
+1223,có bao nhiêu điện thoại,sáu,601223,1
+1224,số lượng xe ô tô là bao nhiêu,bảy,601224,1
+1225,có bao nhiêu xe ô tô trong hình,sáu,601225,1
+1226,có bao nhiêu người,bảy,601226,1
+1227,trong hình có bao nhiêu con mèo,ba,601227,1
+1228,có bao nhiêu người,năm,601228,1
+1229,trong hình có bao nhiêu con mèo,một,601229,1
+1230,trong hình có bao nhiêu con ngựa vằn,tám,601230,1
+1231,số lượng con ngựa vằn là bao nhiêu,sáu,601231,1
+1232,có bao nhiêu cái ghế,hai,601232,1
+1233,có bao nhiêu người trong hình,bốn,601233,1
+1234,có bao nhiêu con ngựa trong hình,bảy,601234,1
+1235,hình có mấy con mèo,bốn,601235,1
+1236,trong hình có bao nhiêu con chó,bốn,601236,1
+1237,hình có mấy điện thoại,bốn,601237,1
+1238,có bao nhiêu máy tính xách tay trong hình,sáu,601238,1
+1239,số lượng tòa nhà là bao nhiêu,bảy,601239,1
+1240,có bao nhiêu xe ô tô,một,601240,1
+1241,có bao nhiêu người trong hình,bốn,601241,1
+1242,có bao nhiêu cốc,ba,601242,1
+1243,có bao nhiêu quyển sách,năm,601243,1
+1244,trong hình có bao nhiêu người,năm,601244,1
+1245,số lượng con chim là bao nhiêu,tám,601245,1
+1246,hình có mấy quyển sách,sáu,601246,1
+1247,trong hình có bao nhiêu cái ghế,một,601247,1
+1248,trong hình có bao nhiêu con chim,sáu,601248,1
+1249,hình có mấy cái bàn,hai,601249,1
+1250,có bao nhiêu tòa nhà,năm,601250,1
+1251,có bao nhiêu con ngựa vằn,hai,601251,1
+1252,số lượng con chim là bao nhiêu,năm,601252,1
+1253,hình có mấy cốc,bốn,601253,1
+1254,số lượng con chim là bao nhiêu,ba,601254,1
+1255,có bao nhiêu con bò trong hình,một,601255,1
+1256,trong hình có bao nhiêu cái ghế,năm,601256,1
+1257,số lượng cái cây là bao nhiêu,một,601257,1
+1258,số lượng cái ghế là bao nhiêu,năm,601258,1
+1259,có bao nhiêu điện thoại trong hình,hai,601259,1
+1260,trong hình có bao nhiêu chai,một,601260,1
+1261,có bao nhiêu con chó,bảy,601261,1
+1262,có bao nhiêu con voi,sáu,601262,1
+1263,có bao nhiêu con voi,hai,601263,1
+1264,hình có mấy cốc,một,601264,1
+1265,có bao nhiêu con hươu cao cổ,năm,601265,1
+1266,có bao nhiêu cái ghế trong hình,sáu,601266,1
+1267,có bao nhiêu con bò,bảy,601267,1
+1268,hình có mấy con gà,một,601268,1
+1269,có bao nhiêu con voi trong hình,một,601269,1
+1270,trong hình có bao nhiêu cái ghế,hai,601270,1
+1271,có bao nhiêu cái ghế,sáu,601271,1
+1272,trong hình có bao nhiêu chai,bảy,601272,1
+1273,có bao nhiêu quyển sách trong hình,ba,601273,1
+1274,có bao nhiêu cốc trong hình,một,601274,1
+1275,số lượng người là bao nhiêu,ba,601275,1
+1276,có bao nhiêu cốc trong hình,hai,601276,1
+1277,hình có mấy chai,ba,601277,1
+1278,có bao nhiêu người,một,601278,1
+1279,số lượng xe ô tô là bao nhiêu,sáu,601279,1
+1280,số lượng cốc là bao nhiêu,bốn,601280,1
+1281,trong hình có bao nhiêu tòa nhà,bảy,601281,1
+1282,có bao nhiêu quyển sách trong hình,hai,601282,1
+1283,có bao nhiêu con gà trong hình,một,601283,1
+1284,trong hình có bao nhiêu con hươu cao cổ,năm,601284,1
+1285,hình có mấy máy tính xách tay,hai,601285,1
+1286,số lượng tòa nhà là bao nhiêu,sáu,601286,1
+1287,số lượng máy tính xách tay là bao nhiêu,ba,601287,1
+1288,số lượng xe ô tô là bao nhiêu,năm,601288,1
+1289,có bao nhiêu máy tính xách tay,bảy,601289,1
+1290,có bao nhiêu con hươu cao cổ trong hình,sáu,601290,1
+1291,có bao nhiêu con ngựa trong hình,tám,601291,1
+1292,hình có mấy xe ô tô,tám,601292,1
+1293,hình có mấy người,một,601293,1
+1294,số lượng quyển sách là bao nhiêu,tám,601294,1
+1295,số lượng cái bàn là bao nhiêu,ba,601295,1
+1296,có bao nhiêu con mèo,sáu,601296,1
+1297,có bao nhiêu con cừu,năm,601297,1
+1298,trong hình có bao nhiêu xe ô tô,hai,601298,1
+1299,hình có mấy con ngựa vằn,sáu,601299,1
+1300,trong hình có bao nhiêu cái ghế,tám,601300,1
+1301,hình có mấy tòa nhà,hai,601301,1
+1302,có bao nhiêu điện thoại trong hình,tám,601302,1
+1303,hình có mấy xe ô tô,ba,601303,1
+1304,có bao nhiêu chai trong hình,sáu,601304,1
+1305,trong hình có bao nhiêu con gà,bảy,601305,1
+1306,số lượng tòa nhà là bao nhiêu,bảy,601306,1
+1307,số lượng cốc là bao nhiêu,bảy,601307,1
+1308,trong hình có bao nhiêu con chim,bảy,601308,1
+1309,số lượng con hươu cao cổ là bao nhiêu,bảy,601309,1
+1310,trong hình có bao nhiêu cái bàn,ba,601310,1
+1311,số lượng điện thoại là bao nhiêu,bốn,601311,1
+1312,trong hình có bao nhiêu con chim,năm,601312,1
+1313,có bao nhiêu cái ghế,năm,601313,1
+1314,trong hình có bao nhiêu con ngựa vằn,ba,601314,1
+1315,số lượng con voi là bao nhiêu,sáu,601315,1
+1316,có bao nhiêu cái ghế,tám,601316,1
+1317,trong hình có bao nhiêu tòa nhà,ba,601317,1
+1318,có bao nhiêu con hươu cao cổ trong hình,tám,601318,1
+1319,trong hình có bao nhiêu máy tính xách tay,bốn,601319,1
+1320,hình có mấy con hươu cao cổ,tám,601320,1
+1321,trong hình có bao nhiêu cái ghế,sáu,601321,1
+1322,số lượng điện thoại là bao nhiêu,hai,601322,1
+1323,có bao nhiêu cái cây trong hình,tám,601323,1
+1324,hình có mấy cái ghế,hai,601324,1
+1325,trong hình có bao nhiêu con gà,năm,601325,1
+1326,có bao nhiêu người,tám,601326,1
+1327,trong hình có bao nhiêu cốc,tám,601327,1
+1328,số lượng cái bàn là bao nhiêu,sáu,601328,1
+1329,số lượng chai là bao nhiêu,hai,601329,1
+1330,hình có mấy điện thoại,tám,601330,1
+1331,có bao nhiêu cái bàn,hai,601331,1
+1332,có bao nhiêu con voi,ba,601332,1
+1333,hình có mấy con ngựa,bảy,601333,1
+1334,trong hình có bao nhiêu con ngựa vằn,tám,601334,1
+1335,trong hình có bao nhiêu quyển sách,hai,601335,1
+1336,trong hình có bao nhiêu con chim,năm,601336,1
+1337,có bao nhiêu người,hai,601337,1
+1338,hình có mấy con bò,một,601338,1
+1339,có bao nhiêu cái bàn,tám,601339,1
+1340,có bao nhiêu con cừu,năm,601340,1
+1341,trong hình có bao nhiêu con chim,bốn,601341,1
+1342,có bao nhiêu máy tính xách tay,sáu,601342,1
+1343,trong hình có bao nhiêu cái ghế,hai,601343,1
+1344,số lượng người là bao nhiêu,hai,601344,1
+1345,hình có mấy cái bàn,bốn,601345,1
+1346,có bao nhiêu con ngựa,năm,601346,1
+1347,có bao nhiêu cái cây,tám,601347,1
+1348,hình có mấy máy tính xách tay,hai,601348,1
+1349,số lượng quyển sách là bao nhiêu,một,601349,1
+1350,có bao nhiêu người,năm,601350,1
+1351,số lượng con hươu cao cổ là bao nhiêu,hai,601351,1
+1352,có bao nhiêu điện thoại trong hình,bảy,601352,1
+1353,có bao nhiêu con cừu,bốn,601353,1
+1354,có bao nhiêu quyển sách,một,601354,1
+1355,trong hình có bao nhiêu tòa nhà,ba,601355,1
+1356,số lượng điện thoại là bao nhiêu,năm,601356,1
+1357,có bao nhiêu cái cây trong hình,một,601357,1
+1358,có bao nhiêu cái ghế trong hình,ba,601358,1
+1359,hình có mấy tòa nhà,tám,601359,1
+1360,trong hình có bao nhiêu quyển sách,sáu,601360,1
+1361,có bao nhiêu điện thoại trong hình,bảy,601361,1
+1362,có bao nhiêu con ngựa,bốn,601362,1
+1363,có bao nhiêu cái bàn,hai,601363,1
+1364,hình có mấy cái ghế,tám,601364,1
+1365,trong hình có bao nhiêu quyển sách,bảy,601365,1
+1366,trong hình có bao nhiêu cái cây,bốn,601366,1
+1367,số lượng con chim là bao nhiêu,hai,601367,1
+1368,có bao nhiêu con cừu,bốn,601368,1
+1369,trong hình có bao nhiêu chai,ba,601369,1
+1370,số lượng cái ghế là bao nhiêu,bốn,601370,1
+1371,số lượng con voi là bao nhiêu,sáu,601371,1
+1372,hình có mấy người,sáu,601372,1
+1373,hình có mấy người,tám,601373,1
+1374,số lượng người là bao nhiêu,bảy,601374,1
+1375,có bao nhiêu quyển sách,tám,601375,1
+1376,số lượng cốc là bao nhiêu,ba,601376,1
+1377,hình có mấy con mèo,tám,601377,1
+1378,có bao nhiêu con chim,bốn,601378,1
+1379,số lượng tòa nhà là bao nhiêu,sáu,601379,1
+1380,có bao nhiêu con gà trong hình,bốn,601380,1
+1381,hình có mấy cốc,hai,601381,1
+1382,có bao nhiêu con chó,năm,601382,1
+1383,hình có mấy cái bàn,một,601383,1
+1384,trong hình có bao nhiêu cái bàn,hai,601384,1
+1385,hình có mấy cái ghế,sáu,601385,1
+1386,có bao nhiêu cốc,năm,601386,1
+1387,hình có mấy cái cây,hai,601387,1
+1388,số lượng người là bao nhiêu,ba,601388,1
+1389,có bao nhiêu xe ô tô,sáu,601389,1
+1390,số lượng người là bao nhiêu,tám,601390,1
+1391,số lượng tòa nhà là bao nhiêu,hai,601391,1
+1392,có bao nhiêu cốc trong hình,sáu,601392,1
+1393,có bao nhiêu chai,năm,601393,1
+1394,có bao nhiêu con ngựa,hai,601394,1
+1395,số lượng quyển sách là bao nhiêu,bảy,601395,1
+1396,số lượng cái cây là bao nhiêu,hai,601396,1
+1397,số lượng con bò là bao nhiêu,sáu,601397,1
+1398,số lượng chai là bao nhiêu,bốn,601398,1
+1399,số lượng người là bao nhiêu,sáu,601399,1
+1400,có bao nhiêu con hươu cao cổ trong hình,tám,601400,1
+1401,số lượng xe ô tô là bao nhiêu,tám,601401,1
+1402,có bao nhiêu con chim trong hình,hai,601402,1
+1403,trong hình có bao nhiêu quyển sách,bảy,601403,1
+1404,có bao nhiêu con chim trong hình,một,601404,1
+1405,số lượng xe ô tô là bao nhiêu,bảy,601405,1
+1406,trong hình có bao nhiêu cái cây,hai,601406,1
+1407,hình có mấy cái bàn,tám,601407,1
+1408,hình có mấy xe ô tô,năm,601408,1
+1409,số lượng người là bao nhiêu,hai,601409,1
+1410,có bao nhiêu con hươu cao cổ trong hình,tám,601410,1
+1411,có bao nhiêu con cừu trong hình,sáu,601411,1
+1412,trong hình có bao nhiêu tòa nhà,sáu,601412,1
+1413,hình có mấy tòa nhà,sáu,601413,1
+1414,có bao nhiêu cái ghế,ba,601414,1
+1415,trong hình có bao nhiêu chai,một,601415,1
+1416,có bao nhiêu máy tính xách tay trong hình,sáu,601416,1
+1417,trong hình có bao nhiêu tòa nhà,ba,601417,1
+1418,hình có mấy cái ghế,tám,601418,1
+1419,số lượng con bò là bao nhiêu,ba,601419,1
+1420,hình có mấy người,một,601420,1
+1421,trong hình có bao nhiêu cái ghế,tám,601421,1
+1422,có bao nhiêu quyển sách,bốn,601422,1
+1423,số lượng cái cây là bao nhiêu,bốn,601423,1
+1424,có bao nhiêu con chim,hai,601424,1
+1425,hình có mấy xe ô tô,hai,601425,1
+1426,có bao nhiêu cốc trong hình,một,601426,1
+1427,trong hình có bao nhiêu cái cây,năm,601427,1
+1428,hình có mấy tòa nhà,năm,601428,1
+1429,số lượng xe ô tô là bao nhiêu,một,601429,1
+1430,hình có mấy cái cây,một,601430,1
+1431,có bao nhiêu xe ô tô trong hình,hai,601431,1
+1432,có bao nhiêu xe ô tô trong hình,bốn,601432,1
+1433,trong hình có bao nhiêu tòa nhà,bốn,601433,1
+1434,trong hình có bao nhiêu xe ô tô,hai,601434,1
+1435,trong hình có bao nhiêu xe ô tô,một,601435,1
+1436,số lượng con voi là bao nhiêu,hai,601436,1
+1437,hình có mấy cái cây,bảy,601437,1
+1438,có bao nhiêu cái cây,tám,601438,1
+1439,có bao nhiêu cốc,hai,601439,1
+1440,hình có mấy người,bảy,601440,1
+1441,số lượng cái bàn là bao nhiêu,bảy,601441,1
+1442,có bao nhiêu máy tính xách tay,tám,601442,1
+1443,có bao nhiêu điện thoại,sáu,601443,1
+1444,có bao nhiêu cái ghế,tám,601444,1
+1445,số lượng điện thoại là bao nhiêu,hai,601445,1
+1446,hình có mấy con chim,bảy,601446,1
+1447,hình có mấy chai,bảy,601447,1
+1448,trong hình có bao nhiêu chai,tám,601448,1
+1449,hình có mấy cốc,bảy,601449,1
+1450,có bao nhiêu điện thoại,sáu,601450,1
+1451,số lượng chai là bao nhiêu,bốn,601451,1
+1452,trong hình có bao nhiêu máy tính xách tay,bốn,601452,1
+1453,có bao nhiêu con cừu,bảy,601453,1
+1454,trong hình có bao nhiêu con voi,hai,601454,1
+1455,trong hình có bao nhiêu cái cây,hai,601455,1
+1456,có bao nhiêu máy tính xách tay,bốn,601456,1
+1457,số lượng điện thoại là bao nhiêu,ba,601457,1
+1458,trong hình có bao nhiêu tòa nhà,năm,601458,1
+1459,số lượng máy tính xách tay là bao nhiêu,một,601459,1
+1460,có bao nhiêu cái ghế,hai,601460,1
+1461,có bao nhiêu xe ô tô trong hình,ba,601461,1
+1462,hình có mấy quyển sách,hai,601462,1
+1463,có bao nhiêu con ngựa trong hình,một,601463,1
+1464,có bao nhiêu cái cây,tám,601464,1
+1465,số lượng người là bao nhiêu,tám,601465,1
+1466,có bao nhiêu quyển sách,hai,601466,1
+1467,số lượng con mèo là bao nhiêu,một,601467,1
+1468,trong hình có bao nhiêu xe ô tô,hai,601468,1
+1469,có bao nhiêu xe ô tô trong hình,bảy,601469,1
+1470,có bao nhiêu cốc,bảy,601470,1
+1471,số lượng con chim là bao nhiêu,bốn,601471,1
+1472,số lượng cái cây là bao nhiêu,năm,601472,1
+1473,có bao nhiêu điện thoại trong hình,một,601473,1
+1474,hình có mấy cái bàn,năm,601474,1
+1475,trong hình có bao nhiêu con chim,sáu,601475,1
+1476,trong hình có bao nhiêu con bò,sáu,601476,1
+1477,số lượng máy tính xách tay là bao nhiêu,một,601477,1
+1478,có bao nhiêu cái cây,bảy,601478,1
+1479,số lượng người là bao nhiêu,tám,601479,1
+1480,có bao nhiêu con gà,sáu,601480,1
+1481,trong hình có bao nhiêu con ngựa,một,601481,1
+1482,hình có mấy tòa nhà,hai,601482,1
+1483,hình có mấy cái bàn,bốn,601483,1
+1484,có bao nhiêu con cừu,bốn,601484,1
+1485,có bao nhiêu cốc,sáu,601485,1
+1486,có bao nhiêu cái bàn trong hình,bảy,601486,1
+1487,trong hình có bao nhiêu cốc,bảy,601487,1
+1488,số lượng con hươu cao cổ là bao nhiêu,bốn,601488,1
+1489,số lượng điện thoại là bao nhiêu,bốn,601489,1
+1490,trong hình có bao nhiêu cái cây,bốn,601490,1
+1491,trong hình có bao nhiêu cái ghế,tám,601491,1
+1492,trong hình có bao nhiêu máy tính xách tay,sáu,601492,1
+1493,có bao nhiêu máy tính xách tay,bốn,601493,1
+1494,số lượng con mèo là bao nhiêu,bảy,601494,1
+1495,có bao nhiêu con chim trong hình,năm,601495,1
+1496,có bao nhiêu tòa nhà trong hình,tám,601496,1
+1497,trong hình có bao nhiêu điện thoại,bốn,601497,1
+1498,có bao nhiêu quyển sách trong hình,ba,601498,1
+1499,hình có mấy cái cây,một,601499,1
+1500,số lượng cốc là bao nhiêu,tám,601500,1
+1501,có bao nhiêu chai,ba,601501,1
+1502,hình có mấy tòa nhà,một,601502,1
+1503,có bao nhiêu con chim trong hình,sáu,601503,1
+1504,trong hình có bao nhiêu con chim,năm,601504,1
+1505,có bao nhiêu tòa nhà trong hình,hai,601505,1
+1506,có bao nhiêu máy tính xách tay trong hình,sáu,601506,1
+1507,có bao nhiêu con chó trong hình,bốn,601507,1
+1508,có bao nhiêu máy tính xách tay trong hình,sáu,601508,1
+1509,có bao nhiêu điện thoại,năm,601509,1
+1510,có bao nhiêu con mèo,bốn,601510,1
+1511,hình có mấy quyển sách,bốn,601511,1
+1512,số lượng quyển sách là bao nhiêu,bảy,601512,1
+1513,hình có mấy điện thoại,ba,601513,1
+1514,số lượng cốc là bao nhiêu,tám,601514,1
+1515,có bao nhiêu con bò trong hình,sáu,601515,1
+1516,số lượng xe ô tô là bao nhiêu,tám,601516,1
+1517,trong hình có bao nhiêu máy tính xách tay,tám,601517,1
+1518,có bao nhiêu cái ghế,bảy,601518,1
+1519,hình có mấy tòa nhà,ba,601519,1
+1520,số lượng con mèo là bao nhiêu,ba,601520,1
+1521,có bao nhiêu con bò,hai,601521,1
+1522,hình có mấy điện thoại,bảy,601522,1
+1523,có bao nhiêu con hươu cao cổ trong hình,một,601523,1
+1524,số lượng cái cây là bao nhiêu,bảy,601524,1
+1525,số lượng máy tính xách tay là bao nhiêu,một,601525,1
+1526,có bao nhiêu người trong hình,bốn,601526,1
+1527,có bao nhiêu con mèo trong hình,ba,601527,1
+1528,có bao nhiêu điện thoại trong hình,năm,601528,1
+1529,hình có mấy cái bàn,một,601529,1
+1530,có bao nhiêu điện thoại trong hình,năm,601530,1
+1531,hình có mấy chai,bốn,601531,1
+1532,số lượng con bò là bao nhiêu,năm,601532,1
+1533,có bao nhiêu cốc trong hình,bốn,601533,1
+1534,hình có mấy con chó,bốn,601534,1
+1535,số lượng xe ô tô là bao nhiêu,một,601535,1
+1536,hình có mấy xe ô tô,hai,601536,1
+1537,trong hình có bao nhiêu con bò,một,601537,1
+1538,có bao nhiêu cái cây,bốn,601538,1
+1539,số lượng điện thoại là bao nhiêu,ba,601539,1
+1540,trong hình có bao nhiêu chai,bảy,601540,1
+1541,có bao nhiêu con chim,hai,601541,1
+1542,trong hình có bao nhiêu người,một,601542,1
+1543,hình có mấy con chim,sáu,601543,1
+1544,có bao nhiêu điện thoại,năm,601544,1
+1545,có bao nhiêu máy tính xách tay trong hình,hai,601545,1
+1546,có bao nhiêu con hươu cao cổ,ba,601546,1
+1547,hình có mấy con voi,năm,601547,1
+1548,có bao nhiêu cái ghế trong hình,sáu,601548,1
+1549,trong hình có bao nhiêu tòa nhà,sáu,601549,1
+1550,hình có mấy chai,bảy,601550,1
+1551,có bao nhiêu con ngựa vằn,tám,601551,1
+1552,hình có mấy máy tính xách tay,năm,601552,1
+1553,có bao nhiêu chai,tám,601553,1
+1554,trong hình có bao nhiêu con ngựa,ba,601554,1
+1555,hình có mấy con chó,một,601555,1
+1556,hình có mấy máy tính xách tay,một,601556,1
+1557,trong hình có bao nhiêu điện thoại,ba,601557,1
+1558,có bao nhiêu cái bàn,một,601558,1
+1559,số lượng con gà là bao nhiêu,sáu,601559,1
+1560,trong hình có bao nhiêu con bò,ba,601560,1
+1561,có bao nhiêu máy tính xách tay trong hình,hai,601561,1
+1562,số lượng cái cây là bao nhiêu,bảy,601562,1
+1563,số lượng con voi là bao nhiêu,một,601563,1
+1564,trong hình có bao nhiêu cái bàn,sáu,601564,1
+1565,hình có mấy chai,bốn,601565,1
+1566,số lượng cái bàn là bao nhiêu,tám,601566,1
+1567,số lượng xe ô tô là bao nhiêu,năm,601567,1
+1568,trong hình có bao nhiêu người,năm,601568,1
+1569,hình có mấy tòa nhà,tám,601569,1
+1570,số lượng cốc là bao nhiêu,ba,601570,1
+1571,có bao nhiêu cái bàn,tám,601571,1
+1572,hình có mấy con chim,bảy,601572,1
+1573,số lượng cái ghế là bao nhiêu,tám,601573,1
+1574,có bao nhiêu cái cây trong hình,bốn,601574,1
+1575,có bao nhiêu con gà,hai,601575,1
+1576,trong hình có bao nhiêu tòa nhà,sáu,601576,1
+1577,có bao nhiêu con chó,năm,601577,1
+1578,trong hình có bao nhiêu con hươu cao cổ,hai,601578,1
+1579,trong hình có bao nhiêu con gà,ba,601579,1
+1580,trong hình có bao nhiêu tòa nhà,năm,601580,1
+1581,hình có mấy xe ô tô,bảy,601581,1
+1582,hình có mấy cốc,hai,601582,1
+1583,trong hình có bao nhiêu cái bàn,tám,601583,1
+1584,có bao nhiêu xe ô tô,năm,601584,1
+1585,số lượng con chim là bao nhiêu,một,601585,1
+1586,số lượng chai là bao nhiêu,năm,601586,1
+1587,có bao nhiêu con mèo trong hình,tám,601587,1
+1588,hình có mấy con mèo,một,601588,1
+1589,số lượng tòa nhà là bao nhiêu,sáu,601589,1
+1590,số lượng quyển sách là bao nhiêu,năm,601590,1
+1591,số lượng người là bao nhiêu,ba,601591,1
+1592,có bao nhiêu tòa nhà,tám,601592,1
+1593,hình có mấy máy tính xách tay,hai,601593,1
+1594,số lượng con chim là bao nhiêu,ba,601594,1
+1595,trong hình có bao nhiêu cái bàn,năm,601595,1
+1596,có bao nhiêu chai,ba,601596,1
+1597,có bao nhiêu quyển sách,một,601597,1
+1598,hình có mấy con chó,năm,601598,1
+1599,số lượng máy tính xách tay là bao nhiêu,một,601599,1
+1600,có bao nhiêu máy tính xách tay trong hình,ba,601600,1
+1601,số lượng máy tính xách tay là bao nhiêu,năm,601601,1
+1602,có bao nhiêu cái cây trong hình,hai,601602,1
+1603,có bao nhiêu chai,bảy,601603,1
+1604,trong hình có bao nhiêu con ngựa vằn,tám,601604,1
+1605,có bao nhiêu máy tính xách tay,bảy,601605,1
+1606,có bao nhiêu con chim,năm,601606,1
+1607,trong hình có bao nhiêu chai,hai,601607,1
+1608,số lượng tòa nhà là bao nhiêu,bốn,601608,1
+1609,hình có mấy cốc,bảy,601609,1
+1610,trong hình có bao nhiêu cái bàn,năm,601610,1
+1611,số lượng cái ghế là bao nhiêu,bảy,601611,1
+1612,trong hình có bao nhiêu con cừu,bốn,601612,1
+1613,số lượng xe ô tô là bao nhiêu,sáu,601613,1
+1614,trong hình có bao nhiêu con gà,hai,601614,1
+1615,số lượng cái ghế là bao nhiêu,sáu,601615,1
+1616,số lượng con chim là bao nhiêu,tám,601616,1
+1617,hình có mấy xe ô tô,bốn,601617,1
+1618,hình có mấy xe ô tô,tám,601618,1
+1619,trong hình có bao nhiêu quyển sách,tám,601619,1
+1620,có bao nhiêu điện thoại trong hình,tám,601620,1
+1621,hình có mấy cái bàn,tám,601621,1
+1622,hình có mấy xe ô tô,một,601622,1
+1623,số lượng xe ô tô là bao nhiêu,một,601623,1
+1624,hình có mấy cái cây,bảy,601624,1
+1625,có bao nhiêu con voi,bốn,601625,1
+1626,số lượng chai là bao nhiêu,năm,601626,1
+1627,số lượng cái cây là bao nhiêu,bốn,601627,1
+1628,có bao nhiêu tòa nhà,năm,601628,1
+1629,có bao nhiêu xe ô tô trong hình,năm,601629,1
+1630,có bao nhiêu máy tính xách tay trong hình,ba,601630,1
+1631,số lượng con bò là bao nhiêu,hai,601631,1
+1632,có bao nhiêu con mèo,một,601632,1
+1633,hình có mấy chai,một,601633,1
+1634,có bao nhiêu con chó,bảy,601634,1
+1635,hình có mấy con cừu,bảy,601635,1
+1636,có bao nhiêu con chim,ba,601636,1
+1637,có bao nhiêu con bò,bảy,601637,1
+1638,hình có mấy con bò,bảy,601638,1
+1639,trong hình có bao nhiêu con ngựa,bảy,601639,1
+1640,hình có mấy cái bàn,ba,601640,1
+1641,số lượng người là bao nhiêu,năm,601641,1
+1642,có bao nhiêu cái cây,hai,601642,1
+1643,hình có mấy điện thoại,năm,601643,1
+1644,có bao nhiêu xe ô tô,sáu,601644,1
+1645,có bao nhiêu máy tính xách tay trong hình,hai,601645,1
+1646,có bao nhiêu tòa nhà,sáu,601646,1
+1647,có bao nhiêu điện thoại,một,601647,1
+1648,có bao nhiêu quyển sách trong hình,sáu,601648,1
+1649,trong hình có bao nhiêu con ngựa vằn,bảy,601649,1
+1650,số lượng máy tính xách tay là bao nhiêu,bốn,601650,1
+1651,có bao nhiêu con chim,sáu,601651,1
+1652,hình có mấy xe ô tô,bảy,601652,1
+1653,có bao nhiêu con ngựa,bảy,601653,1
+1654,có bao nhiêu cái cây trong hình,năm,601654,1
+1655,số lượng quyển sách là bao nhiêu,hai,601655,1
+1656,trong hình có bao nhiêu máy tính xách tay,ba,601656,1
+1657,hình có mấy con chim,ba,601657,1
+1658,có bao nhiêu con chim trong hình,bốn,601658,1
+1659,có bao nhiêu quyển sách trong hình,tám,601659,1
+1660,trong hình có bao nhiêu chai,bốn,601660,1
+1661,hình có mấy cốc,năm,601661,1
+1662,có bao nhiêu người,bảy,601662,1
+1663,có bao nhiêu con mèo trong hình,hai,601663,1
+1664,có bao nhiêu con chim trong hình,hai,601664,1
+1665,hình có mấy con ngựa,sáu,601665,1
+1666,trong hình có bao nhiêu con ngựa vằn,sáu,601666,1
+1667,số lượng con ngựa vằn là bao nhiêu,bảy,601667,1
+1668,có bao nhiêu điện thoại trong hình,một,601668,1
+1669,có bao nhiêu con ngựa,bảy,601669,1
+1670,có bao nhiêu người trong hình,một,601670,1
+1671,trong hình có bao nhiêu con chim,ba,601671,1
+1672,trong hình có bao nhiêu con cừu,tám,601672,1
+1673,số lượng máy tính xách tay là bao nhiêu,năm,601673,1
+1674,có bao nhiêu con chim,bảy,601674,1
+1675,có bao nhiêu tòa nhà,năm,601675,1
+1676,số lượng cốc là bao nhiêu,năm,601676,1
+1677,trong hình có bao nhiêu con cừu,sáu,601677,1
+1678,có bao nhiêu cái bàn,bảy,601678,1
+1679,có bao nhiêu điện thoại trong hình,sáu,601679,1
+1680,có bao nhiêu điện thoại,tám,601680,1
+1681,trong hình có bao nhiêu con cừu,tám,601681,1
+1682,có bao nhiêu điện thoại,sáu,601682,1
+1683,có bao nhiêu cái ghế trong hình,năm,601683,1
+1684,hình có mấy con mèo,một,601684,1
+1685,trong hình có bao nhiêu con cừu,tám,601685,1
+1686,trong hình có bao nhiêu con ngựa,bốn,601686,1
+1687,hình có mấy xe ô tô,ba,601687,1
+1688,trong hình có bao nhiêu con voi,bảy,601688,1
+1689,có bao nhiêu con chim trong hình,một,601689,1
+1690,có bao nhiêu người,sáu,601690,1
+1691,hình có mấy chai,sáu,601691,1
+1692,số lượng người là bao nhiêu,bảy,601692,1
+1693,hình có mấy điện thoại,một,601693,1
+1694,có bao nhiêu cái cây,bảy,601694,1
+1695,số lượng cốc là bao nhiêu,một,601695,1
+1696,số lượng xe ô tô là bao nhiêu,hai,601696,1
+1697,số lượng cái cây là bao nhiêu,năm,601697,1
+1698,hình có mấy quyển sách,một,601698,1
+1699,hình có mấy cái ghế,hai,601699,1
+1700,có bao nhiêu tòa nhà trong hình,một,601700,1
+1701,có bao nhiêu con mèo,một,601701,1
+1702,có bao nhiêu cái cây trong hình,ba,601702,1
+1703,có bao nhiêu xe ô tô,năm,601703,1
+1704,trong hình có bao nhiêu tòa nhà,bốn,601704,1
+1705,hình có mấy xe ô tô,năm,601705,1
+1706,trong hình có bao nhiêu cái bàn,bốn,601706,1
+1707,có bao nhiêu xe ô tô,một,601707,1
+1708,hình có mấy người,bốn,601708,1
+1709,có bao nhiêu quyển sách trong hình,sáu,601709,1
+1710,trong hình có bao nhiêu con cừu,bảy,601710,1
+1711,có bao nhiêu con chim,tám,601711,1
+1712,có bao nhiêu con ngựa,bảy,601712,1
+1713,có bao nhiêu cái cây,sáu,601713,1
+1714,có bao nhiêu cái cây,bảy,601714,1
+1715,có bao nhiêu cái ghế,sáu,601715,1
+1716,số lượng con chó là bao nhiêu,sáu,601716,1
+1717,hình có mấy cốc,năm,601717,1
+1718,có bao nhiêu chai trong hình,năm,601718,1
+1719,có bao nhiêu cái ghế trong hình,một,601719,1
+1720,số lượng chai là bao nhiêu,một,601720,1
+1721,có bao nhiêu cốc,hai,601721,1
+1722,trong hình có bao nhiêu cái cây,sáu,601722,1
+1723,trong hình có bao nhiêu điện thoại,bảy,601723,1
+1724,có bao nhiêu chai trong hình,bảy,601724,1
+1725,hình có mấy cái ghế,bảy,601725,1
+1726,hình có mấy cái ghế,hai,601726,1
+1727,số lượng cái cây là bao nhiêu,tám,601727,1
+1728,có bao nhiêu con ngựa vằn trong hình,một,601728,1
+1729,có bao nhiêu cái bàn,ba,601729,1
+1730,có bao nhiêu điện thoại trong hình,tám,601730,1
+1731,có bao nhiêu chai trong hình,một,601731,1
+1732,trong hình có bao nhiêu cái ghế,hai,601732,1
+1733,trong hình có bao nhiêu cái bàn,một,601733,1
+1734,trong hình có bao nhiêu cốc,năm,601734,1
+1735,trong hình có bao nhiêu xe ô tô,bảy,601735,1
+1736,số lượng con voi là bao nhiêu,năm,601736,1
+1737,số lượng điện thoại là bao nhiêu,bốn,601737,1
+1738,có bao nhiêu máy tính xách tay trong hình,tám,601738,1
+1739,trong hình có bao nhiêu chai,năm,601739,1
+1740,có bao nhiêu cái cây trong hình,hai,601740,1
+1741,có bao nhiêu cái cây trong hình,sáu,601741,1
+1742,trong hình có bao nhiêu con gà,ba,601742,1
+1743,hình có mấy cái bàn,sáu,601743,1
+1744,số lượng con cừu là bao nhiêu,một,601744,1
+1745,trong hình có bao nhiêu cốc,ba,601745,1
+1746,có bao nhiêu máy tính xách tay trong hình,bốn,601746,1
+1747,hình có mấy quyển sách,năm,601747,1
+1748,có bao nhiêu xe ô tô trong hình,năm,601748,1
+1749,trong hình có bao nhiêu con bò,ba,601749,1
+1750,trong hình có bao nhiêu cốc,một,601750,1
+1751,trong hình có bao nhiêu con voi,hai,601751,1
+1752,trong hình có bao nhiêu con bò,sáu,601752,1
+1753,số lượng cốc là bao nhiêu,tám,601753,1
+1754,trong hình có bao nhiêu người,sáu,601754,1
+1755,hình có mấy người,năm,601755,1
+1756,số lượng con ngựa vằn là bao nhiêu,năm,601756,1
+1757,có bao nhiêu tòa nhà,năm,601757,1
+1758,có bao nhiêu máy tính xách tay,năm,601758,1
+1759,có bao nhiêu xe ô tô trong hình,bốn,601759,1
+1760,số lượng chai là bao nhiêu,một,601760,1
+1761,có bao nhiêu xe ô tô trong hình,tám,601761,1
+1762,hình có mấy con chim,hai,601762,1
+1763,có bao nhiêu xe ô tô,tám,601763,1
+1764,có bao nhiêu máy tính xách tay,tám,601764,1
+1765,trong hình có bao nhiêu quyển sách,hai,601765,1
+1766,có bao nhiêu cái cây,bốn,601766,1
+1767,hình có mấy người,năm,601767,1
+1768,số lượng con cừu là bao nhiêu,bốn,601768,1
+1769,có bao nhiêu cái ghế,ba,601769,1
+1770,trong hình có bao nhiêu cái cây,tám,601770,1
+1771,hình có mấy điện thoại,bảy,601771,1
+1772,trong hình có bao nhiêu con ngựa vằn,bảy,601772,1
+1773,trong hình có bao nhiêu con cừu,bốn,601773,1
+1774,trong hình có bao nhiêu máy tính xách tay,bảy,601774,1
+1775,hình có mấy cốc,sáu,601775,1
+1776,trong hình có bao nhiêu chai,sáu,601776,1
+1777,số lượng con bò là bao nhiêu,bảy,601777,1
+1778,có bao nhiêu con hươu cao cổ,ba,601778,1
+1779,có bao nhiêu con cừu,bảy,601779,1
+1780,có bao nhiêu điện thoại,một,601780,1
+1781,có bao nhiêu con bò,năm,601781,1
+1782,hình có mấy tòa nhà,bảy,601782,1
+1783,trong hình có bao nhiêu con hươu cao cổ,ba,601783,1
+1784,trong hình có bao nhiêu quyển sách,bốn,601784,1
+1785,có bao nhiêu cái cây trong hình,năm,601785,1
+1786,trong hình có bao nhiêu người,một,601786,1
+1787,số lượng cốc là bao nhiêu,bảy,601787,1
+1788,có bao nhiêu cái ghế,một,601788,1
+1789,có bao nhiêu con mèo,hai,601789,1
+1790,số lượng con hươu cao cổ là bao nhiêu,năm,601790,1
+1791,có bao nhiêu con chó,bảy,601791,1
+1792,hình có mấy điện thoại,tám,601792,1
+1793,có bao nhiêu con chim trong hình,bốn,601793,1
+1794,có bao nhiêu chai,hai,601794,1
+1795,trong hình có bao nhiêu cốc,bốn,601795,1
+1796,có bao nhiêu cái bàn,năm,601796,1
+1797,trong hình có bao nhiêu con chó,sáu,601797,1
+1798,hình có mấy con ngựa vằn,bốn,601798,1
+1799,số lượng tòa nhà là bao nhiêu,bảy,601799,1
+1800,hình có mấy cái bàn,bốn,601800,1
+1801,có bao nhiêu máy tính xách tay,tám,601801,1
+1802,hình có mấy xe ô tô,tám,601802,1
+1803,trong hình có bao nhiêu điện thoại,tám,601803,1
+1804,trong hình có bao nhiêu cái bàn,ba,601804,1
+1805,hình có mấy cái cây,bốn,601805,1
+1806,hình có mấy con hươu cao cổ,tám,601806,1
+1807,trong hình có bao nhiêu tòa nhà,bảy,601807,1
+1808,có bao nhiêu xe ô tô trong hình,bảy,601808,1
+1809,có bao nhiêu chai,bốn,601809,1
+1810,hình có mấy tòa nhà,bốn,601810,1
+1811,trong hình có bao nhiêu tòa nhà,năm,601811,1
+1812,số lượng xe ô tô là bao nhiêu,một,601812,1
+1813,số lượng cái ghế là bao nhiêu,một,601813,1
+1814,có bao nhiêu chai trong hình,hai,601814,1
+1815,có bao nhiêu tòa nhà,bốn,601815,1
+1816,trong hình có bao nhiêu chai,hai,601816,1
+1817,số lượng máy tính xách tay là bao nhiêu,bốn,601817,1
+1818,số lượng máy tính xách tay là bao nhiêu,một,601818,1
+1819,có bao nhiêu cái ghế,hai,601819,1
+1820,có bao nhiêu con hươu cao cổ trong hình,năm,601820,1
+1821,có bao nhiêu điện thoại,bảy,601821,1
+1822,số lượng cái cây là bao nhiêu,bốn,601822,1
+1823,có bao nhiêu người trong hình,hai,601823,1
+1824,có bao nhiêu quyển sách trong hình,bảy,601824,1
+1825,số lượng chai là bao nhiêu,bảy,601825,1
+1826,có bao nhiêu con voi,sáu,601826,1
+1827,số lượng cái bàn là bao nhiêu,ba,601827,1
+1828,có bao nhiêu cái bàn trong hình,một,601828,1
+1829,hình có mấy tòa nhà,bảy,601829,1
+1830,có bao nhiêu chai,năm,601830,1
+1831,có bao nhiêu con chim trong hình,năm,601831,1
+1832,có bao nhiêu con chim trong hình,năm,601832,1
+1833,hình có mấy con chim,ba,601833,1
+1834,số lượng điện thoại là bao nhiêu,bảy,601834,1
+1835,có bao nhiêu máy tính xách tay trong hình,năm,601835,1
+1836,trong hình có bao nhiêu điện thoại,sáu,601836,1
+1837,số lượng con chim là bao nhiêu,bảy,601837,1
+1838,số lượng con gà là bao nhiêu,bảy,601838,1
+1839,số lượng con bò là bao nhiêu,tám,601839,1
+1840,trong hình có bao nhiêu người,một,601840,1
+1841,có bao nhiêu xe ô tô trong hình,một,601841,1
+1842,hình có mấy cái bàn,sáu,601842,1
+1843,trong hình có bao nhiêu quyển sách,năm,601843,1
+1844,trong hình có bao nhiêu con chim,một,601844,1
+1845,có bao nhiêu cái bàn trong hình,năm,601845,1
+1846,số lượng điện thoại là bao nhiêu,ba,601846,1
+1847,có bao nhiêu cái bàn,sáu,601847,1
+1848,có bao nhiêu tòa nhà,bảy,601848,1
+1849,số lượng con ngựa vằn là bao nhiêu,hai,601849,1
+1850,có bao nhiêu cái cây,một,601850,1
+1851,có bao nhiêu con voi trong hình,hai,601851,1
+1852,hình có mấy quyển sách,một,601852,1
+1853,có bao nhiêu cái bàn,tám,601853,1
+1854,số lượng con chim là bao nhiêu,ba,601854,1
+1855,trong hình có bao nhiêu cái bàn,bốn,601855,1
+1856,số lượng máy tính xách tay là bao nhiêu,bảy,601856,1
+1857,số lượng con chim là bao nhiêu,bốn,601857,1
+1858,hình có mấy xe ô tô,hai,601858,1
+1859,có bao nhiêu con mèo trong hình,bảy,601859,1
+1860,trong hình có bao nhiêu tòa nhà,tám,601860,1
+1861,hình có mấy xe ô tô,ba,601861,1
+1862,hình có mấy điện thoại,bảy,601862,1
+1863,có bao nhiêu chai trong hình,hai,601863,1
+1864,số lượng con mèo là bao nhiêu,một,601864,1
+1865,hình có mấy chai,một,601865,1
+1866,hình có mấy quyển sách,bảy,601866,1
+1867,trong hình có bao nhiêu điện thoại,bảy,601867,1
+1868,trong hình có bao nhiêu con chim,sáu,601868,1
+1869,hình có mấy con chó,hai,601869,1
+1870,có bao nhiêu con cừu trong hình,bốn,601870,1
+1871,hình có mấy người,một,601871,1
+1872,có bao nhiêu cái ghế,tám,601872,1
+1873,hình có mấy con chó,tám,601873,1
+1874,hình có mấy con cừu,một,601874,1
+1875,có bao nhiêu cốc,bảy,601875,1
+1876,hình có mấy con chim,sáu,601876,1
+1877,hình có mấy điện thoại,hai,601877,1
+1878,có bao nhiêu tòa nhà,bốn,601878,1
+1879,có bao nhiêu điện thoại,bảy,601879,1
+1880,có bao nhiêu con chó,ba,601880,1
+1881,trong hình có bao nhiêu con chim,tám,601881,1
+1882,trong hình có bao nhiêu con mèo,một,601882,1
+1883,có bao nhiêu điện thoại trong hình,ba,601883,1
+1884,số lượng cái cây là bao nhiêu,một,601884,1
+1885,số lượng con mèo là bao nhiêu,bốn,601885,1
+1886,số lượng máy tính xách tay là bao nhiêu,năm,601886,1
+1887,hình có mấy cốc,sáu,601887,1
+1888,số lượng con voi là bao nhiêu,năm,601888,1
+1889,có bao nhiêu con chim,sáu,601889,1
+1890,số lượng con ngựa là bao nhiêu,tám,601890,1
+1891,trong hình có bao nhiêu điện thoại,ba,601891,1
+1892,số lượng điện thoại là bao nhiêu,ba,601892,1
+1893,có bao nhiêu con chim trong hình,ba,601893,1
+1894,trong hình có bao nhiêu cái ghế,ba,601894,1
+1895,trong hình có bao nhiêu cái cây,tám,601895,1
+1896,số lượng tòa nhà là bao nhiêu,sáu,601896,1
+1897,trong hình có bao nhiêu điện thoại,một,601897,1
+1898,hình có mấy cái bàn,ba,601898,1
+1899,hình có mấy tòa nhà,bốn,601899,1
+1900,hình có mấy con chim,ba,601900,1
+1901,có bao nhiêu cái ghế,bốn,601901,1
+1902,có bao nhiêu cái bàn,bảy,601902,1
+1903,hình có mấy cốc,bốn,601903,1
+1904,có bao nhiêu con chim,một,601904,1
+1905,có bao nhiêu con chim,bảy,601905,1
+1906,có bao nhiêu cốc,bốn,601906,1
+1907,có bao nhiêu chai,bảy,601907,1
+1908,có bao nhiêu điện thoại,ba,601908,1
+1909,số lượng người là bao nhiêu,tám,601909,1
+1910,có bao nhiêu quyển sách trong hình,hai,601910,1
+1911,có bao nhiêu con chim trong hình,hai,601911,1
+1912,có bao nhiêu tòa nhà trong hình,hai,601912,1
+1913,có bao nhiêu chai trong hình,một,601913,1
+1914,hình có mấy xe ô tô,bảy,601914,1
+1915,trong hình có bao nhiêu con bò,bảy,601915,1
+1916,có bao nhiêu con bò trong hình,hai,601916,1
+1917,hình có mấy máy tính xách tay,tám,601917,1
+1918,có bao nhiêu con chim trong hình,năm,601918,1
+1919,có bao nhiêu quyển sách,năm,601919,1
+1920,trong hình có bao nhiêu con chó,năm,601920,1
+1921,có bao nhiêu điện thoại,bảy,601921,1
+1922,có bao nhiêu quyển sách,năm,601922,1
+1923,số lượng con hươu cao cổ là bao nhiêu,hai,601923,1
+1924,trong hình có bao nhiêu cái bàn,bốn,601924,1
+1925,hình có mấy xe ô tô,một,601925,1
+1926,hình có mấy con ngựa vằn,sáu,601926,1
+1927,có bao nhiêu cái ghế trong hình,ba,601927,1
+1928,có bao nhiêu quyển sách,năm,601928,1
+1929,hình có mấy con chó,hai,601929,1
+1930,có bao nhiêu con voi trong hình,tám,601930,1
+1931,có bao nhiêu con chim,sáu,601931,1
+1932,hình có mấy cốc,sáu,601932,1
+1933,có bao nhiêu điện thoại,sáu,601933,1
+1934,trong hình có bao nhiêu con mèo,năm,601934,1
+1935,số lượng con bò là bao nhiêu,năm,601935,1
+1936,số lượng con chim là bao nhiêu,năm,601936,1
+1937,hình có mấy con chim,hai,601937,1
+1938,có bao nhiêu con gà,năm,601938,1
+1939,có bao nhiêu cốc trong hình,năm,601939,1
+1940,có bao nhiêu cái cây trong hình,tám,601940,1
+1941,có bao nhiêu quyển sách,ba,601941,1
+1942,có bao nhiêu con cừu trong hình,hai,601942,1
+1943,có bao nhiêu con gà trong hình,một,601943,1
+1944,trong hình có bao nhiêu con gà,hai,601944,1
+1945,có bao nhiêu con chim trong hình,một,601945,1
+1946,trong hình có bao nhiêu cốc,bảy,601946,1
+1947,số lượng quyển sách là bao nhiêu,sáu,601947,1
+1948,có bao nhiêu chai,tám,601948,1
+1949,hình có mấy tòa nhà,bốn,601949,1
+1950,có bao nhiêu con ngựa vằn,năm,601950,1
+1951,có bao nhiêu con gà trong hình,bảy,601951,1
+1952,có bao nhiêu con bò trong hình,hai,601952,1
+1953,số lượng cái cây là bao nhiêu,một,601953,1
+1954,hình có mấy người,bảy,601954,1
+1955,số lượng tòa nhà là bao nhiêu,bảy,601955,1
+1956,trong hình có bao nhiêu xe ô tô,bảy,601956,1
+1957,số lượng máy tính xách tay là bao nhiêu,một,601957,1
+1958,hình có mấy chai,bảy,601958,1
+1959,có bao nhiêu cái cây trong hình,bảy,601959,1
+1960,trong hình có bao nhiêu máy tính xách tay,năm,601960,1
+1961,hình có mấy máy tính xách tay,tám,601961,1
+1962,có bao nhiêu điện thoại,sáu,601962,1
+1963,có bao nhiêu cái bàn trong hình,năm,601963,1
+1964,hình có mấy cốc,năm,601964,1
+1965,trong hình có bao nhiêu cái bàn,một,601965,1
+1966,trong hình có bao nhiêu quyển sách,sáu,601966,1
+1967,hình có mấy cái cây,ba,601967,1
+1968,hình có mấy cái cây,sáu,601968,1
+1969,số lượng tòa nhà là bao nhiêu,bốn,601969,1
+1970,hình có mấy con voi,bốn,601970,1
+1971,hình có mấy xe ô tô,ba,601971,1
+1972,có bao nhiêu con chim,ba,601972,1
+1973,trong hình có bao nhiêu cái cây,bảy,601973,1
+1974,hình có mấy cái ghế,hai,601974,1
+1975,có bao nhiêu con bò trong hình,sáu,601975,1
+1976,hình có mấy cái ghế,bảy,601976,1
+1977,số lượng tòa nhà là bao nhiêu,năm,601977,1
+1978,trong hình có bao nhiêu cái cây,hai,601978,1
+1979,số lượng quyển sách là bao nhiêu,ba,601979,1
+1980,có bao nhiêu cốc trong hình,một,601980,1
+1981,trong hình có bao nhiêu cái cây,bảy,601981,1
+1982,trong hình có bao nhiêu cái ghế,bốn,601982,1
+1983,trong hình có bao nhiêu tòa nhà,tám,601983,1
+1984,có bao nhiêu điện thoại,tám,601984,1
+1985,có bao nhiêu xe ô tô trong hình,bốn,601985,1
+1986,số lượng chai là bao nhiêu,ba,601986,1
+1987,hình có mấy con hươu cao cổ,một,601987,1
+1988,trong hình có bao nhiêu con bò,tám,601988,1
+1989,hình có mấy con chim,tám,601989,1
+1990,hình có mấy điện thoại,hai,601990,1
+1991,có bao nhiêu con chim trong hình,tám,601991,1
+1992,số lượng chai là bao nhiêu,bảy,601992,1
+1993,có bao nhiêu con gà,bốn,601993,1
+1994,số lượng người là bao nhiêu,tám,601994,1
+1995,trong hình có bao nhiêu con hươu cao cổ,tám,601995,1
+1996,trong hình có bao nhiêu điện thoại,bốn,601996,1
+1997,số lượng con bò là bao nhiêu,năm,601997,1
+1998,có bao nhiêu con bò,sáu,601998,1
+1999,có bao nhiêu cốc,ba,601999,1
+2000,hình có mấy con cừu,năm,602000,1
+2001,trong hình có bao nhiêu con gà,bảy,602001,1
+2002,có bao nhiêu cái ghế,ba,602002,1
+2003,trong hình có bao nhiêu người,tám,602003,1
+2004,có bao nhiêu xe ô tô trong hình,tám,602004,1
+2005,hình có mấy chai,sáu,602005,1
+2006,có bao nhiêu người,bảy,602006,1
+2007,có bao nhiêu điện thoại trong hình,tám,602007,1
+2008,có bao nhiêu con cừu,bảy,602008,1
+2009,trong hình có bao nhiêu con mèo,một,602009,1
+2010,có bao nhiêu con chim,một,602010,1
+2011,có bao nhiêu con mèo,năm,602011,1
+2012,có bao nhiêu con gà trong hình,ba,602012,1
+2013,có bao nhiêu quyển sách trong hình,một,602013,1
+2014,có bao nhiêu tòa nhà,hai,602014,1
+2015,có bao nhiêu cái ghế,một,602015,1
+2016,số lượng điện thoại là bao nhiêu,tám,602016,1
+2017,trong hình có bao nhiêu con mèo,bốn,602017,1
+2018,có bao nhiêu người trong hình,bốn,602018,1
+2019,hình có mấy điện thoại,bốn,602019,1
+2020,hình có mấy tòa nhà,bảy,602020,1
+2021,trong hình có bao nhiêu cái ghế,bảy,602021,1
+2022,số lượng con gà là bao nhiêu,một,602022,1
+2023,có bao nhiêu con ngựa trong hình,sáu,602023,1
+2024,màu sắc của xe ô tô là gì,màu cam,602024,2
+2025,con bò có màu gì,màu tím,602025,2
+2026,màu của tàu hỏa là gì,màu vàng,602026,2
+2027,con bò có màu gì,màu nâu,602027,2
+2028,màu của cốc là gì,màu đen,602028,2
+2029,màu con ngựa là gì,màu đỏ,602029,2
+2030,màu của xe ô tô là gì,màu xám,602030,2
+2031,màu của xe ô tô là gì,màu nâu,602031,2
+2032,màu của xe buýt là gì,màu tím,602032,2
+2033,màu của dress là gì,màu đỏ,602033,2
+2034,màu xe máy là gì,màu cam,602034,2
+2035,màu sắc của xe ô tô là gì,màu trắng,602035,2
+2036,túi có màu gì,màu xanh lá,602036,2
+2037,xe máy có màu gì,màu vàng,602037,2
+2038,màu sắc của con thỏ là gì,màu nâu,602038,2
+2039,màu sắc của con chó là gì,màu đỏ,602039,2
+2040,xe ô tô có màu gì,màu xanh lá,602040,2
+2041,quả bóng có màu gì,màu xanh dương,602041,2
+2042,con chim có màu gì,màu đen,602042,2
+2043,cái ghế có màu gì,màu cam,602043,2
+2044,màu của con ngựa là gì,màu đỏ,602044,2
+2045,màu sắc của door là gì,màu cam,602045,2
+2046,màu sắc của đĩa là gì,màu tím,602046,2
+2047,cái bàn có màu gì,màu trắng,602047,2
+2048,tàu hỏa có màu gì,màu vàng,602048,2
+2049,màu của wall là gì,màu đỏ,602049,2
+2050,con ngựa có màu gì,màu xanh lá,602050,2
+2051,màu của quả bóng là gì,màu trắng,602051,2
+2052,màu sắc của cái ghế là gì,màu vàng,602052,2
+2053,màu sắc của xe đạp là gì,màu hồng,602053,2
+2054,màu con ngựa là gì,màu xanh dương,602054,2
+2055,màu xe máy là gì,màu hồng,602055,2
+2056,màu con ngựa là gì,màu xanh lá,602056,2
+2057,màu của quả bóng là gì,màu tím,602057,2
+2058,màu của shirt là gì,màu vàng,602058,2
+2059,con chim có màu gì,màu xanh dương,602059,2
+2060,đĩa có màu gì,màu đen,602060,2
+2061,dress có màu gì,màu xanh dương,602061,2
+2062,xe tải có màu gì,màu hồng,602062,2
+2063,màu của con chim là gì,màu đen,602063,2
+2064,màu con ngựa là gì,màu đen,602064,2
+2065,đĩa có màu gì,màu nâu,602065,2
+2066,màu sắc của dress là gì,màu đen,602066,2
+2067,xe tải có màu gì,màu hồng,602067,2
+2068,màu của con thỏ là gì,màu cam,602068,2
+2069,màu sắc của con chim là gì,màu đỏ,602069,2
+2070,túi có màu gì,màu nâu,602070,2
+2071,màu xe đạp là gì,màu trắng,602071,2
+2072,màu con bò là gì,màu vàng,602072,2
+2073,màu shirt là gì,màu xanh dương,602073,2
+2074,quả bóng có màu gì,màu xanh dương,602074,2
+2075,màu của xe ô tô là gì,màu đỏ,602075,2
+2076,màu sắc của cốc là gì,màu xanh dương,602076,2
+2077,màu sắc của tàu hỏa là gì,màu trắng,602077,2
+2078,door có màu gì,màu tím,602078,2
+2079,màu con mèo là gì,màu đỏ,602079,2
+2080,màu wall là gì,màu cam,602080,2
+2081,màu tàu hỏa là gì,màu xanh dương,602081,2
+2082,màu sắc của đĩa là gì,màu hồng,602082,2
+2083,xe đạp có màu gì,màu trắng,602083,2
+2084,màu dress là gì,màu cam,602084,2
+2085,màu của xe ô tô là gì,màu trắng,602085,2
+2086,con mèo có màu gì,màu vàng,602086,2
+2087,màu sắc của xe buýt là gì,màu vàng,602087,2
+2088,màu sắc của vase là gì,màu xanh dương,602088,2
+2089,màu con mèo là gì,màu hồng,602089,2
+2090,màu door là gì,màu xanh lá,602090,2
+2091,xe đạp có màu gì,màu đen,602091,2
+2092,màu sắc của door là gì,màu trắng,602092,2
+2093,màu xe ô tô là gì,màu hồng,602093,2
+2094,màu xe buýt là gì,màu nâu,602094,2
+2095,màu shirt là gì,màu cam,602095,2
+2096,màu sắc của con thỏ là gì,màu xám,602096,2
+2097,màu cái bàn là gì,màu trắng,602097,2
+2098,màu của con thỏ là gì,màu cam,602098,2
+2099,màu shirt là gì,màu hồng,602099,2
+2100,màu con chim là gì,màu vàng,602100,2
+2101,màu của door là gì,màu xám,602101,2
+2102,màu sắc của túi là gì,màu nâu,602102,2
+2103,con bò có màu gì,màu trắng,602103,2
+2104,con chim có màu gì,màu hồng,602104,2
+2105,màu xe ô tô là gì,màu xanh lá,602105,2
+2106,màu của con bò là gì,màu xanh lá,602106,2
+2107,màu sắc của cái bàn là gì,màu cam,602107,2
+2108,màu con thỏ là gì,màu nâu,602108,2
+2109,màu đĩa là gì,màu vàng,602109,2
+2110,màu sắc của quả bóng là gì,màu xanh dương,602110,2
+2111,màu sắc của xe đạp là gì,màu đen,602111,2
+2112,màu sắc của tàu hỏa là gì,màu xám,602112,2
+2113,màu tàu hỏa là gì,màu xanh lá,602113,2
+2114,màu của con chim là gì,màu xanh lá,602114,2
+2115,màu sắc của door là gì,màu trắng,602115,2
+2116,màu sắc của con mèo là gì,màu hồng,602116,2
+2117,màu của xe ô tô là gì,màu đỏ,602117,2
+2118,màu xe đạp là gì,màu hồng,602118,2
+2119,quả bóng có màu gì,màu cam,602119,2
+2120,xe tải có màu gì,màu tím,602120,2
+2121,xe ô tô có màu gì,màu tím,602121,2
+2122,màu sắc của dress là gì,màu nâu,602122,2
+2123,màu con chó là gì,màu đỏ,602123,2
+2124,con bò có màu gì,màu xanh dương,602124,2
+2125,màu của xe ô tô là gì,màu đen,602125,2
+2126,cái bàn có màu gì,màu cam,602126,2
+2127,màu của xe buýt là gì,màu trắng,602127,2
+2128,màu shirt là gì,màu xanh lá,602128,2
+2129,màu wall là gì,màu đen,602129,2
+2130,màu túi là gì,màu nâu,602130,2
+2131,con ngựa có màu gì,màu đỏ,602131,2
+2132,màu xe ô tô là gì,màu hồng,602132,2
+2133,màu của cốc là gì,màu đen,602133,2
+2134,màu sắc của xe tải là gì,màu vàng,602134,2
+2135,cái ghế có màu gì,màu trắng,602135,2
+2136,màu của con chó là gì,màu tím,602136,2
+2137,màu sắc của con chim là gì,màu xanh dương,602137,2
+2138,đĩa có màu gì,màu tím,602138,2
+2139,con chim có màu gì,màu xanh dương,602139,2
+2140,màu của con mèo là gì,màu xanh lá,602140,2
+2141,màu của door là gì,màu trắng,602141,2
+2142,shirt có màu gì,màu trắng,602142,2
+2143,màu quả bóng là gì,màu nâu,602143,2
+2144,door có màu gì,màu xanh lá,602144,2
+2145,màu sắc của con thỏ là gì,màu nâu,602145,2
+2146,màu sắc của cốc là gì,màu trắng,602146,2
+2147,cốc có màu gì,màu vàng,602147,2
+2148,màu sắc của túi là gì,màu đen,602148,2
+2149,shirt có màu gì,màu xanh dương,602149,2
+2150,màu sắc của túi là gì,màu xanh lá,602150,2
+2151,màu door là gì,màu nâu,602151,2
+2152,màu xe máy là gì,màu xám,602152,2
+2153,màu sắc của tàu hỏa là gì,màu tím,602153,2
+2154,màu xe ô tô là gì,màu xanh lá,602154,2
+2155,màu của con thỏ là gì,màu nâu,602155,2
+2156,màu của xe ô tô là gì,màu đỏ,602156,2
+2157,con thỏ có màu gì,màu đen,602157,2
+2158,màu sắc của con chim là gì,màu vàng,602158,2
+2159,màu sắc của cái ghế là gì,màu xanh lá,602159,2
+2160,shirt có màu gì,màu vàng,602160,2
+2161,màu của xe ô tô là gì,màu xanh lá,602161,2
+2162,màu sắc của đĩa là gì,màu đen,602162,2
+2163,màu sắc của tàu hỏa là gì,màu vàng,602163,2
+2164,màu sắc của đĩa là gì,màu nâu,602164,2
+2165,màu tàu hỏa là gì,màu trắng,602165,2
+2166,màu wall là gì,màu đỏ,602166,2
+2167,màu door là gì,màu xanh lá,602167,2
+2168,màu sắc của đĩa là gì,màu vàng,602168,2
+2169,màu của túi là gì,màu đỏ,602169,2
+2170,con ngựa có màu gì,màu cam,602170,2
+2171,xe đạp có màu gì,màu xanh dương,602171,2
+2172,màu cái ghế là gì,màu vàng,602172,2
+2173,màu sắc của cái bàn là gì,màu xanh lá,602173,2
+2174,shirt có màu gì,màu đỏ,602174,2
+2175,màu sắc của dress là gì,màu cam,602175,2
+2176,xe đạp có màu gì,màu trắng,602176,2
+2177,màu của con chó là gì,màu tím,602177,2
+2178,con thỏ có màu gì,màu tím,602178,2
+2179,màu con chó là gì,màu hồng,602179,2
+2180,xe máy có màu gì,màu đỏ,602180,2
+2181,con mèo có màu gì,màu tím,602181,2
+2182,con mèo có màu gì,màu nâu,602182,2
+2183,màu sắc của xe đạp là gì,màu hồng,602183,2
+2184,cái ghế có màu gì,màu cam,602184,2
+2185,màu sắc của con bò là gì,màu xanh lá,602185,2
+2186,màu sắc của xe máy là gì,màu tím,602186,2
+2187,màu sắc của dress là gì,màu trắng,602187,2
+2188,con chim có màu gì,màu xanh dương,602188,2
+2189,màu của cốc là gì,màu nâu,602189,2
+2190,màu của xe tải là gì,màu xám,602190,2
+2191,màu của shirt là gì,màu đỏ,602191,2
+2192,màu sắc của con chó là gì,màu vàng,602192,2
+2193,con bò có màu gì,màu xanh dương,602193,2
+2194,con bò có màu gì,màu hồng,602194,2
+2195,màu cái bàn là gì,màu đỏ,602195,2
+2196,màu sắc của xe ô tô là gì,màu đen,602196,2
+2197,màu xe máy là gì,màu đỏ,602197,2
+2198,cốc có màu gì,màu cam,602198,2
+2199,màu của con ngựa là gì,màu xám,602199,2
+2200,màu của cái ghế là gì,màu xám,602200,2
+2201,màu cốc là gì,màu hồng,602201,2
+2202,màu sắc của cái bàn là gì,màu đỏ,602202,2
+2203,màu xe ô tô là gì,màu đen,602203,2
+2204,màu cốc là gì,màu xám,602204,2
+2205,màu con chim là gì,màu tím,602205,2
+2206,xe máy có màu gì,màu xám,602206,2
+2207,màu con mèo là gì,màu tím,602207,2
+2208,màu sắc của door là gì,màu tím,602208,2
+2209,màu sắc của xe tải là gì,màu nâu,602209,2
+2210,cốc có màu gì,màu trắng,602210,2
+2211,màu của xe ô tô là gì,màu tím,602211,2
+2212,màu xe ô tô là gì,màu đen,602212,2
+2213,màu sắc của cốc là gì,màu vàng,602213,2
+2214,màu đĩa là gì,màu đen,602214,2
+2215,đĩa có màu gì,màu nâu,602215,2
+2216,màu của con bò là gì,màu hồng,602216,2
+2217,màu của wall là gì,màu tím,602217,2
+2218,màu wall là gì,màu nâu,602218,2
+2219,màu tàu hỏa là gì,màu tím,602219,2
+2220,xe ô tô có màu gì,màu xanh dương,602220,2
+2221,màu tàu hỏa là gì,màu nâu,602221,2
+2222,màu con chim là gì,màu vàng,602222,2
+2223,màu con chó là gì,màu xanh dương,602223,2
+2224,màu cốc là gì,màu cam,602224,2
+2225,dress có màu gì,màu tím,602225,2
+2226,màu sắc của con thỏ là gì,màu xanh dương,602226,2
+2227,xe ô tô có màu gì,màu tím,602227,2
+2228,màu sắc của con chó là gì,màu vàng,602228,2
+2229,màu sắc của con thỏ là gì,màu nâu,602229,2
+2230,màu sắc của con ngựa là gì,màu nâu,602230,2
+2231,con bò có màu gì,màu xám,602231,2
+2232,màu sắc của con ngựa là gì,màu xám,602232,2
+2233,màu wall là gì,màu xám,602233,2
+2234,màu của dress là gì,màu hồng,602234,2
+2235,màu sắc của xe ô tô là gì,màu nâu,602235,2
+2236,màu của xe ô tô là gì,màu xanh lá,602236,2
+2237,màu sắc của quả bóng là gì,màu xanh dương,602237,2
+2238,màu cái ghế là gì,màu hồng,602238,2
+2239,màu sắc của tàu hỏa là gì,màu nâu,602239,2
+2240,màu sắc của quả bóng là gì,màu tím,602240,2
+2241,màu của shirt là gì,màu xám,602241,2
+2242,con mèo có màu gì,màu đỏ,602242,2
+2243,xe buýt có màu gì,màu đen,602243,2
+2244,con mèo có màu gì,màu nâu,602244,2
+2245,xe ô tô có màu gì,màu nâu,602245,2
+2246,màu của túi là gì,màu hồng,602246,2
+2247,dress có màu gì,màu trắng,602247,2
+2248,xe ô tô có màu gì,màu hồng,602248,2
+2249,màu của xe ô tô là gì,màu cam,602249,2
+2250,màu sắc của đĩa là gì,màu nâu,602250,2
+2251,màu shirt là gì,màu nâu,602251,2
+2252,xe buýt có màu gì,màu vàng,602252,2
+2253,con chó có màu gì,màu vàng,602253,2
+2254,màu quả bóng là gì,màu vàng,602254,2
+2255,màu xe ô tô là gì,màu đỏ,602255,2
+2256,màu sắc của cái ghế là gì,màu xanh dương,602256,2
+2257,xe buýt có màu gì,màu hồng,602257,2
+2258,con mèo có màu gì,màu đỏ,602258,2
+2259,màu của cốc là gì,màu nâu,602259,2
+2260,màu sắc của tàu hỏa là gì,màu xanh lá,602260,2
+2261,màu xe tải là gì,màu cam,602261,2
+2262,cái bàn có màu gì,màu đen,602262,2
+2263,màu của wall là gì,màu hồng,602263,2
+2264,màu sắc của con ngựa là gì,màu xanh lá,602264,2
+2265,màu của xe tải là gì,màu vàng,602265,2
+2266,màu sắc của xe máy là gì,màu cam,602266,2
+2267,màu của cái bàn là gì,màu trắng,602267,2
+2268,màu của xe buýt là gì,màu đỏ,602268,2
+2269,màu con ngựa là gì,màu xanh dương,602269,2
+2270,cái ghế có màu gì,màu vàng,602270,2
+2271,màu sắc của đĩa là gì,màu xanh lá,602271,2
+2272,màu con bò là gì,màu xanh dương,602272,2
+2273,màu của cái bàn là gì,màu hồng,602273,2
+2274,cốc có màu gì,màu hồng,602274,2
+2275,màu con chim là gì,màu hồng,602275,2
+2276,màu của xe đạp là gì,màu hồng,602276,2
+2277,màu sắc của con chim là gì,màu đỏ,602277,2
+2278,màu sắc của xe máy là gì,màu hồng,602278,2
+2279,màu của con chó là gì,màu đỏ,602279,2
+2280,màu của door là gì,màu nâu,602280,2
+2281,màu con ngựa là gì,màu nâu,602281,2
+2282,màu xe buýt là gì,màu xanh lá,602282,2
+2283,quả bóng có màu gì,màu hồng,602283,2
+2284,màu của con thỏ là gì,màu cam,602284,2
+2285,màu tàu hỏa là gì,màu xanh dương,602285,2
+2286,màu sắc của xe tải là gì,màu xám,602286,2
+2287,màu con chim là gì,màu xanh dương,602287,2
+2288,màu shirt là gì,màu nâu,602288,2
+2289,màu sắc của xe tải là gì,màu đỏ,602289,2
+2290,màu con mèo là gì,màu xanh dương,602290,2
+2291,màu xe ô tô là gì,màu tím,602291,2
+2292,màu sắc của con chim là gì,màu xanh lá,602292,2
+2293,màu wall là gì,màu xám,602293,2
+2294,màu của con thỏ là gì,màu hồng,602294,2
+2295,màu sắc của door là gì,màu hồng,602295,2
+2296,màu xe tải là gì,màu vàng,602296,2
+2297,màu sắc của xe đạp là gì,màu nâu,602297,2
+2298,màu sắc của cái ghế là gì,màu xanh lá,602298,2
+2299,màu của vase là gì,màu cam,602299,2
+2300,màu sắc của xe buýt là gì,màu đen,602300,2
+2301,màu xe ô tô là gì,màu tím,602301,2
+2302,màu của con chó là gì,màu xanh lá,602302,2
+2303,door có màu gì,màu đen,602303,2
+2304,màu cái bàn là gì,màu xám,602304,2
+2305,màu của cốc là gì,màu đen,602305,2
+2306,màu wall là gì,màu hồng,602306,2
+2307,màu sắc của con bò là gì,màu xám,602307,2
+2308,màu sắc của con bò là gì,màu nâu,602308,2
+2309,màu sắc của quả bóng là gì,màu xanh dương,602309,2
+2310,quả bóng có màu gì,màu đen,602310,2
+2311,màu của con thỏ là gì,màu xanh lá,602311,2
+2312,màu sắc của dress là gì,màu trắng,602312,2
+2313,màu của xe buýt là gì,màu đỏ,602313,2
+2314,màu của xe ô tô là gì,màu cam,602314,2
+2315,màu sắc của con chim là gì,màu trắng,602315,2
+2316,màu sắc của con chim là gì,màu xám,602316,2
+2317,màu của xe máy là gì,màu xanh dương,602317,2
+2318,con thỏ có màu gì,màu nâu,602318,2
+2319,xe ô tô có màu gì,màu trắng,602319,2
+2320,màu sắc của con chó là gì,màu đỏ,602320,2
+2321,màu sắc của con ngựa là gì,màu cam,602321,2
+2322,màu con ngựa là gì,màu xanh dương,602322,2
+2323,door có màu gì,màu xanh dương,602323,2
+2324,con ngựa có màu gì,màu hồng,602324,2
+2325,màu sắc của con bò là gì,màu đen,602325,2
+2326,cốc có màu gì,màu trắng,602326,2
+2327,màu sắc của xe buýt là gì,màu vàng,602327,2
+2328,con chó có màu gì,màu xanh lá,602328,2
+2329,xe ô tô có màu gì,màu tím,602329,2
+2330,tàu hỏa có màu gì,màu hồng,602330,2
+2331,màu xe tải là gì,màu tím,602331,2
+2332,màu của vase là gì,màu hồng,602332,2
+2333,màu của vase là gì,màu hồng,602333,2
+2334,màu cốc là gì,màu xám,602334,2
+2335,màu của xe tải là gì,màu đen,602335,2
+2336,màu sắc của tàu hỏa là gì,màu xanh lá,602336,2
+2337,màu cốc là gì,màu xanh dương,602337,2
+2338,màu sắc của túi là gì,màu nâu,602338,2
+2339,màu wall là gì,màu đen,602339,2
+2340,màu sắc của cái bàn là gì,màu đỏ,602340,2
+2341,màu của túi là gì,màu xám,602341,2
+2342,túi có màu gì,màu xám,602342,2
+2343,màu của xe máy là gì,màu xanh dương,602343,2
+2344,màu của cái bàn là gì,màu xám,602344,2
+2345,màu của wall là gì,màu cam,602345,2
+2346,màu của wall là gì,màu đỏ,602346,2
+2347,xe buýt có màu gì,màu nâu,602347,2
+2348,màu sắc của con bò là gì,màu xám,602348,2
+2349,con chó có màu gì,màu nâu,602349,2
+2350,xe ô tô có màu gì,màu xanh dương,602350,2
+2351,màu sắc của xe buýt là gì,màu xanh lá,602351,2
+2352,màu xe ô tô là gì,màu vàng,602352,2
+2353,màu sắc của wall là gì,màu tím,602353,2
+2354,màu sắc của tàu hỏa là gì,màu trắng,602354,2
+2355,màu cốc là gì,màu cam,602355,2
+2356,màu xe ô tô là gì,màu hồng,602356,2
+2357,cái ghế có màu gì,màu xanh dương,602357,2
+2358,cái ghế có màu gì,màu trắng,602358,2
+2359,màu của con mèo là gì,màu xanh dương,602359,2
+2360,màu dress là gì,màu xanh lá,602360,2
+2361,màu của xe tải là gì,màu cam,602361,2
+2362,màu sắc của xe máy là gì,màu hồng,602362,2
+2363,con mèo có màu gì,màu xám,602363,2
+2364,màu sắc của tàu hỏa là gì,màu nâu,602364,2
+2365,wall có màu gì,màu tím,602365,2
+2366,màu con mèo là gì,màu xanh lá,602366,2
+2367,màu của cái bàn là gì,màu xám,602367,2
+2368,màu của túi là gì,màu cam,602368,2
+2369,màu của xe ô tô là gì,màu cam,602369,2
+2370,cái ghế có màu gì,màu xanh dương,602370,2
+2371,màu xe đạp là gì,màu tím,602371,2
+2372,cốc có màu gì,màu trắng,602372,2
+2373,màu tàu hỏa là gì,màu đỏ,602373,2
+2374,màu của xe máy là gì,màu đỏ,602374,2
+2375,con ngựa có màu gì,màu cam,602375,2
+2376,màu sắc của con thỏ là gì,màu đỏ,602376,2
+2377,màu sắc của xe ô tô là gì,màu tím,602377,2
+2378,màu sắc của cái bàn là gì,màu xám,602378,2
+2379,màu xe máy là gì,màu tím,602379,2
+2380,màu sắc của túi là gì,màu cam,602380,2
+2381,màu sắc của con bò là gì,màu đen,602381,2
+2382,xe ô tô có màu gì,màu vàng,602382,2
+2383,màu con mèo là gì,màu trắng,602383,2
+2384,màu của con mèo là gì,màu đỏ,602384,2
+2385,màu sắc của shirt là gì,màu xám,602385,2
+2386,màu sắc của cái ghế là gì,màu tím,602386,2
+2387,màu sắc của đĩa là gì,màu tím,602387,2
+2388,màu sắc của con thỏ là gì,màu đỏ,602388,2
+2389,màu xe ô tô là gì,màu nâu,602389,2
+2390,màu sắc của con thỏ là gì,màu tím,602390,2
+2391,xe buýt có màu gì,màu nâu,602391,2
+2392,màu của tàu hỏa là gì,màu đen,602392,2
+2393,màu xe ô tô là gì,màu trắng,602393,2
+2394,màu của con ngựa là gì,màu xám,602394,2
+2395,màu của túi là gì,màu đỏ,602395,2
+2396,màu sắc của wall là gì,màu trắng,602396,2
+2397,màu sắc của đĩa là gì,màu xanh lá,602397,2
+2398,màu sắc của con ngựa là gì,màu hồng,602398,2
+2399,màu của con mèo là gì,màu xanh dương,602399,2
+2400,màu xe buýt là gì,màu cam,602400,2
+2401,con ngựa có màu gì,màu trắng,602401,2
+2402,xe máy có màu gì,màu xanh lá,602402,2
+2403,màu cái ghế là gì,màu vàng,602403,2
+2404,con bò có màu gì,màu cam,602404,2
+2405,màu của cái ghế là gì,màu xanh lá,602405,2
+2406,con chó có màu gì,màu trắng,602406,2
+2407,màu sắc của con chó là gì,màu vàng,602407,2
+2408,màu shirt là gì,màu hồng,602408,2
+2409,màu sắc của tàu hỏa là gì,màu tím,602409,2
+2410,con thỏ có màu gì,màu hồng,602410,2
+2411,màu của door là gì,màu xám,602411,2
+2412,màu của đĩa là gì,màu xanh dương,602412,2
+2413,màu dress là gì,màu hồng,602413,2
+2414,con mèo có màu gì,màu hồng,602414,2
+2415,xe ô tô có màu gì,màu xám,602415,2
+2416,màu của quả bóng là gì,màu xanh dương,602416,2
+2417,màu sắc của xe ô tô là gì,màu xanh dương,602417,2
+2418,màu xe máy là gì,màu nâu,602418,2
+2419,màu của con chim là gì,màu đen,602419,2
+2420,màu sắc của shirt là gì,màu xanh lá,602420,2
+2421,màu xe ô tô là gì,màu đỏ,602421,2
+2422,màu xe tải là gì,màu cam,602422,2
+2423,đĩa có màu gì,màu vàng,602423,2
+2424,màu của con thỏ là gì,màu tím,602424,2
+2425,màu sắc của con chó là gì,màu vàng,602425,2
+2426,màu quả bóng là gì,màu xanh lá,602426,2
+2427,màu của xe đạp là gì,màu tím,602427,2
+2428,cốc có màu gì,màu vàng,602428,2
+2429,màu sắc của con chó là gì,màu xám,602429,2
+2430,màu của túi là gì,màu xám,602430,2
+2431,con chó có màu gì,màu hồng,602431,2
+2432,xe đạp có màu gì,màu tím,602432,2
+2433,màu của xe buýt là gì,màu xám,602433,2
+2434,con mèo có màu gì,màu xanh dương,602434,2
+2435,xe ô tô có màu gì,màu nâu,602435,2
+2436,xe ô tô có màu gì,màu hồng,602436,2
+2437,màu sắc của con mèo là gì,màu hồng,602437,2
+2438,màu xe ô tô là gì,màu cam,602438,2
+2439,màu con chim là gì,màu xanh dương,602439,2
+2440,màu sắc của vase là gì,màu cam,602440,2
+2441,màu sắc của con bò là gì,màu tím,602441,2
+2442,màu của con bò là gì,màu xanh lá,602442,2
+2443,vase có màu gì,màu vàng,602443,2
+2444,màu con ngựa là gì,màu vàng,602444,2
+2445,màu sắc của xe ô tô là gì,màu cam,602445,2
+2446,xe tải có màu gì,màu hồng,602446,2
+2447,tàu hỏa có màu gì,màu xanh lá,602447,2
+2448,màu của quả bóng là gì,màu đỏ,602448,2
+2449,màu cái bàn là gì,màu trắng,602449,2
+2450,màu của vase là gì,màu nâu,602450,2
+2451,con chim có màu gì,màu đen,602451,2
+2452,màu sắc của cốc là gì,màu tím,602452,2
+2453,màu xe ô tô là gì,màu xanh lá,602453,2
+2454,màu con chó là gì,màu cam,602454,2
+2455,màu quả bóng là gì,màu cam,602455,2
+2456,màu sắc của con chim là gì,màu đỏ,602456,2
+2457,con chó có màu gì,màu đen,602457,2
+2458,màu của xe đạp là gì,màu xám,602458,2
+2459,màu wall là gì,màu vàng,602459,2
+2460,màu sắc của tàu hỏa là gì,màu xanh dương,602460,2
+2461,túi có màu gì,màu trắng,602461,2
+2462,túi có màu gì,màu đỏ,602462,2
+2463,màu con ngựa là gì,màu tím,602463,2
+2464,màu sắc của con mèo là gì,màu đỏ,602464,2
+2465,màu sắc của cốc là gì,màu vàng,602465,2
+2466,con thỏ có màu gì,màu đỏ,602466,2
+2467,con chim có màu gì,màu xanh dương,602467,2
+2468,màu sắc của cốc là gì,màu cam,602468,2
+2469,màu của túi là gì,màu xám,602469,2
+2470,màu sắc của túi là gì,màu hồng,602470,2
+2471,cái bàn có màu gì,màu nâu,602471,2
+2472,màu sắc của xe tải là gì,màu tím,602472,2
+2473,vase có màu gì,màu cam,602473,2
+2474,màu của cốc là gì,màu xám,602474,2
+2475,cái ghế có màu gì,màu nâu,602475,2
+2476,màu dress là gì,màu tím,602476,2
+2477,màu của xe ô tô là gì,màu xám,602477,2
+2478,màu sắc của con ngựa là gì,màu xanh dương,602478,2
+2479,con chó có màu gì,màu đỏ,602479,2
+2480,màu của xe đạp là gì,màu xanh dương,602480,2
+2481,con chó có màu gì,màu xám,602481,2
+2482,màu xe máy là gì,màu xám,602482,2
+2483,màu con chim là gì,màu đỏ,602483,2
+2484,màu sắc của xe tải là gì,màu đen,602484,2
+2485,màu của xe tải là gì,màu vàng,602485,2
+2486,màu của quả bóng là gì,màu tím,602486,2
+2487,màu của con ngựa là gì,màu tím,602487,2
+2488,vase có màu gì,màu xanh lá,602488,2
+2489,màu của xe máy là gì,màu đen,602489,2
+2490,màu cái ghế là gì,màu xanh dương,602490,2
+2491,màu của xe ô tô là gì,màu đỏ,602491,2
+2492,dress có màu gì,màu nâu,602492,2
+2493,màu xe buýt là gì,màu trắng,602493,2
+2494,màu sắc của shirt là gì,màu cam,602494,2
+2495,túi có màu gì,màu xám,602495,2
+2496,túi có màu gì,màu trắng,602496,2
+2497,màu sắc của con chó là gì,màu vàng,602497,2
+2498,túi có màu gì,màu cam,602498,2
+2499,màu sắc của xe buýt là gì,màu hồng,602499,2
+2500,xe máy có màu gì,màu hồng,602500,2
+2501,màu sắc của xe ô tô là gì,màu nâu,602501,2
+2502,màu dress là gì,màu đỏ,602502,2
+2503,màu dress là gì,màu trắng,602503,2
+2504,shirt có màu gì,màu vàng,602504,2
+2505,màu của con chó là gì,màu xanh dương,602505,2
+2506,màu xe tải là gì,màu đỏ,602506,2
+2507,dress có màu gì,màu trắng,602507,2
+2508,cái ghế có màu gì,màu đen,602508,2
+2509,màu vase là gì,màu đỏ,602509,2
+2510,xe ô tô có màu gì,màu xanh lá,602510,2
+2511,màu sắc của dress là gì,màu xám,602511,2
+2512,màu của con chim là gì,màu nâu,602512,2
+2513,màu xe máy là gì,màu nâu,602513,2
+2514,màu sắc của con thỏ là gì,màu tím,602514,2
+2515,màu túi là gì,màu nâu,602515,2
+2516,màu con thỏ là gì,màu xám,602516,2
+2517,xe tải có màu gì,màu hồng,602517,2
+2518,màu shirt là gì,màu cam,602518,2
+2519,màu xe ô tô là gì,màu vàng,602519,2
+2520,màu sắc của đĩa là gì,màu nâu,602520,2
+2521,màu túi là gì,màu đỏ,602521,2
+2522,màu sắc của con chim là gì,màu xám,602522,2
+2523,màu cái bàn là gì,màu hồng,602523,2
+2524,màu sắc của vase là gì,màu tím,602524,2
+2525,door có màu gì,màu hồng,602525,2
+2526,màu của xe đạp là gì,màu cam,602526,2
+2527,tàu hỏa có màu gì,màu trắng,602527,2
+2528,quả bóng có màu gì,màu hồng,602528,2
+2529,xe máy có màu gì,màu đỏ,602529,2
+2530,màu của shirt là gì,màu trắng,602530,2
+2531,màu con mèo là gì,màu nâu,602531,2
+2532,màu của xe đạp là gì,màu vàng,602532,2
+2533,màu của door là gì,màu hồng,602533,2
+2534,xe buýt có màu gì,màu xanh lá,602534,2
+2535,màu của xe buýt là gì,màu cam,602535,2
+2536,màu của cốc là gì,màu xám,602536,2
+2537,con mèo có màu gì,màu xanh dương,602537,2
+2538,màu vase là gì,màu cam,602538,2
+2539,xe ô tô có màu gì,màu hồng,602539,2
+2540,shirt có màu gì,màu cam,602540,2
+2541,màu wall là gì,màu đỏ,602541,2
+2542,wall có màu gì,màu cam,602542,2
+2543,con chó có màu gì,màu hồng,602543,2
+2544,quả bóng có màu gì,màu tím,602544,2
+2545,con ngựa có màu gì,màu xám,602545,2
+2546,màu cốc là gì,màu xanh dương,602546,2
+2547,màu cái bàn là gì,màu đen,602547,2
+2548,màu của cốc là gì,màu tím,602548,2
+2549,màu cái bàn là gì,màu tím,602549,2
+2550,dress có màu gì,màu xanh lá,602550,2
+2551,màu sắc của wall là gì,màu xanh dương,602551,2
+2552,màu của dress là gì,màu xám,602552,2
+2553,con chó có màu gì,màu vàng,602553,2
+2554,con ngựa có màu gì,màu đen,602554,2
+2555,màu sắc của con thỏ là gì,màu đen,602555,2
+2556,màu sắc của shirt là gì,màu hồng,602556,2
+2557,màu cốc là gì,màu trắng,602557,2
+2558,màu của xe tải là gì,màu xanh lá,602558,2
+2559,màu con thỏ là gì,màu đỏ,602559,2
+2560,con chó có màu gì,màu xanh dương,602560,2
+2561,màu con ngựa là gì,màu vàng,602561,2
+2562,màu xe buýt là gì,màu xanh lá,602562,2
+2563,màu cái ghế là gì,màu tím,602563,2
+2564,túi có màu gì,màu đen,602564,2
+2565,màu sắc của xe buýt là gì,màu nâu,602565,2
+2566,màu con chó là gì,màu tím,602566,2
+2567,màu của con chó là gì,màu đen,602567,2
+2568,màu xe tải là gì,màu vàng,602568,2
+2569,màu sắc của cốc là gì,màu đen,602569,2
+2570,màu door là gì,màu xanh dương,602570,2
+2571,màu con thỏ là gì,màu đen,602571,2
+2572,màu xe máy là gì,màu xanh lá,602572,2
+2573,màu xe buýt là gì,màu đỏ,602573,2
+2574,màu sắc của quả bóng là gì,màu cam,602574,2
+2575,door có màu gì,màu xanh lá,602575,2
+2576,màu của xe máy là gì,màu trắng,602576,2
+2577,màu của con mèo là gì,màu xanh dương,602577,2
+2578,màu sắc của túi là gì,màu đỏ,602578,2
+2579,dress có màu gì,màu xanh dương,602579,2
+2580,xe ô tô có màu gì,màu tím,602580,2
+2581,màu của dress là gì,màu đen,602581,2
+2582,đĩa có màu gì,màu xanh lá,602582,2
+2583,đĩa có màu gì,màu đỏ,602583,2
+2584,màu sắc của xe ô tô là gì,màu nâu,602584,2
+2585,màu con thỏ là gì,màu nâu,602585,2
+2586,màu sắc của shirt là gì,màu xanh lá,602586,2
+2587,màu của con chim là gì,màu xanh lá,602587,2
+2588,màu dress là gì,màu vàng,602588,2
+2589,màu của xe máy là gì,màu xanh lá,602589,2
+2590,màu xe máy là gì,màu xanh lá,602590,2
+2591,màu của xe buýt là gì,màu xanh dương,602591,2
+2592,màu sắc của dress là gì,màu xám,602592,2
+2593,màu của cốc là gì,màu vàng,602593,2
+2594,màu dress là gì,màu xanh lá,602594,2
+2595,túi có màu gì,màu xanh dương,602595,2
+2596,màu sắc của con bò là gì,màu đỏ,602596,2
+2597,màu của cái bàn là gì,màu trắng,602597,2
+2598,đĩa có màu gì,màu trắng,602598,2
+2599,túi có màu gì,màu hồng,602599,2
+2600,màu sắc của xe đạp là gì,màu cam,602600,2
+2601,màu của xe buýt là gì,màu đỏ,602601,2
+2602,màu cốc là gì,màu đen,602602,2
+2603,màu của xe tải là gì,màu cam,602603,2
+2604,màu wall là gì,màu cam,602604,2
+2605,túi có màu gì,màu xanh lá,602605,2
+2606,con mèo có màu gì,màu cam,602606,2
+2607,màu sắc của đĩa là gì,màu tím,602607,2
+2608,cái bàn có màu gì,màu đen,602608,2
+2609,màu của xe máy là gì,màu đỏ,602609,2
+2610,màu dress là gì,màu xám,602610,2
+2611,cốc có màu gì,màu cam,602611,2
+2612,màu sắc của túi là gì,màu đỏ,602612,2
+2613,màu của cái bàn là gì,màu trắng,602613,2
+2614,xe ô tô có màu gì,màu nâu,602614,2
+2615,màu của quả bóng là gì,màu cam,602615,2
+2616,màu sắc của con bò là gì,màu hồng,602616,2
+2617,xe ô tô có màu gì,màu vàng,602617,2
+2618,màu sắc của shirt là gì,màu nâu,602618,2
+2619,màu của wall là gì,màu xanh lá,602619,2
+2620,màu của con ngựa là gì,màu nâu,602620,2
+2621,màu quả bóng là gì,màu xanh dương,602621,2
+2622,màu sắc của tàu hỏa là gì,màu cam,602622,2
+2623,màu sắc của xe ô tô là gì,màu xám,602623,2
+2624,xe tải có màu gì,màu nâu,602624,2
+2625,màu sắc của xe buýt là gì,màu xanh lá,602625,2
+2626,màu quả bóng là gì,màu vàng,602626,2
+2627,màu của xe máy là gì,màu đỏ,602627,2
+2628,con thỏ có màu gì,màu xanh lá,602628,2
+2629,con chim có màu gì,màu nâu,602629,2
+2630,màu của con bò là gì,màu xám,602630,2
+2631,màu của xe ô tô là gì,màu đỏ,602631,2
+2632,màu của con thỏ là gì,màu đen,602632,2
+2633,con chó có màu gì,màu xanh lá,602633,2
+2634,dress có màu gì,màu cam,602634,2
+2635,màu xe ô tô là gì,màu tím,602635,2
+2636,tàu hỏa có màu gì,màu xám,602636,2
+2637,con ngựa có màu gì,màu nâu,602637,2
+2638,màu sắc của wall là gì,màu xanh dương,602638,2
+2639,màu con bò là gì,màu nâu,602639,2
+2640,màu của con ngựa là gì,màu cam,602640,2
+2641,con bò có màu gì,màu hồng,602641,2
+2642,màu cốc là gì,màu xanh dương,602642,2
+2643,màu con ngựa là gì,màu đen,602643,2
+2644,màu xe buýt là gì,màu đỏ,602644,2
+2645,cái bàn có màu gì,màu xanh dương,602645,2
+2646,màu sắc của con ngựa là gì,màu vàng,602646,2
+2647,màu sắc của con mèo là gì,màu xám,602647,2
+2648,màu của dress là gì,màu hồng,602648,2
+2649,màu dress là gì,màu nâu,602649,2
+2650,màu sắc của con mèo là gì,màu xanh dương,602650,2
+2651,màu sắc của cái ghế là gì,màu trắng,602651,2
+2652,màu của cốc là gì,màu hồng,602652,2
+2653,màu sắc của wall là gì,màu trắng,602653,2
+2654,màu wall là gì,màu đỏ,602654,2
+2655,con thỏ có màu gì,màu đen,602655,2
+2656,màu sắc của túi là gì,màu xám,602656,2
+2657,shirt có màu gì,màu tím,602657,2
+2658,màu của con ngựa là gì,màu cam,602658,2
+2659,màu của đĩa là gì,màu nâu,602659,2
+2660,dress có màu gì,màu trắng,602660,2
+2661,màu của xe buýt là gì,màu nâu,602661,2
+2662,màu sắc của shirt là gì,màu đen,602662,2
+2663,màu sắc của wall là gì,màu nâu,602663,2
+2664,màu sắc của xe ô tô là gì,màu xanh lá,602664,2
+2665,màu của đĩa là gì,màu nâu,602665,2
+2666,màu xe đạp là gì,màu cam,602666,2
+2667,màu xe buýt là gì,màu trắng,602667,2
+2668,màu sắc của con ngựa là gì,màu cam,602668,2
+2669,màu đĩa là gì,màu nâu,602669,2
+2670,màu sắc của tàu hỏa là gì,màu vàng,602670,2
+2671,màu sắc của cái bàn là gì,màu xanh dương,602671,2
+2672,màu xe buýt là gì,màu đỏ,602672,2
+2673,màu sắc của xe buýt là gì,màu đen,602673,2
+2674,màu xe đạp là gì,màu hồng,602674,2
+2675,màu của con chó là gì,màu đen,602675,2
+2676,đĩa có màu gì,màu đen,602676,2
+2677,màu xe ô tô là gì,màu đen,602677,2
+2678,xe ô tô có màu gì,màu xanh dương,602678,2
+2679,màu của xe đạp là gì,màu đen,602679,2
+2680,màu của vase là gì,màu xanh lá,602680,2
+2681,tàu hỏa có màu gì,màu cam,602681,2
+2682,màu của con bò là gì,màu trắng,602682,2
+2683,màu của xe ô tô là gì,màu xám,602683,2
+2684,màu của vase là gì,màu xanh dương,602684,2
+2685,màu sắc của door là gì,màu trắng,602685,2
+2686,màu sắc của wall là gì,màu xanh dương,602686,2
+2687,màu con mèo là gì,màu nâu,602687,2
+2688,màu sắc của con bò là gì,màu xanh dương,602688,2
+2689,màu xe tải là gì,màu xanh dương,602689,2
+2690,xe ô tô có màu gì,màu xám,602690,2
+2691,màu quả bóng là gì,màu xanh lá,602691,2
+2692,con ngựa có màu gì,màu tím,602692,2
+2693,màu đĩa là gì,màu đen,602693,2
+2694,xe ô tô có màu gì,màu cam,602694,2
+2695,xe buýt có màu gì,màu xanh lá,602695,2
+2696,màu sắc của tàu hỏa là gì,màu trắng,602696,2
+2697,màu của con mèo là gì,màu nâu,602697,2
+2698,màu sắc của cốc là gì,màu đen,602698,2
+2699,màu của con bò là gì,màu xanh lá,602699,2
+2700,cốc có màu gì,màu hồng,602700,2
+2701,màu của tàu hỏa là gì,màu hồng,602701,2
+2702,con chim có màu gì,màu đen,602702,2
+2703,màu sắc của con ngựa là gì,màu đỏ,602703,2
+2704,màu quả bóng là gì,màu xanh dương,602704,2
+2705,màu của quả bóng là gì,màu hồng,602705,2
+2706,con thỏ có màu gì,màu cam,602706,2
+2707,màu sắc của xe máy là gì,màu cam,602707,2
+2708,màu của đĩa là gì,màu đỏ,602708,2
+2709,con chim có màu gì,màu trắng,602709,2
+2710,xe ô tô có màu gì,màu xám,602710,2
+2711,màu sắc của con chó là gì,màu trắng,602711,2
+2712,màu sắc của cái bàn là gì,màu xanh lá,602712,2
+2713,màu cốc là gì,màu xanh lá,602713,2
+2714,màu của con chim là gì,màu trắng,602714,2
+2715,shirt có màu gì,màu tím,602715,2
+2716,xe máy có màu gì,màu xám,602716,2
+2717,màu sắc của shirt là gì,màu vàng,602717,2
+2718,xe ô tô có màu gì,màu tím,602718,2
+2719,màu của door là gì,màu đen,602719,2
+2720,shirt có màu gì,màu trắng,602720,2
+2721,màu wall là gì,màu đỏ,602721,2
+2722,xe máy có màu gì,màu xanh dương,602722,2
+2723,màu của con thỏ là gì,màu xanh lá,602723,2
+2724,túi có màu gì,màu đỏ,602724,2
+2725,màu sắc của dress là gì,màu xanh lá,602725,2
+2726,người phụ nữ đang ở đâu,văn phòng,602726,3
+2727,người đàn ông đang ở vị trí nào,sân vườn,602727,3
+2728,vị trí của đứa trẻ ở đâu,thư viện,602728,3
+2729,người phụ nữ ở đâu,phòng ngủ,602729,3
+2730,vị trí của người ở đâu,phòng bếp,602730,3
+2731,đầu bếp ở đâu,phòng ngủ,602731,3
+2732,người đang ở đâu,sân vườn,602732,3
+2733,người đang ở vị trí nào,phòng ngủ,602733,3
+2734,người đang ở đâu,công viên,602734,3
+2735,người đang ở vị trí nào,đường phố,602735,3
+2736,người phụ nữ ở đâu,nhà hàng,602736,3
+2737,vị trí của người ở đâu,phòng bếp,602737,3
+2738,vị trí của người ở đâu,phòng ngủ,602738,3
+2739,vị trí của đầu bếp ở đâu,thư viện,602739,3
+2740,vị trí của người ở đâu,bãi biển,602740,3
+2741,người ở đâu,sân vườn,602741,3
+2742,người đàn ông đang ở vị trí nào,thư viện,602742,3
+2743,vị trí của đứa trẻ ở đâu,phòng khách,602743,3
+2744,người đang ở vị trí nào,sân vườn,602744,3
+2745,vị trí của người ở đâu,phòng bếp,602745,3
+2746,người đang ở vị trí nào,nhà hàng,602746,3
+2747,người ở đâu,nhà hàng,602747,3
+2748,người đang ở đâu,văn phòng,602748,3
+2749,người đang ở vị trí nào,phòng bếp,602749,3
+2750,người đang ở vị trí nào,phòng khách,602750,3
+2751,người đang ở vị trí nào,đường phố,602751,3
+2752,người đang ở vị trí nào,phòng ngủ,602752,3
+2753,vị trí của người ở đâu,cửa hàng,602753,3
+2754,vị trí của người ở đâu,nhà hàng,602754,3
+2755,người đang ở đâu,phòng khách,602755,3
+2756,vị trí của người ở đâu,nhà hàng,602756,3
+2757,người đàn ông đang ở vị trí nào,phòng khách,602757,3
+2758,người đang ở đâu,bãi biển,602758,3
+2759,người đang ở đâu,bãi biển,602759,3
+2760,giáo viên đang ở đâu,cửa hàng,602760,3
+2761,vị trí của đứa trẻ ở đâu,nhà hàng,602761,3
+2762,người ở đâu,cửa hàng,602762,3
+2763,vị trí của người ở đâu,cửa hàng,602763,3
+2764,người ở đâu,đường phố,602764,3
+2765,người đang ở vị trí nào,cửa hàng,602765,3
+2766,người ở đâu,phòng ngủ,602766,3
+2767,đầu bếp đang ở đâu,cửa hàng,602767,3
+2768,người đang ở vị trí nào,cửa hàng,602768,3
+2769,vị trí của người ở đâu,thư viện,602769,3
+2770,vị trí của người ở đâu,đường phố,602770,3
+2771,người đang ở đâu,phòng ngủ,602771,3
+2772,người đang ở đâu,cửa hàng,602772,3
+2773,người đang ở đâu,nhà hàng,602773,3
+2774,người đang ở vị trí nào,cửa hàng,602774,3
+2775,người ở đâu,phòng bếp,602775,3
+2776,giáo viên đang ở đâu,phòng ngủ,602776,3
+2777,người đang ở vị trí nào,đường phố,602777,3
+2778,người đang ở vị trí nào,bãi biển,602778,3
+2779,người ở đâu,thư viện,602779,3
+2780,người đang ở vị trí nào,cửa hàng,602780,3
+2781,vị trí của người ở đâu,cửa hàng,602781,3
+2782,người đang ở đâu,sân vườn,602782,3
+2783,vị trí của người ở đâu,phòng ngủ,602783,3
+2784,vị trí của người ở đâu,đường phố,602784,3
+2785,giáo viên đang ở đâu,thư viện,602785,3
+2786,người phụ nữ đang ở vị trí nào,bãi biển,602786,3
+2787,người đang ở đâu,công viên,602787,3
+2788,đứa trẻ đang ở đâu,phòng ngủ,602788,3
+2789,vị trí của người ở đâu,nhà hàng,602789,3
+2790,vị trí của người phụ nữ ở đâu,đường phố,602790,3
+2791,người ở đâu,cửa hàng,602791,3
+2792,vị trí của người ở đâu,đường phố,602792,3
+2793,người ở đâu,phòng bếp,602793,3
+2794,người ở đâu,thư viện,602794,3
+2795,vị trí của giáo viên ở đâu,bãi biển,602795,3
+2796,người ở đâu,bãi biển,602796,3
+2797,vị trí của người ở đâu,công viên,602797,3
+2798,vị trí của người ở đâu,phòng bếp,602798,3
+2799,đứa trẻ đang ở đâu,phòng ngủ,602799,3
+2800,người đang ở vị trí nào,bãi biển,602800,3
+2801,người ở đâu,bãi biển,602801,3
+2802,người đàn ông ở đâu,bãi biển,602802,3
+2803,vị trí của người phụ nữ ở đâu,cửa hàng,602803,3
+2804,người đang ở đâu,văn phòng,602804,3
+2805,vị trí của người ở đâu,cửa hàng,602805,3
+2806,người ở đâu,công viên,602806,3
+2807,giáo viên đang ở đâu,đường phố,602807,3
+2808,người đang ở đâu,phòng ngủ,602808,3
+2809,người đang ở đâu,công viên,602809,3
+2810,người đàn ông đang ở đâu,văn phòng,602810,3
+2811,vị trí của người ở đâu,văn phòng,602811,3
+2812,người đang ở đâu,nhà hàng,602812,3
+2813,người đang ở vị trí nào,phòng ngủ,602813,3
+2814,người đang ở vị trí nào,công viên,602814,3
+2815,người đang ở vị trí nào,phòng ngủ,602815,3
+2816,người ở đâu,đường phố,602816,3
+2817,đầu bếp đang ở vị trí nào,đường phố,602817,3
+2818,người đang ở đâu,phòng bếp,602818,3
+2819,người đang ở vị trí nào,phòng khách,602819,3
+2820,đứa trẻ đang ở vị trí nào,sân vườn,602820,3
+2821,vị trí của người ở đâu,bãi biển,602821,3
+2822,người đang ở vị trí nào,phòng khách,602822,3
+2823,giáo viên đang ở đâu,bãi biển,602823,3
+2824,vị trí của người đàn ông ở đâu,đường phố,602824,3
+2825,đầu bếp ở đâu,bãi biển,602825,3
+2826,người đang ở đâu,phòng khách,602826,3
+2827,người ở đâu,cửa hàng,602827,3
+2828,vị trí của đứa trẻ ở đâu,sân vườn,602828,3
+2829,giáo viên đang ở đâu,công viên,602829,3
+2830,người đang ở đâu,sân vườn,602830,3
+2831,vị trí của đứa trẻ ở đâu,văn phòng,602831,3
+2832,người đang ở vị trí nào,phòng khách,602832,3
+2833,người ở đâu,cửa hàng,602833,3
+2834,người đang ở đâu,bãi biển,602834,3
+2835,người ở đâu,sân vườn,602835,3
+2836,người ở đâu,đường phố,602836,3
+2837,vị trí của người ở đâu,cửa hàng,602837,3
+2838,người đang ở đâu,phòng bếp,602838,3
+2839,vị trí của người phụ nữ ở đâu,công viên,602839,3
+2840,người phụ nữ ở đâu,nhà hàng,602840,3
+2841,người đang ở đâu,nhà hàng,602841,3
+2842,người đang ở vị trí nào,sân vườn,602842,3
+2843,người đang ở đâu,phòng ngủ,602843,3
+2844,người ở đâu,bãi biển,602844,3
+2845,người đang ở đâu,đường phố,602845,3
+2846,người đang ở vị trí nào,nhà hàng,602846,3
+2847,người đang ở vị trí nào,cửa hàng,602847,3
+2848,người ở đâu,bãi biển,602848,3
+2849,đứa trẻ ở đâu,sân vườn,602849,3
+2850,vị trí của người ở đâu,thư viện,602850,3
+2851,vị trí của người ở đâu,phòng ngủ,602851,3
+2852,người ở đâu,cửa hàng,602852,3
+2853,người đang ở vị trí nào,đường phố,602853,3
+2854,người ở đâu,đường phố,602854,3
+2855,giáo viên đang ở đâu,sân vườn,602855,3
+2856,người đang ở đâu,đường phố,602856,3
+2857,người đang ở đâu,bãi biển,602857,3
+2858,giáo viên đang ở vị trí nào,phòng ngủ,602858,3
+2859,người đàn ông đang ở đâu,sân vườn,602859,3
+2860,người đang ở vị trí nào,công viên,602860,3
+2861,vị trí của người ở đâu,cửa hàng,602861,3
+2862,người đang ở vị trí nào,phòng bếp,602862,3
+2863,người phụ nữ ở đâu,nhà hàng,602863,3
+2864,người ở đâu,phòng bếp,602864,3
+2865,người đàn ông đang ở đâu,phòng bếp,602865,3
+2866,người đang ở vị trí nào,văn phòng,602866,3
+2867,người đang ở đâu,thư viện,602867,3
+2868,người ở đâu,phòng bếp,602868,3
+2869,đầu bếp ở đâu,văn phòng,602869,3
+2870,người đang ở đâu,thư viện,602870,3
+2871,người đang ở đâu,nhà hàng,602871,3
+2872,vị trí của đầu bếp ở đâu,sân vườn,602872,3
+2873,người đang ở đâu,văn phòng,602873,3
+2874,người đàn ông đang ở đâu,công viên,602874,3
+2875,người đàn ông đang ở đâu,phòng bếp,602875,3
+2876,người ở đâu,văn phòng,602876,3
+2877,người đang ở vị trí nào,công viên,602877,3
+2878,người đàn ông đang ở đâu,cửa hàng,602878,3
+2879,vị trí của người ở đâu,công viên,602879,3
+2880,đứa trẻ ở đâu,công viên,602880,3
+2881,giáo viên ở đâu,công viên,602881,3
+2882,người ở đâu,nhà hàng,602882,3
+2883,người ở đâu,phòng bếp,602883,3
+2884,đứa trẻ đang ở vị trí nào,đường phố,602884,3
+2885,người đang ở vị trí nào,nhà hàng,602885,3
+2886,người ở đâu,văn phòng,602886,3
+2887,người ở đâu,phòng bếp,602887,3
+2888,vị trí của người ở đâu,phòng ngủ,602888,3
+2889,người ở đâu,văn phòng,602889,3
+2890,người đang ở vị trí nào,đường phố,602890,3
+2891,người đang ở vị trí nào,phòng bếp,602891,3
+2892,người đang ở vị trí nào,bãi biển,602892,3
+2893,người ở đâu,sân vườn,602893,3
+2894,người đang ở vị trí nào,phòng khách,602894,3
+2895,người phụ nữ đang ở đâu,công viên,602895,3
+2896,vị trí của người ở đâu,phòng ngủ,602896,3
+2897,người ở đâu,đường phố,602897,3
+2898,người đang ở vị trí nào,bãi biển,602898,3
+2899,đầu bếp đang ở đâu,thư viện,602899,3
+2900,vị trí của người ở đâu,phòng ngủ,602900,3
+2901,giáo viên ở đâu,sân vườn,602901,3
+2902,người đang ở đâu,thư viện,602902,3
+2903,vị trí của đầu bếp ở đâu,bãi biển,602903,3
+2904,vị trí của người ở đâu,bãi biển,602904,3
+2905,người đang ở đâu,sân vườn,602905,3
+2906,đứa trẻ ở đâu,thư viện,602906,3
+2907,người ở đâu,thư viện,602907,3
+2908,vị trí của người ở đâu,phòng khách,602908,3
+2909,giáo viên đang ở đâu,đường phố,602909,3
+2910,người đang ở vị trí nào,đường phố,602910,3
+2911,vị trí của người ở đâu,nhà hàng,602911,3
+2912,vị trí của người ở đâu,phòng ngủ,602912,3
+2913,người đang ở vị trí nào,nhà hàng,602913,3
+2914,vị trí của người ở đâu,thư viện,602914,3
+2915,vị trí của người ở đâu,nhà hàng,602915,3
+2916,người đang ở vị trí nào,phòng bếp,602916,3
+2917,người ở đâu,bãi biển,602917,3
+2918,người ở đâu,bãi biển,602918,3
+2919,giáo viên đang ở đâu,nhà hàng,602919,3
+2920,người đàn ông đang ở vị trí nào,nhà hàng,602920,3
+2921,đầu bếp đang ở vị trí nào,bãi biển,602921,3
+2922,người ở đâu,đường phố,602922,3
+2923,người ở đâu,cửa hàng,602923,3
+2924,vị trí của người ở đâu,phòng khách,602924,3
+2925,người đang ở đâu,phòng bếp,602925,3
+2926,giáo viên ở đâu,nhà hàng,602926,3
+2927,người ở đâu,sân vườn,602927,3
+2928,vị trí của đầu bếp ở đâu,nhà hàng,602928,3
+2929,người đàn ông đang ở đâu,sân vườn,602929,3
+2930,người ở đâu,công viên,602930,3
+2931,vị trí của người ở đâu,bãi biển,602931,3
+2932,người ở đâu,phòng ngủ,602932,3
+2933,vị trí của đứa trẻ ở đâu,bãi biển,602933,3
+2934,người đang ở đâu,văn phòng,602934,3
+2935,người ở đâu,sân vườn,602935,3
+2936,người đang ở vị trí nào,phòng bếp,602936,3
+2937,người ở đâu,sân vườn,602937,3
+2938,người đang ở đâu,thư viện,602938,3
+2939,người ở đâu,thư viện,602939,3
+2940,người đang ở đâu,nhà hàng,602940,3
+2941,người đang ở vị trí nào,phòng ngủ,602941,3
+2942,vị trí của người ở đâu,phòng bếp,602942,3
+2943,người đang ở đâu,cửa hàng,602943,3
+2944,người đang ở đâu,nhà hàng,602944,3
+2945,người ở đâu,phòng ngủ,602945,3
+2946,giáo viên đang ở đâu,thư viện,602946,3
+2947,đầu bếp đang ở vị trí nào,phòng bếp,602947,3
+2948,người đang ở đâu,cửa hàng,602948,3
+2949,người đang ở đâu,sân vườn,602949,3
+2950,người ở đâu,bãi biển,602950,3
+2951,vị trí của người ở đâu,thư viện,602951,3
+2952,người đàn ông đang ở đâu,đường phố,602952,3
+2953,vị trí của người ở đâu,cửa hàng,602953,3
+2954,người đang ở đâu,công viên,602954,3
+2955,người đang ở vị trí nào,thư viện,602955,3
+2956,vị trí của người ở đâu,thư viện,602956,3
+2957,người ở đâu,sân vườn,602957,3
+2958,người đang ở đâu,phòng khách,602958,3
+2959,người đang ở đâu,phòng bếp,602959,3
+2960,người đang ở đâu,phòng ngủ,602960,3
+2961,người phụ nữ đang ở vị trí nào,văn phòng,602961,3
+2962,người đang ở vị trí nào,phòng ngủ,602962,3
+2963,người ở đâu,phòng bếp,602963,3
+2964,đứa trẻ ở đâu,phòng bếp,602964,3
+2965,người đang ở vị trí nào,phòng ngủ,602965,3
+2966,người đang ở đâu,sân vườn,602966,3
+2967,người đàn ông đang ở đâu,phòng ngủ,602967,3
+2968,người đang ở vị trí nào,thư viện,602968,3
+2969,giáo viên ở đâu,phòng ngủ,602969,3
+2970,người ở đâu,phòng bếp,602970,3
+2971,người đang ở đâu,bãi biển,602971,3
+2972,người đang ở đâu,đường phố,602972,3
+2973,người đang ở vị trí nào,nhà hàng,602973,3
+2974,đứa trẻ đang ở vị trí nào,cửa hàng,602974,3
+2975,người ở đâu,phòng ngủ,602975,3
+2976,giáo viên đang ở vị trí nào,thư viện,602976,3
+2977,người đang ở vị trí nào,phòng bếp,602977,3
+2978,người đang ở vị trí nào,công viên,602978,3
+2979,người đang ở vị trí nào,cửa hàng,602979,3
+2980,đầu bếp ở đâu,công viên,602980,3
+2981,người đàn ông ở đâu,phòng ngủ,602981,3
+2982,người đang ở đâu,phòng bếp,602982,3
+2983,người đang ở vị trí nào,phòng khách,602983,3
+2984,người ở đâu,nhà hàng,602984,3
+2985,đầu bếp đang ở vị trí nào,phòng khách,602985,3
+2986,vị trí của người ở đâu,phòng ngủ,602986,3
+2987,người đang ở đâu,bãi biển,602987,3
+2988,đầu bếp đang ở đâu,cửa hàng,602988,3
+2989,người đang ở đâu,phòng bếp,602989,3
+2990,người đang ở đâu,phòng bếp,602990,3
+2991,vị trí của đầu bếp ở đâu,thư viện,602991,3
+2992,người đang ở vị trí nào,cửa hàng,602992,3
+2993,người ở đâu,sân vườn,602993,3
+2994,người đang ở đâu,cửa hàng,602994,3
+2995,người đàn ông đang ở đâu,cửa hàng,602995,3
+2996,người ở đâu,phòng bếp,602996,3
+2997,người đang ở vị trí nào,cửa hàng,602997,3
+2998,vị trí của đứa trẻ ở đâu,văn phòng,602998,3
+2999,đứa trẻ đang ở vị trí nào,văn phòng,602999,3
+3000,người đang ở đâu,công viên,603000,3
+3001,vị trí của người ở đâu,văn phòng,603001,3
+3002,người đang ở đâu,đường phố,603002,3
+3003,giáo viên ở đâu,phòng khách,603003,3
+3004,người đàn ông đang ở đâu,bãi biển,603004,3
+3005,người đang ở vị trí nào,công viên,603005,3
+3006,người đang ở vị trí nào,văn phòng,603006,3
+3007,người ở đâu,bãi biển,603007,3
+3008,người đang ở đâu,thư viện,603008,3
+3009,vị trí của đứa trẻ ở đâu,sân vườn,603009,3
+3010,người ở đâu,bãi biển,603010,3
+3011,người đang ở vị trí nào,nhà hàng,603011,3
+3012,vị trí của người ở đâu,sân vườn,603012,3
+3013,người ở đâu,cửa hàng,603013,3
+3014,vị trí của người ở đâu,nhà hàng,603014,3
+3015,người đang ở đâu,công viên,603015,3
+3016,vị trí của người ở đâu,phòng bếp,603016,3
+3017,vị trí của người ở đâu,phòng khách,603017,3
+3018,người phụ nữ ở đâu,nhà hàng,603018,3
+3019,vị trí của người ở đâu,văn phòng,603019,3
+3020,đứa trẻ đang ở đâu,thư viện,603020,3
+3021,người phụ nữ đang ở đâu,nhà hàng,603021,3
+3022,vị trí của đứa trẻ ở đâu,thư viện,603022,3
+3023,đứa trẻ đang ở đâu,thư viện,603023,3
+3024,người ở đâu,phòng ngủ,603024,3
+3025,vị trí của người ở đâu,phòng ngủ,603025,3
+3026,người đang ở đâu,phòng bếp,603026,3
+3027,người đang ở đâu,nhà hàng,603027,3
+3028,người đang ở đâu,thư viện,603028,3
+3029,người đang ở vị trí nào,thư viện,603029,3
+3030,giáo viên đang ở vị trí nào,thư viện,603030,3
+3031,người ở đâu,văn phòng,603031,3
+3032,đứa trẻ ở đâu,đường phố,603032,3
+3033,vị trí của người ở đâu,sân vườn,603033,3
+3034,người đang ở đâu,thư viện,603034,3
+3035,người đang ở đâu,sân vườn,603035,3
+3036,người ở đâu,công viên,603036,3
+3037,vị trí của đứa trẻ ở đâu,phòng bếp,603037,3
+3038,người đang ở vị trí nào,bãi biển,603038,3
+3039,người ở đâu,thư viện,603039,3
+3040,người phụ nữ đang ở đâu,nhà hàng,603040,3
+3041,vị trí của người đàn ông ở đâu,đường phố,603041,3
+3042,người đang ở vị trí nào,phòng ngủ,603042,3
+3043,vị trí của người phụ nữ ở đâu,cửa hàng,603043,3
+3044,vị trí của người ở đâu,phòng ngủ,603044,3
+3045,giáo viên đang ở đâu,công viên,603045,3
+3046,người ở đâu,sân vườn,603046,3
+3047,người ở đâu,phòng ngủ,603047,3
+3048,vị trí của người ở đâu,nhà hàng,603048,3
+3049,người đang ở vị trí nào,phòng khách,603049,3
+3050,người đang ở đâu,phòng bếp,603050,3
+3051,người đang ở đâu,công viên,603051,3
+3052,vị trí của người ở đâu,thư viện,603052,3
+3053,người đang ở vị trí nào,bãi biển,603053,3
+3054,vị trí của người ở đâu,đường phố,603054,3
+3055,người ở đâu,văn phòng,603055,3
+3056,giáo viên ở đâu,bãi biển,603056,3
+3057,vị trí của người ở đâu,công viên,603057,3
+3058,người ở đâu,nhà hàng,603058,3
+3059,người đang ở đâu,thư viện,603059,3
+3060,người đang ở vị trí nào,bãi biển,603060,3
+3061,người đang ở vị trí nào,phòng bếp,603061,3
+3062,vị trí của người ở đâu,sân vườn,603062,3
+3063,vị trí của người ở đâu,thư viện,603063,3
+3064,vị trí của người ở đâu,đường phố,603064,3
+3065,đứa trẻ đang ở vị trí nào,phòng bếp,603065,3
+3066,người ở đâu,văn phòng,603066,3
+3067,vị trí của người ở đâu,phòng bếp,603067,3
+3068,người đang ở đâu,phòng ngủ,603068,3
+3069,người đang ở đâu,thư viện,603069,3
+3070,giáo viên đang ở vị trí nào,phòng bếp,603070,3
+3071,vị trí của người ở đâu,công viên,603071,3
+3072,người ở đâu,cửa hàng,603072,3
+3073,người đang ở đâu,sân vườn,603073,3
+3074,đứa trẻ đang ở vị trí nào,đường phố,603074,3
+3075,người đang ở đâu,nhà hàng,603075,3
+3076,người đang ở vị trí nào,cửa hàng,603076,3
+3077,vị trí của người ở đâu,phòng ngủ,603077,3
+3078,vị trí của người ở đâu,phòng khách,603078,3
+3079,người đang ở vị trí nào,đường phố,603079,3
+3080,người ở đâu,bãi biển,603080,3
+3081,vị trí của người ở đâu,phòng ngủ,603081,3
+3082,người đang ở đâu,bãi biển,603082,3
+3083,người ở đâu,đường phố,603083,3
+3084,người đang ở đâu,bãi biển,603084,3
+3085,người đang ở vị trí nào,phòng bếp,603085,3
+3086,vị trí của đứa trẻ ở đâu,thư viện,603086,3
+3087,đứa trẻ ở đâu,cửa hàng,603087,3
+3088,người ở đâu,sân vườn,603088,3
+3089,người đang ở vị trí nào,công viên,603089,3
+3090,người đàn ông đang ở vị trí nào,phòng khách,603090,3
+3091,người đang ở đâu,cửa hàng,603091,3
+3092,vị trí của người ở đâu,thư viện,603092,3
+3093,vị trí của người đàn ông ở đâu,nhà hàng,603093,3
+3094,người đang ở đâu,phòng ngủ,603094,3
+3095,vị trí của người ở đâu,cửa hàng,603095,3
+3096,người phụ nữ đang ở đâu,văn phòng,603096,3
+3097,vị trí của người ở đâu,phòng bếp,603097,3
+3098,người đang ở vị trí nào,đường phố,603098,3
+3099,người ở đâu,phòng bếp,603099,3
+3100,vị trí của người đàn ông ở đâu,đường phố,603100,3
+3101,người đang ở vị trí nào,cửa hàng,603101,3
+3102,người đang ở đâu,thư viện,603102,3
+3103,vị trí của đầu bếp ở đâu,phòng bếp,603103,3
+3104,vị trí của người ở đâu,nhà hàng,603104,3
+3105,người đang ở đâu,văn phòng,603105,3
+3106,người đàn ông đang ở đâu,sân vườn,603106,3
+3107,người đang ở vị trí nào,thư viện,603107,3
+3108,vị trí của người ở đâu,cửa hàng,603108,3
+3109,vị trí của người đàn ông ở đâu,phòng ngủ,603109,3
+3110,người đang ở vị trí nào,nhà hàng,603110,3
+3111,người đang ở đâu,sân vườn,603111,3
+3112,người đang ở đâu,sân vườn,603112,3
+3113,người đàn ông đang ở vị trí nào,thư viện,603113,3
+3114,người đang ở đâu,sân vườn,603114,3
+3115,vị trí của người ở đâu,bãi biển,603115,3
+3116,người đang ở đâu,nhà hàng,603116,3
+3117,vị trí của người ở đâu,phòng bếp,603117,3
+3118,người đang ở đâu,bãi biển,603118,3
+3119,người ở đâu,phòng bếp,603119,3
+3120,vị trí của người ở đâu,văn phòng,603120,3
+3121,vị trí của người ở đâu,cửa hàng,603121,3
+3122,vị trí của đầu bếp ở đâu,thư viện,603122,3
+3123,người ở đâu,thư viện,603123,3
+3124,vị trí của người ở đâu,phòng ngủ,603124,3
+3125,vị trí của giáo viên ở đâu,văn phòng,603125,3
+3126,vị trí của người ở đâu,bãi biển,603126,3
+3127,người đang ở đâu,thư viện,603127,3
+3128,vị trí của người ở đâu,công viên,603128,3
+3129,người đang ở vị trí nào,nhà hàng,603129,3
+3130,vị trí của đầu bếp ở đâu,phòng ngủ,603130,3
+3131,người đàn ông đang ở đâu,nhà hàng,603131,3
+3132,vị trí của người ở đâu,phòng bếp,603132,3
+3133,giáo viên đang ở đâu,bãi biển,603133,3
+3134,người ở đâu,công viên,603134,3
+3135,vị trí của người ở đâu,văn phòng,603135,3
+3136,người đang ở vị trí nào,văn phòng,603136,3
+3137,vị trí của đầu bếp ở đâu,phòng khách,603137,3
+3138,người đang ở vị trí nào,phòng ngủ,603138,3
+3139,đầu bếp đang ở vị trí nào,phòng khách,603139,3
+3140,người đang ở vị trí nào,bãi biển,603140,3
+3141,người ở đâu,văn phòng,603141,3
+3142,người ở đâu,phòng ngủ,603142,3
+3143,người đang ở vị trí nào,văn phòng,603143,3
+3144,người phụ nữ ở đâu,thư viện,603144,3
+3145,đầu bếp đang ở vị trí nào,phòng khách,603145,3
+3146,đầu bếp ở đâu,cửa hàng,603146,3
+3147,người đang ở vị trí nào,nhà hàng,603147,3
+3148,vị trí của người ở đâu,bãi biển,603148,3
+3149,vị trí của giáo viên ở đâu,văn phòng,603149,3
+3150,người ở đâu,cửa hàng,603150,3
+3151,đứa trẻ đang ở đâu,phòng ngủ,603151,3
+3152,người ở đâu,công viên,603152,3
+3153,người đang ở đâu,nhà hàng,603153,3
+3154,người đang ở vị trí nào,nhà hàng,603154,3
+3155,người đang ở vị trí nào,công viên,603155,3
+3156,người đang ở vị trí nào,công viên,603156,3
+3157,người đang ở đâu,nhà hàng,603157,3
+3158,vị trí của người ở đâu,đường phố,603158,3
+3159,vị trí của người ở đâu,nhà hàng,603159,3
+3160,vị trí của đứa trẻ ở đâu,công viên,603160,3
+3161,vị trí của người ở đâu,bãi biển,603161,3
+3162,giáo viên đang ở vị trí nào,công viên,603162,3
+3163,người đang ở vị trí nào,phòng bếp,603163,3
+3164,người đang ở vị trí nào,phòng bếp,603164,3
+3165,người ở đâu,phòng bếp,603165,3
+3166,người đang ở vị trí nào,phòng ngủ,603166,3
+3167,người đang ở đâu,bãi biển,603167,3
+3168,người ở đâu,đường phố,603168,3
+3169,người đang ở đâu,phòng bếp,603169,3
+3170,người ở đâu,văn phòng,603170,3
+3171,người đang ở đâu,cửa hàng,603171,3
+3172,vị trí của người phụ nữ ở đâu,phòng ngủ,603172,3
+3173,người đang ở đâu,bãi biển,603173,3
+3174,người đang ở đâu,công viên,603174,3
+3175,người phụ nữ đang ở vị trí nào,bãi biển,603175,3
+3176,vị trí của người ở đâu,đường phố,603176,3
+3177,người đang ở vị trí nào,phòng ngủ,603177,3
+3178,người đang ở vị trí nào,phòng khách,603178,3
+3179,giáo viên ở đâu,bãi biển,603179,3
+3180,vị trí của người ở đâu,công viên,603180,3
+3181,vị trí của đầu bếp ở đâu,đường phố,603181,3
+3182,người đang ở đâu,phòng khách,603182,3
+3183,người ở đâu,cửa hàng,603183,3
+3184,người đang ở vị trí nào,nhà hàng,603184,3
+3185,người đàn ông đang ở đâu,phòng bếp,603185,3
+3186,người ở đâu,phòng ngủ,603186,3
+3187,người đàn ông ở đâu,văn phòng,603187,3
