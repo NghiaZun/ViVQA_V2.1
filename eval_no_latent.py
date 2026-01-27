@@ -236,13 +236,28 @@ def main():
     print(f"\n[Model] Loading checkpoint: {args.checkpoint}")
     checkpoint = torch.load(args.checkpoint, map_location=device)
     
-    # Detect if checkpoint has LoRA/vision gating
-    has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in checkpoint['model_state_dict'].keys())
-    has_vision_gate = any('vision_gating' in k for k in checkpoint['model_state_dict'].keys())
+    # Detect features from checkpoint state_dict
+    state_dict_keys = checkpoint['model_state_dict'].keys()
+    
+    has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in state_dict_keys)
+    has_text_lora = any('encoder.base_model.model' in k for k in state_dict_keys)
+    
+    # Detect vision gating (2 versions):
+    # - OLD version: simple scalar "vision_gate" 
+    # - NEW version: attention-based "vision_gating" (VisionGating class)
+    has_vision_gate_old = any(k == 'vision_gate' for k in state_dict_keys)
+    has_vision_gate_new = any('vision_gating' in k for k in state_dict_keys)
+    has_vision_gate = has_vision_gate_old or has_vision_gate_new
     
     print(f"[Model] Checkpoint features detected:")
     print(f"  • Vision LoRA: {'YES' if has_vision_lora else 'NO'}")
-    print(f"  • Vision Gating: {'YES' if has_vision_gate else 'NO'}")
+    print(f"  • Text LoRA: {'YES' if has_text_lora else 'NO'}")
+    if has_vision_gate_old:
+        print(f"  • Vision Gating: YES (OLD scalar version)")
+    elif has_vision_gate_new:
+        print(f"  • Vision Gating: YES (NEW attention-based)")
+    else:
+        print(f"  • Vision Gating: NO")
     
     # Build model matching checkpoint configuration
     print(f"\n[Model] Building Deterministic VQA (matching checkpoint)...")
@@ -253,15 +268,25 @@ def main():
         num_heads=8,
         dropout=0.1,
         gradient_checkpointing=False,
-        use_vision_lora=has_vision_lora,  # 🔥 Auto-detect LoRA
+        use_vision_lora=has_vision_lora,
         vision_lora_r=8,
         vision_lora_alpha=16,
         vision_lora_dropout=0.1,
-        use_vision_gate=has_vision_gate  # 🔥 Auto-detect vision gating
+        use_text_lora=has_text_lora,
+        text_lora_r=16,
+        text_lora_alpha=32,
+        text_lora_dropout=0.1,
+        use_vision_gate=has_vision_gate_new  # Only enable NEW version (model only has this)
     ).to(device)
     
-    # Load state dict
-    model.load_state_dict(checkpoint['model_state_dict'])
+    # Load state dict with strict=False to skip old vision_gate if exists
+    if has_vision_gate_old:
+        print(f"[Model] ⚠️  Skipping old 'vision_gate' scalar (not supported in current model)")
+        missing, unexpected = model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+        if unexpected:
+            print(f"[Model] Skipped keys: {[k for k in unexpected if 'vision_gate' in k]}")
+    else:
+        model.load_state_dict(checkpoint['model_state_dict'])
     
     print(f"[Model] Checkpoint info:")
     print(f"  • Epoch: {checkpoint.get('epoch', 'N/A')}")
