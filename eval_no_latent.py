@@ -232,20 +232,35 @@ def main():
     )
     print(f"[Data] Loaded {len(dataset)} samples")
     
-    # Load model
-    print(f"\n[Model] Building Deterministic VQA...")
+    # Load checkpoint first to check configuration
+    print(f"\n[Model] Loading checkpoint: {args.checkpoint}")
+    checkpoint = torch.load(args.checkpoint, map_location=device)
+    
+    # Detect if checkpoint has LoRA/vision gating
+    has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in checkpoint['model_state_dict'].keys())
+    has_vision_gate = any('vision_gating' in k for k in checkpoint['model_state_dict'].keys())
+    
+    print(f"[Model] Checkpoint features detected:")
+    print(f"  • Vision LoRA: {'YES' if has_vision_lora else 'NO'}")
+    print(f"  • Vision Gating: {'YES' if has_vision_gate else 'NO'}")
+    
+    # Build model matching checkpoint configuration
+    print(f"\n[Model] Building Deterministic VQA (matching checkpoint)...")
     model = DeterministicVQA(
         dinov2_model_name='facebook/dinov2-base',
         bartpho_model_name='vinai/bartpho-syllable',
         num_fusion_layers=2,
         num_heads=8,
         dropout=0.1,
-        gradient_checkpointing=False
+        gradient_checkpointing=False,
+        use_vision_lora=has_vision_lora,  # 🔥 Auto-detect LoRA
+        vision_lora_r=8,
+        vision_lora_alpha=16,
+        vision_lora_dropout=0.1,
+        use_vision_gate=has_vision_gate  # 🔥 Auto-detect vision gating
     ).to(device)
     
-    # Load checkpoint
-    print(f"[Model] Loading checkpoint: {args.checkpoint}")
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    # Load state dict
     model.load_state_dict(checkpoint['model_state_dict'])
     
     print(f"[Model] Checkpoint info:")
@@ -254,7 +269,7 @@ def main():
     print(f"  • Val loss: {checkpoint.get('val_loss', 'N/A'):.4f}")
     
     # Evaluate
-    print(f"\n[Eval] Running evaluation on {args.split} split...")
+    print(f"\n[Eval] Running evaluation...")
     results = evaluate(model, dataloader, device, model.tokenizer)
     
     print("\n" + "="*80)
