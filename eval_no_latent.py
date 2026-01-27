@@ -19,7 +19,7 @@ from tqdm import tqdm
 import argparse
 from collections import Counter
 
-from dataset import ViVQADataset
+from dataset import VQAGenDataset
 from model_no_latent import DeterministicVQA
 
 try:
@@ -195,24 +195,34 @@ def evaluate(model, dataloader, device, tokenizer):
 def main():
     parser = argparse.ArgumentParser(description='Evaluate Deterministic VQA')
     parser.add_argument('--checkpoint', type=str, required=True, help='Path to checkpoint')
-    parser.add_argument('--data_dir', type=str, default='./data', help='Data directory')
+    parser.add_argument('--csv_path', type=str, required=True, help='Path to CSV file (val/test)')
+    parser.add_argument('--image_folder', type=str, required=True, help='Path to image folder')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
-    parser.add_argument('--split', type=str, default='val', choices=['train', 'val', 'test'])
     parser.add_argument('--num_samples', type=int, default=20, help='Number of samples to print')
-    
+    parser.add_argument('--max_q_len', type=int, default=32, help='Max question length')
+    parser.add_argument('--max_a_len', type=int, default=10, help='Max answer length')
+    parser.add_argument('--tokenizer_name', type=str, default='vinai/bartpho-syllable', help='Tokenizer name')
+    parser.add_argument('--vision_processor_name', type=str, default='facebook/dinov2-base', help='Vision processor name')
+    parser.add_argument('--include_question_type', action='store_true', help='Include question type if available')
     args = parser.parse_args()
-    
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[Device] Using: {device}")
-    
-    # Load dataset
-    print(f"\n[Data] Loading {args.split} split...")
-    dataset = ViVQADataset(
-        data_dir=args.data_dir,
-        split=args.split,
-        bartpho_model_name='vinai/bartpho-syllable'
+
+    from transformers import AutoImageProcessor
+    vision_processor = AutoImageProcessor.from_pretrained(args.vision_processor_name)
+
+    print(f"\n[Data] Loading dataset from {args.csv_path} ...")
+    dataset = VQAGenDataset(
+        csv_path=args.csv_path,
+        image_folder=args.image_folder,
+        vision_processor=vision_processor,
+        tokenizer_name=args.tokenizer_name,
+        max_q_len=args.max_q_len,
+        max_a_len=args.max_a_len,
+        include_question_type=args.include_question_type
     )
-    
+
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -220,7 +230,6 @@ def main():
         num_workers=4,
         pin_memory=True
     )
-    
     print(f"[Data] Loaded {len(dataset)} samples")
     
     # Load model
