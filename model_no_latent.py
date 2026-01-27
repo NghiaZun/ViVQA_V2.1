@@ -400,13 +400,14 @@ class DeterministicVQA(nn.Module):
             print(f"  [LoRA] Injecting into BARTpho encoder (r={self.text_lora_r})...")
             
             # LoRA config for text encoder (BARTpho)
+            # Note: Use FEATURE_EXTRACTION not SEQ_2_SEQ_LM because encoder doesn't generate
             lora_config = LoraConfig(
                 r=self.text_lora_r,
                 lora_alpha=self.text_lora_alpha,
                 lora_dropout=self.text_lora_dropout,
                 target_modules=["q_proj", "k_proj", "v_proj"],  # BART uses *_proj naming
                 bias="none",
-                task_type="SEQ_2_SEQ_LM"  # BART is seq2seq model
+                task_type="FEATURE_EXTRACTION"  # Encoder is feature extractor, not generator
             )
             
             # Apply LoRA to encoder (PEFT handles everything!)
