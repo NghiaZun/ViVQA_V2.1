@@ -491,15 +491,57 @@ def run_full_diagnostic(
     model = DeterministicVQA(
         use_vision_gate=True,
         vision_gate_init=1.5,
-        use_vision_lora=False,
-        use_text_lora=False
+        use_vision_lora=True,
+        use_text_lora=True
     )
     
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        model.load_state_dict(checkpoint)
+    # Load checkpoint and adapt state_dict keys if necessary
+    raw_ckpt = torch.load(checkpoint_path, map_location=device)
+    state = raw_ckpt.get('model_state_dict', raw_ckpt)
+
+    # Remap common PEFT/base_model prefixes to current model's key names
+    adapted_state = {}
+    skipped_adapter_keys = []
+    for k, v in state.items():
+        new_k = k
+
+        # Remove nested base_model.model wrappers from some HF PEFT-wrapped checkpoints
+        # Examples seen in the wild: 'vision_encoder.base_model.model.encoder.layer...' -> 'vision_encoder.encoder.layer...'
+        new_k = new_k.replace('vision_encoder.base_model.model.', 'vision_encoder.')
+        new_k = new_k.replace('encoder.base_model.model.', 'encoder.')
+        new_k = new_k.replace('vision_encoder.base_model.', 'vision_encoder.')
+        new_k = new_k.replace('encoder.base_model.', 'encoder.')
+        new_k = new_k.replace('.base_model.model.', '.')
+
+        # Skip PEFT/LoRA adapter params if current model wasn't created with PEFT
+        # Adapter keys often contain 'lora' or 'lora_A'/'lora_B' suffixes
+        if ('lora' in new_k) or ('.lora_' in new_k) or ('lora_A' in new_k) or ('lora_B' in new_k):
+            skipped_adapter_keys.append(new_k)
+            continue
+
+        adapted_state[new_k] = v
+
+    if skipped_adapter_keys:
+        print(f"⚠️  Skipping {len(skipped_adapter_keys)} PEFT/LoRA adapter keys from checkpoint (not applied):")
+        print("   ", skipped_adapter_keys[:10])
+
+    # Load adapted state dict with non-strict mode to surface missing/unexpected keys
+    load_res = model.load_state_dict(adapted_state, strict=False)
+    try:
+        missing = load_res.missing_keys
+        unexpected = load_res.unexpected_keys
+    except Exception:
+        # Older/newer torch versions may return different types; fallback to printing the result
+        print("Load result:", load_res)
+        missing = None
+        unexpected = None
+
+    if missing is not None:
+        print(f"Loaded checkpoint with {len(missing)} missing keys and {len(unexpected)} unexpected keys")
+        if len(missing) > 0:
+            print("  Missing keys (examples):", missing[:10])
+        if len(unexpected) > 0:
+            print("  Unexpected keys (examples):", unexpected[:10])
     
     model = model.to(device)
     model.eval()
