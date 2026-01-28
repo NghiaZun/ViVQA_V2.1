@@ -489,11 +489,14 @@ def run_full_diagnostic(
     
     # Load model
     print("\n📥 Loading model...")
+    
+    # 🔥 IMPORTANT: Tạo model KHÔNG CÓ LoRA vì checkpoint được train không có LoRA
+    # Nếu checkpoint có LoRA, sửa thành use_vision_lora=True, use_text_lora=True
     model = DeterministicVQA(
         use_vision_gate=True,
         vision_gate_init=1.5,
-        use_vision_lora=True,
-        use_text_lora=True
+        use_vision_lora=False,  # 🔥 TẮT vì checkpoint không có LoRA
+        use_text_lora=False     # 🔥 TẮT vì checkpoint không có LoRA
     )
     
     # Load checkpoint and adapt state_dict keys if necessary
