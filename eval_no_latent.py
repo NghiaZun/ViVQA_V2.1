@@ -2,13 +2,12 @@
 EVALUATION SCRIPT FOR DETERMINISTIC VQA (No Latent)
 ====================================================
 
-Simple evaluation with multiple metrics:
+Evaluation with multiple metrics:
 - Exact Match (EM)
 - F1 Score (partial credit)
-- ROUGE-1 (unigram overlap)
-- ROUGE-L (longest common subsequence)
+- Per-Type Breakdown (OBJECT/COUNT/COLOR/LOCATION)
 
-Version 2.1 with ROUGE metrics!
+Version 2.2 with per-type analysis!
 """
 
 import os
@@ -17,18 +16,41 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 
 from dataset import VQAGenDataset
 from model_no_latent import DeterministicVQA
 
-try:
-    from rouge_score import rouge_scorer
-    ROUGE_AVAILABLE = True
-except ImportError:
-    ROUGE_AVAILABLE = False
-    print("⚠️  Warning: rouge_score not installed. ROUGE metrics will be skipped.")
-    print("   Install with: pip install rouge-score")
+
+def detect_question_type(question_text: str) -> int:
+    """
+    Auto-detect question type from text
+    
+    Returns:
+        0: OBJECT (cái gì, con gì, vật gì)
+        1: COUNT (bao nhiêu, mấy)
+        2: COLOR (màu gì, màu sắc)
+        3: LOCATION (đâu, ở đâu, bên nào)
+    """
+    q = question_text.lower()
+    
+    # COUNT patterns
+    if any(word in q for word in ['bao nhiêu', 'mấy', 'có', 'số lượng']):
+        return 1
+    
+    # COLOR patterns
+    if any(word in q for word in ['màu', 'màu sắc', 'sắc']):
+        return 2
+    
+    # LOCATION patterns
+    if any(word in q for word in ['đâu', 'ở đâu', 'chỗ nào', 'vị trí', 'bên', 'phía']):
+        return 3
+    
+    # Default: OBJECT
+    return 0
+
+
+TYPE_NAMES = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
 
 
 def compute_exact_match(prediction: str, ground_truth: str) -> float:
@@ -61,43 +83,25 @@ def compute_f1_score(prediction: str, ground_truth: str) -> float:
     return f1
 
 
-def compute_rouge_scores(prediction: str, ground_truth: str) -> dict:
-    """
-    Compute ROUGE-1 and ROUGE-L scores
-    
-    ROUGE-1: Unigram overlap (word-level similarity)
-    ROUGE-L: Longest common subsequence (fluency/order)
-    
-    Returns:
-        dict with 'rouge1' and 'rougeL' F1 scores (0-1 range)
-    """
-    if not ROUGE_AVAILABLE:
-        return {'rouge1': 0.0, 'rougeL': 0.0}
-    
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=False)
-    scores = scorer.score(ground_truth, prediction)
-    
-    return {
-        'rouge1': scores['rouge1'].fmeasure,
-        'rougeL': scores['rougeL'].fmeasure
-    }
-
-
 def evaluate(model, dataloader, device, tokenizer):
-    """Evaluate model on validation set with EM + F1 + ROUGE metrics"""
+    """Evaluate model on validation set with EM + F1 + Per-Type breakdown"""
     model.eval()
     
     all_predictions = []
     all_ground_truths = []
     all_questions = []
+    all_question_types = []
     
     total_loss = 0.0
     num_batches = 0
     
     exact_matches = []
     f1_scores = []
-    rouge1_scores = []
-    rougeL_scores = []
+    
+    # Per-type tracking
+    from collections import defaultdict
+    type_exact_matches = defaultdict(list)
+    type_f1_scores = defaultdict(list)
     
     with torch.no_grad():
         pbar = tqdm(dataloader, desc="Evaluating")
@@ -135,59 +139,65 @@ def evaluate(model, dataloader, device, tokenizer):
                 gt_text = tokenizer.decode(label_tokens, skip_special_tokens=True)
                 all_ground_truths.append(gt_text)
             
-            # Decode questions
+            # Decode questions and detect types
             for inp in input_ids:
                 question_text = tokenizer.decode(inp, skip_special_tokens=True)
                 all_questions.append(question_text)
+                q_type = detect_question_type(question_text)
+                all_question_types.append(q_type)
             
             all_predictions.extend(predictions)
             
             # Compute metrics for this batch
-            for pred, gt in zip(predictions, all_ground_truths[-len(predictions):]):
+            batch_start_idx = len(all_ground_truths) - len(predictions)
+            for i, (pred, gt) in enumerate(zip(predictions, all_ground_truths[-len(predictions):])):
                 em = compute_exact_match(pred, gt)
                 f1 = compute_f1_score(pred, gt)
-                rouge_scores = compute_rouge_scores(pred, gt)
+                q_type = all_question_types[batch_start_idx + i]
                 
                 exact_matches.append(em)
                 f1_scores.append(f1)
-                rouge1_scores.append(rouge_scores['rouge1'])
-                rougeL_scores.append(rouge_scores['rougeL'])
+                
+                # Track per-type
+                type_exact_matches[q_type].append(em)
+                type_f1_scores[q_type].append(f1)
             
             # Update progress
             current_em = sum(exact_matches) / len(exact_matches) * 100
             current_f1 = sum(f1_scores) / len(f1_scores) * 100
             
-            pbar_dict = {
+            pbar.set_postfix({
                 'loss': f"{total_loss/num_batches:.3f}",
                 'EM': f"{current_em:.1f}%",
                 'F1': f"{current_f1:.1f}%"
-            }
-            
-            if ROUGE_AVAILABLE and rouge1_scores:
-                current_r1 = sum(rouge1_scores) / len(rouge1_scores) * 100
-                current_rl = sum(rougeL_scores) / len(rougeL_scores) * 100
-                pbar_dict['R1'] = f"{current_r1:.1f}%"
-                pbar_dict['RL'] = f"{current_rl:.1f}%"
-            
-            pbar.set_postfix(pbar_dict)
+            })
     
     # Compute final metrics
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     exact_match_acc = sum(exact_matches) / len(exact_matches) * 100
     f1_score_avg = sum(f1_scores) / len(f1_scores) * 100
     
+    # Compute per-type metrics
+    per_type_results = {}
+    for q_type in sorted(type_exact_matches.keys()):
+        type_em = sum(type_exact_matches[q_type]) / len(type_exact_matches[q_type]) * 100 if type_exact_matches[q_type] else 0
+        type_f1 = sum(type_f1_scores[q_type]) / len(type_f1_scores[q_type]) * 100 if type_f1_scores[q_type] else 0
+        per_type_results[q_type] = {
+            'exact_match': type_em,
+            'f1_score': type_f1,
+            'count': len(type_exact_matches[q_type])
+        }
+    
     results = {
         'loss': avg_loss,
         'exact_match': exact_match_acc,
         'f1_score': f1_score_avg,
+        'per_type': per_type_results,
         'predictions': all_predictions,
         'ground_truths': all_ground_truths,
-        'questions': all_questions
+        'questions': all_questions,
+        'question_types': all_question_types
     }
-    
-    if ROUGE_AVAILABLE and rouge1_scores:
-        results['rouge1'] = sum(rouge1_scores) / len(rouge1_scores) * 100
-        results['rougeL'] = sum(rougeL_scores) / len(rougeL_scores) * 100
     
     return results
 
@@ -300,15 +310,19 @@ def main():
     print("\n" + "="*80)
     print("EVALUATION RESULTS")
     print("="*80)
+    print(f"\nOverall Metrics:")
     print(f"  Loss: {results['loss']:.4f}")
     print(f"  Exact Match: {results['exact_match']:.2f}%")
     print(f"  F1 Score: {results['f1_score']:.2f}%")
     
-    if 'rouge1' in results:
-        print(f"  ROUGE-1: {results['rouge1']:.2f}%")
-        print(f"  ROUGE-L: {results['rougeL']:.2f}%")
-    elif not ROUGE_AVAILABLE:
-        print(f"  ROUGE metrics: N/A (install rouge-score)")
+    if results['per_type']:
+        print(f"\nPer Question Type:")
+        print(f"  {'Type':<12} {'EM':<8} {'F1':<8} {'Count':<8}")
+        print(f"  {'-'*40}")
+        for q_type in sorted(results['per_type'].keys()):
+            type_name = TYPE_NAMES[q_type]
+            type_data = results['per_type'][q_type]
+            print(f"  {type_name:<12} {type_data['exact_match']:<8.2f} {type_data['f1_score']:<8.2f} {type_data['count']:<8}")
     
     print("="*80)
     
@@ -320,21 +334,17 @@ def main():
         q = results['questions'][i]
         pred = results['predictions'][i]
         gt = results['ground_truths'][i]
+        q_type = results['question_types'][i]
+        type_name = TYPE_NAMES[q_type]
         
         em = compute_exact_match(pred, gt)
         f1 = compute_f1_score(pred, gt)
         match = "✓" if em == 1.0 else "✗"
         
-        print(f"\n{i+1}. {match} Q: {q}")
+        print(f"\n{i+1}. {match} [{type_name}] Q: {q}")
         print(f"   Pred: {pred}")
         print(f"   GT:   {gt}")
-        print(f"   F1:   {f1:.2f}", end="")
-        
-        if ROUGE_AVAILABLE:
-            rouge_scores = compute_rouge_scores(pred, gt)
-            print(f" | ROUGE-1: {rouge_scores['rouge1']:.2f} | ROUGE-L: {rouge_scores['rougeL']:.2f}")
-        else:
-            print()
+        print(f"   F1:   {f1:.2f}")
     
     print("\n" + "="*80)
 
