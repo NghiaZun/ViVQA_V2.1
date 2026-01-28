@@ -257,7 +257,8 @@ def test_vision_dependency(model, dataloader, device='cuda'):
                 )
             
             # 5. Prepare decoder inputs (same as model)
-            from transformers.models.mbart.modeling_mbart import shift_tokens_right
+            # Import from local model to match exact implementation
+            from model_no_latent import shift_tokens_right
             decoder_input_ids = shift_tokens_right(
                 labels,
                 model.config.pad_token_id,
