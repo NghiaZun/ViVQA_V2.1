@@ -3,8 +3,8 @@
 ## 📊 Diagnostic Results Summary
 
 ### Before Change:
-```
-num_flamingo_layers = 2  # Original setting
+```python
+num_fusion_layers = 2  # Original setting (parameter name in __init__)
 ```
 
 **Performance:**

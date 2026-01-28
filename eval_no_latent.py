@@ -274,7 +274,7 @@ def main():
     model = DeterministicVQA(
         dinov2_model_name='facebook/dinov2-base',
         bartpho_model_name='vinai/bartpho-syllable',
-        num_fusion_layers=2,
+        num_fusion_layers=4,  # 🔥 Match training default
         num_heads=8,
         dropout=0.1,
         gradient_checkpointing=False,

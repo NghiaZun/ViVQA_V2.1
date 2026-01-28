@@ -63,7 +63,7 @@ class FixedTrainConfig:
     # Enable multi-hop reasoning: "đường ray" → "phương tiện" → "xe lửa"
     # 2 layers only learn surface features → shortcuts win
     # 4 layers can chain concepts → semantic reasoning possible
-    num_fusion_layers: int = 2
+    num_fusion_layers: int = 4  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
     free_bits: float = 0.38  # 🔥 ADJUSTED: 0.42→0.38 based on Epoch 4 analysis!
     # Epoch 4 findings:
     #   KL_raw=0.43, KL_after=0.033, penalty_reduction=92% (too strong!)

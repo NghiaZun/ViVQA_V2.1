@@ -523,7 +523,7 @@ def main():
     # Model
     parser.add_argument('--dinov2_model', type=str, default='facebook/dinov2-base', help='DINOv2 model')
     parser.add_argument('--bartpho_model', type=str, default='vinai/bartpho-syllable', help='BARTpho model')
-    parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
+    parser.add_argument('--num_fusion_layers', type=int, default=4, help='Number of Flamingo fusion layers (INCREASED: 2→4 for deeper reasoning)')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate')
     

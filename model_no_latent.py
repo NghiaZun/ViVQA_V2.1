@@ -909,7 +909,7 @@ if __name__ == '__main__':
     print("="*80)
     
     model = DeterministicVQA(
-        num_fusion_layers=2,
+        num_fusion_layers=4,  # Match default in __init__
         gradient_checkpointing=False
     )
     
