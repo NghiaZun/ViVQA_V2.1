@@ -316,6 +316,7 @@ def run_one_epoch_deterministic(
     
     total_loss = 0.0
     total_answer_loss = 0.0
+    total_type_loss = 0.0  # 🔥 NEW: Track type loss
     num_batches = 0
     
     with torch.set_grad_enabled(is_training):
@@ -374,13 +375,22 @@ def run_one_epoch_deterministic(
                 actual_loss = loss.item() * gradient_accumulation_steps if gradient_accumulation_steps > 1 else loss.item()
                 total_loss += actual_loss
                 total_answer_loss += outputs.answer_loss.item()
+                
+                # 🔥 NEW: Track type loss if available
+                if outputs.type_loss is not None:
+                    total_type_loss += outputs.type_loss.item()
+                
                 num_batches += 1
                 
-                # 🔥 Extract gate statistics if available
+                # 🔥 Extract gate statistics + type loss for progress bar
                 postfix = {
                     'loss': f"{actual_loss:.3f}",
                     'ans': f"{outputs.answer_loss.item():.3f}"
                 }
+                
+                # Add type loss to display if available
+                if outputs.type_loss is not None:
+                    postfix['type'] = f"{outputs.type_loss.item():.3f}"
                 
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
@@ -394,12 +404,14 @@ def run_one_epoch_deterministic(
     if num_batches == 0:
         return {
             'loss': 0.0,
-            'answer_loss': 0.0
+            'answer_loss': 0.0,
+            'type_loss': 0.0
         }
     
     return {
         'loss': total_loss / num_batches,
-        'answer_loss': total_answer_loss / num_batches
+        'answer_loss': total_answer_loss / num_batches,
+        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0  # 🔥 NEW
     }
 
 
@@ -710,7 +722,8 @@ def main():
             image_folder=args.image_dir,
             vision_processor=vision_processor,
             tokenizer_name=bartpho_model,
-            include_question_type=args.use_type_loss  # 🔥 Enable question type if using type loss
+            include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
+            auto_detect_type=True  # 🔥 Auto-detect from Vietnamese question patterns
         )
         
         # Check if val_csv provided
@@ -721,7 +734,8 @@ def main():
                 image_folder=args.image_dir,
                 vision_processor=vision_processor,
                 tokenizer_name=bartpho_model,
-                include_question_type=args.use_type_loss  # 🔥 Enable question type if using type loss
+                include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
+                auto_detect_type=True  # 🔥 Auto-detect from Vietnamese question patterns
             )
             train_dataset = full_train_dataset
         else:

@@ -4,6 +4,43 @@ from transformers import BartphoTokenizer
 from PIL import Image
 import pandas as pd
 import os
+import re
+
+
+def detect_question_type(question: str) -> int:
+    """
+    Detect Vietnamese VQA question type from question text
+    
+    Types:
+        0 = OBJECT (Đây là gì? Cái gì?)
+        1 = COUNT (Có bao nhiêu? Mấy cái?)
+        2 = COLOR (Màu gì? Màu sắc?)
+        3 = LOCATION (Ở đâu? Phía nào? Trên/dưới/trái/phải?)
+    
+    Args:
+        question: Vietnamese question text
+    
+    Returns:
+        type_id: 0-3 integer
+    """
+    q_lower = question.lower().strip()
+    
+    # Pattern matching (order matters - more specific first!)
+    
+    # COLOR: Màu gì? Màu sắc?
+    if re.search(r'màu\s*(gì|sắc|nào)?', q_lower):
+        return 2
+    
+    # COUNT: Có bao nhiêu? Mấy cái? Số lượng?
+    if re.search(r'(bao nhiêu|mấy|số lượng|có\s*\d+)', q_lower):
+        return 1
+    
+    # LOCATION: Ở đâu? Phía nào? Vị trí? Trên/dưới/trái/phải/trong/ngoài
+    if re.search(r'(ở\s*(đâu|nào)|phía|vị\s*trí|bên|trên|dưới|trái|phải|trong|ngoài|giữa)', q_lower):
+        return 3
+    
+    # Default: OBJECT identification (Đây là gì? Cái gì? Ai?)
+    return 0
 
 
 class VQAGenDataset(Dataset):
@@ -11,7 +48,8 @@ class VQAGenDataset(Dataset):
                  vision_processor,
                  tokenizer_name='vinai/bartpho-syllable',
                  max_q_len=32, max_a_len=10,
-                 include_question_type=False):  # 🔥 Enable question type from CSV
+                 include_question_type=False,  # 🔥 Enable question type
+                 auto_detect_type=False):  # 🔥 NEW: Auto-detect from question text
 
         self.data = pd.read_csv(csv_path)
         self.image_folder = image_folder
@@ -21,6 +59,7 @@ class VQAGenDataset(Dataset):
         self.max_q_len = max_q_len
         self.max_a_len = max_a_len
         self.include_question_type = include_question_type
+        self.auto_detect_type = auto_detect_type  # 🔥 NEW
 
     def __len__(self):
         return len(self.data)
@@ -68,14 +107,18 @@ class VQAGenDataset(Dataset):
             'labels': labels
         }
         
-        # Add question type if requested (must exist in CSV: 0=object_id, 1=counting, 2=color, 3=location)
+        # 🔥 Get question type
         if self.include_question_type:
-            if 'type' in row:
+            if self.auto_detect_type:
+                # Auto-detect from question text (fallback if CSV doesn't have type column)
+                question_type = detect_question_type(question)
+            elif 'type' in row:
                 question_type = int(row['type'])
             elif 'question_type' in row:
                 question_type = int(row['question_type'])
             else:
-                raise ValueError("CSV must have 'type' or 'question_type' column when include_question_type=True")
+                # Fallback: auto-detect if no CSV column
+                question_type = detect_question_type(question)
             
             result['question_type'] = question_type
         

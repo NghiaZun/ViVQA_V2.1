@@ -116,26 +116,78 @@ class GatedTextInjection(nn.Module):
 
 
 # ============================================================================
+# TYPE PREDICTION HEAD (Auxiliary Task for Multi-task Learning)
+# ============================================================================
+
+class TypePredictionHead(nn.Module):
+    """
+    Auxiliary head for question type classification
+    
+    Types:
+        0 = OBJECT (Đây là gì? Cái gì?)
+        1 = COUNT (Có bao nhiêu? Mấy cái?)
+        2 = COLOR (Màu gì?)
+        3 = LOCATION (Ở đâu? Phía nào? Trên/dưới?)
+    
+    Purpose: Force question encoder to learn type-level patterns
+    NOT used for hard decision - just auxiliary signal!
+    """
+    def __init__(self, hidden_dim=1024, num_types=4, dropout=0.1):
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, num_types)
+        )
+    
+    def forward(self, text_cls):
+        """
+        Args:
+            text_cls: [B, D] - CLS token from question encoder
+        Returns:
+            type_logits: [B, 4] - logits over 4 question types
+        """
+        return self.classifier(text_cls)
+
+
+# ============================================================================
 # VISION GATING (Learnable Attention-Based)
 # ============================================================================
 
 class VisionGating(nn.Module):
     """
-    Learnable vision gating with attention mechanism
+    🔥 TYPE-CONDITIONED Vision Gating with Attention
     
-    Instead of: gated_vision = scalar * vision  (too simple!)
-    Do:         gated_vision = alpha * vision + (1-alpha) * text_context
+    Key idea: (question + type) → gate → select vision
     
-    Where alpha is learned per-patch based on vision+text interaction
+    Different question types need different vision features:
+        - COLOR → attend to color-rich patches
+        - COUNT → attend to object distribution globally  
+        - LOCATION → attend to spatial arrangement
+        - OBJECT → attend to salient regions
+    
+    Implementation:
+        1. Embed question type as learnable vector
+        2. Combine (question_cls + type_emb) as "query"
+        3. Attention query @ vision → importance scores α
+        4. Gated vision = α * vision + (1-α) * text_context
     """
-    def __init__(self, hidden_dim=1024, init_bias=1.5):
+    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.5):
         super().__init__()
+        
+        # Type embeddings (learnable per-type representations)
+        self.type_embedding = nn.Embedding(num_types, hidden_dim)
         
         # Project vision features
         self.vision_proj = nn.Linear(hidden_dim, hidden_dim)
         
         # Project text features  
         self.text_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+        # 🔥 NEW: Type-aware query projection
+        # Combines question + type to form attention query
+        self.query_proj = nn.Linear(hidden_dim * 2, hidden_dim)  # concat(text_cls, type_emb)
         
         # Gating network: learns α ∈ [0, 1] per position
         self.gate_net = nn.Sequential(
@@ -147,20 +199,21 @@ class VisionGating(nn.Module):
         )
         
         # Learnable bias to prefer vision
-        # Higher bias → higher α → prefer vision more
         self.vision_bias = nn.Parameter(torch.tensor(init_bias))
         
         # Layer norm for stability
         self.layer_norm = nn.LayerNorm(hidden_dim)
     
-    def forward(self, vision_features, text_features):
+    def forward(self, vision_features, text_features, type_ids=None):
         """
         Args:
             vision_features: [B, num_patches, D]  (e.g. [B, 256, 1024])
             text_features: [B, seq_len, D]         (e.g. [B, 20, 1024])
+            type_ids: [B] - question type IDs (0=OBJECT, 1=COUNT, 2=COLOR, 3=LOCATION)
+                      If None, uses uniform attention (no type conditioning)
         
         Returns:
-            gated_vision: [B, num_patches, D]  # Enhanced vision
+            gated_vision: [B, num_patches, D]  # Type-conditioned vision
             gate_values: [B, num_patches]      # α values for monitoring
         """
         batch_size, num_patches, hidden_dim = vision_features.shape
@@ -169,31 +222,95 @@ class VisionGating(nn.Module):
         v_proj = self.vision_proj(vision_features)  # [B, P, D]
         t_proj = self.text_proj(text_features)      # [B, L, D]
         
-        # 2. Pool text to match vision patches
-        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
-        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
+        # 2. Get text CLS token (first token in BARTpho)
+        text_cls = t_proj[:, 0, :]  # [B, D]
         
-        # 3. Compute gating scores
-        # Concatenate vision + text context for each patch
-        gate_input = torch.cat([v_proj, text_pooled], dim=-1)  # [B, P, 2D]
+        # 3. 🔥 Type-aware attention query
+        if type_ids is not None:
+            # Embed type and combine with text CLS
+            type_emb = self.type_embedding(type_ids)  # [B, D]
+            query = torch.cat([text_cls, type_emb], dim=-1)  # [B, 2D]
+            query = self.query_proj(query)  # [B, D]
+        else:
+            # Fallback: use text CLS only (no type conditioning)
+            query = text_cls
         
-        # Learn α per patch (which patches are important?)
+        # 4. Broadcast query for per-patch attention
+        query_expanded = query.unsqueeze(1).expand(-1, num_patches, -1)  # [B, P, D]
+        
+        # 5. Compute gating scores
+        # Concatenate vision + type-aware query for each patch
+        gate_input = torch.cat([v_proj, query_expanded], dim=-1)  # [B, P, 2D]
+        
+        # Learn α per patch (which patches are important for THIS type?)
         alpha = self.gate_net(gate_input)  # [B, P, 1]
         
-        # 4. Apply vision bias (learnable parameter)
-        # Higher bias → prefer vision more globally
+        # 6. Apply vision bias (learnable parameter)
         alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P]
         alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
         
-        # 5. Gated combination
-        # α close to 1 → use vision features
-        # α close to 0 → use text context
+        # 7. Gated combination
+        # Pool text for context (average over sequence)
+        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
+        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
+        
+        # α close to 1 → use vision features (important patches)
+        # α close to 0 → use text context (suppress noise)
         gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
         
-        # 6. Layer norm for stability
+        # 8. Layer norm for stability
         gated_vision = self.layer_norm(gated_vision)
         
         return gated_vision, alpha  # Return alpha for monitoring
+
+
+# ============================================================================
+# TYPE-AWARE LOGITS BIASING (Soft Vocabulary Conditioning)
+# ============================================================================
+
+class TypeAwareLogitsBias(nn.Module):
+    """
+    Soft logits biasing based on question type
+    
+    Key idea: Different question types should prefer different answer tokens
+        - COLOR → boost color words (đỏ, xanh, vàng, ...)
+        - COUNT → boost numbers (một, hai, ba, 1, 2, 3, ...)
+        - LOCATION → boost spatial words (trên, dưới, trái, phải, ...)
+        - OBJECT → no bias (all objects equally likely)
+    
+    Implementation: Learn type-specific bias vectors
+        final_logits = base_logits + type_bias[type_id]
+    
+    ⚠️ This is SOFT - tokens outside preferred vocab still have probability!
+    """
+    def __init__(self, vocab_size, num_types=4, init_scale=0.1):
+        super().__init__()
+        
+        # Learnable bias per type: [num_types, vocab_size]
+        # Initialize small to avoid dominating base logits
+        self.type_biases = nn.Parameter(
+            torch.randn(num_types, vocab_size) * init_scale
+        )
+    
+    def forward(self, logits, type_ids):
+        """
+        Args:
+            logits: [B, seq_len, vocab_size] - base answer logits
+            type_ids: [B] - question type IDs
+        
+        Returns:
+            biased_logits: [B, seq_len, vocab_size] - type-conditioned logits
+        """
+        batch_size, seq_len, vocab_size = logits.shape
+        
+        # Get bias for each sample's type
+        bias = self.type_biases[type_ids]  # [B, vocab_size]
+        
+        # Broadcast to match logits shape
+        bias = bias.unsqueeze(1).expand(-1, seq_len, -1)  # [B, seq_len, vocab_size]
+        
+        # Add bias (soft reweighting)
+        return logits + bias
 
 
 # ============================================================================
@@ -205,9 +322,11 @@ class DeterministicVQAOutput:
     """Output for deterministic VQA (no KL)"""
     answer_logits: torch.Tensor
     answer_loss: Optional[torch.Tensor] = None
+    type_loss: Optional[torch.Tensor] = None  # 🔥 NEW: Auxiliary type classification loss
     total_loss: Optional[torch.Tensor] = None
+    type_logits: Optional[torch.Tensor] = None  # 🔥 NEW: Type predictions [B, num_types]
     attention_weights: Optional[torch.Tensor] = None
-    gate_stats: Optional[dict] = None  # 🔥 NEW: Vision gate statistics
+    gate_stats: Optional[dict] = None  # Vision gate statistics
 
 
 # ============================================================================
@@ -327,16 +446,34 @@ class DeterministicVQA(nn.Module):
         if self.use_vision_gate:
             self.vision_gating = VisionGating(
                 hidden_dim=bart_hidden_dim,
+                num_types=4,  # 🔥 NEW: 4 question types
                 init_bias=self.vision_gate_init
             )
-            print(f"  🔥 Vision Gating: init_bias={self.vision_gate_init:.2f} (learnable attention)")
+            print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}")
+        
+        # 🔥 NEW: Type prediction head (auxiliary task)
+        self.type_head = TypePredictionHead(
+            hidden_dim=bart_hidden_dim,
+            num_types=4,
+            dropout=dropout
+        )
+        print(f"  🔥 Type Prediction Head: 4 types (OBJECT/COUNT/COLOR/LOCATION)")
+        
+        # 🔥 NEW: Type-aware logits biasing
+        vocab_size = self.lm_head.out_features
+        self.logits_bias = TypeAwareLogitsBias(
+            vocab_size=vocab_size,
+            num_types=4,
+            init_scale=0.1  # Small initialization to not dominate base logits
+        )
+        print(f"  🔥 Type-Aware Logits Bias: vocab_size={vocab_size}, 4 types")
         
         # Gradient checkpointing
         if gradient_checkpointing:
             self.vision_encoder.gradient_checkpointing_enable()
             self.encoder.gradient_checkpointing_enable()
         
-        print("[DETERMINISTIC VQA] ✓ Initialization complete (NO latent module!)")
+        print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
     
     def _inject_lora_to_vision_encoder(self):
         """
@@ -545,16 +682,31 @@ class DeterministicVQA(nn.Module):
         )
         text_features = text_encoder_outputs.last_hidden_state
         
+        # 🔥 NEW: Type prediction (auxiliary task)
+        # Extract CLS token (first token in BARTpho)
+        text_cls = text_features[:, 0, :]  # [B, D]
+        type_logits = self.type_head(text_cls)  # [B, 4]
+        
+        # Compute type loss if labels provided
+        type_loss = None
+        if question_types is not None:
+            type_loss = F.cross_entropy(type_logits, question_types)
+        
         # 3. Vision-text fusion (Flamingo style)
         fused_vision = vision_features
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
-        # 🔥 Vision Gating: Apply learnable attention-based gating
+        # 🔥 Type-Conditioned Vision Gating
         gate_stats = None
         if self.use_vision_gate:
-            # NEW: Attention-based gating that learns per-patch importance
-            gated_vision, gate_values = self.vision_gating(fused_vision, text_features)
+            # Use predicted types during inference, ground truth during training
+            type_ids_for_gating = question_types if question_types is not None else torch.argmax(type_logits, dim=-1)
+            gated_vision, gate_values = self.vision_gating(
+                fused_vision, 
+                text_features,
+                type_ids=type_ids_for_gating  # 🔥 Type-conditioned!
+            )
             
             # Compute statistics for monitoring
             gate_stats = {
@@ -598,73 +750,45 @@ class DeterministicVQA(nn.Module):
         )
         
         # 6. Generate answer logits
-        answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
+        base_answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
         
-        # 7. Compute loss (with optional answer-aware weighting and type-conditional loss)
+        # 🔥 NEW: Apply type-aware logits biasing (soft vocab conditioning)
+        if question_types is not None:
+            answer_logits = self.logits_bias(base_answer_logits, question_types)
+        else:
+            # Inference: use predicted types
+            predicted_types = torch.argmax(type_logits, dim=-1)
+            answer_logits = self.logits_bias(base_answer_logits, predicted_types)
+        
+        # 7. 🔥 MULTI-TASK LOSS: Type + Answer
         answer_loss = None
         total_loss = None
         
         if labels is not None:
-            # 🔥 (A) Answer-aware loss: Use token-level weights if provided
-            if answer_weights is not None:
-                # CrossEntropy with per-token weights (inverse frequency)
-                answer_loss = F.cross_entropy(
-                    answer_logits.view(-1, answer_logits.size(-1)),
-                    labels.view(-1),
-                    ignore_index=-100,
-                    weight=answer_weights,  # 🔥 Reweight by answer frequency
-                    label_smoothing=0.1
-                )
+            # (A) Answer generation loss
+            answer_loss = F.cross_entropy(
+                answer_logits.view(-1, answer_logits.size(-1)),
+                labels.view(-1),
+                ignore_index=-100,
+                weight=answer_weights if answer_weights is not None else None,
+                label_smoothing=0.1
+            )
+            
+            # (B) Multi-task loss: Type (auxiliary) + Answer (main)
+            if type_loss is not None:
+                # Weight type loss lower (auxiliary signal, not primary task)
+                # λ_type = 0.2 means type contributes 20% to total loss
+                total_loss = answer_loss + 0.2 * type_loss
             else:
-                # Standard cross entropy loss
-                answer_loss = F.cross_entropy(
-                    answer_logits.view(-1, answer_logits.size(-1)),
-                    labels.view(-1),
-                    ignore_index=-100,
-                    label_smoothing=0.1
-                )
-            
-            # 🔥 (B) Type-conditional loss: Apply extra weight to counting/color questions
-            if question_types is not None:
-                # Compute per-sample loss for type-conditional weighting
-                loss_fct = nn.CrossEntropyLoss(
-                    ignore_index=-100,
-                    weight=answer_weights if answer_weights is not None else None,
-                    label_smoothing=0.1,
-                    reduction='none'
-                )
-                
-                # Per-token loss
-                loss_per_token = loss_fct(
-                    answer_logits.view(-1, answer_logits.size(-1)),
-                    labels.view(-1)
-                )  # [batch * seq_len]
-                
-                # Reshape and average per sample
-                loss_per_token = loss_per_token.view(batch_size, -1)
-                mask = (labels != -100).float()
-                loss_per_sample = (loss_per_token * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
-                
-                # Apply type-conditional weights
-                # question_types: 0=object_id, 1=counting, 2=color, 3=location
-                type_weights = torch.ones(batch_size, device=pixel_values.device)
-                
-                # Weight harder question types more (need stronger gradient signal)
-                type_weights[question_types == 1] = 1.5  # 1.5x for counting (hard!)
-                type_weights[question_types == 2] = 1.3  # 1.3x for color
-                type_weights[question_types == 3] = 1.4  # 1.4x for spatial location (also hard!)
-                # type 0 (object_id) keeps weight = 1.0 (baseline)
-                
-                # Final weighted loss
-                answer_loss = (loss_per_sample * type_weights).mean()
-            
-            total_loss = answer_loss  # Only answer loss, no KL!
+                total_loss = answer_loss
         
         return DeterministicVQAOutput(
             answer_logits=answer_logits,
             answer_loss=answer_loss,
+            type_loss=type_loss,  # 🔥 NEW
             total_loss=total_loss,
-            gate_stats=gate_stats  # 🔥 NEW: Return gate statistics for monitoring
+            type_logits=type_logits,  # 🔥 NEW
+            gate_stats=gate_stats
         )
     
     @torch.inference_mode()  # Faster than @torch.no_grad()!
@@ -702,14 +826,23 @@ class DeterministicVQA(nn.Module):
         )
         text_features = text_encoder_outputs.last_hidden_state
         
+        # 🔥 NEW: Predict type for type-conditioned generation
+        text_cls = text_features[:, 0, :]
+        type_logits = self.type_head(text_cls)
+        predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
+        
         # Fusion
         fused_vision = vision_features
         for fusion_layer in self.flamingo_fusion:
             fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
         
-        # 🔥 Vision Gating: Apply attention-based gating (same as forward)
+        # 🔥 Type-Conditioned Vision Gating (same as forward)
         if self.use_vision_gate:
-            gated_vision, _ = self.vision_gating(fused_vision, text_features)
+            gated_vision, _ = self.vision_gating(
+                fused_vision, 
+                text_features,
+                type_ids=predicted_types  # 🔥 Use predicted type!
+            )
         else:
             gated_vision = fused_vision
         
@@ -738,8 +871,11 @@ class DeterministicVQA(nn.Module):
                 encoder_attention_mask=encoder_attention_mask
             )
             
-            # Get logits for next token
-            logits = self.lm_head(decoder_outputs.last_hidden_state)
+            # Get base logits
+            base_logits = self.lm_head(decoder_outputs.last_hidden_state)
+            
+            # 🔥 Apply type-aware logits biasing
+            logits = self.logits_bias(base_logits, predicted_types)
             next_token_logits = logits[:, -1, :]
             
             # Greedy: take argmax
