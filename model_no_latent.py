@@ -351,7 +351,7 @@ class DeterministicVQA(nn.Module):
         self,
         dinov2_model_name: str = 'facebook/dinov2-base',
         bartpho_model_name: str = 'vinai/bartpho-syllable',
-        num_fusion_layers: int = 2,
+        num_fusion_layers: int = 4,  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
         num_heads: int = 8,
         dropout: float = 0.1,
         gradient_checkpointing: bool = True,
