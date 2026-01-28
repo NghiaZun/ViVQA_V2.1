@@ -217,64 +217,68 @@ def test_vision_dependency(model, dataloader, device='cuda'):
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
             
-            # Test 1: With real vision features (normal forward)
-            # Extract vision features manually
+            # Test 1: With real vision - use normal forward pass
+            outputs_real = model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                labels=labels
+            )
+            preds_real = outputs_real.answer_logits.argmax(dim=-1)
+            
+            # Test 2: WITHOUT vision (mask vision features to ZERO)
+            # 🔥 CRITICAL: Manual forward with masked vision
+            
+            # 1. Vision encoding (then MASK to zero)
             vision_outputs = model.vision_encoder(pixel_values=pixel_values)
             patch_tokens = vision_outputs.last_hidden_state[:, 1:, :]
             patch_tokens = patch_tokens + model.vision_pos_embed.expand(pixel_values.size(0), -1, -1)
-            vision_features_real = model.vision_proj(patch_tokens)
+            vision_features_masked = torch.zeros_like(model.vision_proj(patch_tokens))  # 🔥 Zero!
             
-            # Text encoding
+            # 2. Text encoding
             text_outputs = model.encoder(input_ids=input_ids, attention_mask=attention_mask)
             text_features = text_outputs.last_hidden_state
             
-            # Fusion WITH vision
-            fused_vision_real = vision_features_real
-            for fusion_layer in model.flamingo_fusion:
-                fused_vision_real = fusion_layer(fused_vision_real, text_features, attention_mask)
-            
-            # Gating (if enabled)
-            if model.use_vision_gate:
-                text_cls = text_features[:, 0, :]
-                type_logits = model.type_head(text_cls)
-                predicted_types = torch.argmax(type_logits, dim=-1)
-                fused_vision_real, _ = model.vision_gating(
-                    fused_vision_real,
-                    text_features,
-                    type_ids=predicted_types
-                )
-            
-            # Decode WITH vision
-            combined_real = torch.cat([fused_vision_real, text_features], dim=1)
-            decoder_outputs_real = model.decoder(
-                inputs_embeds=combined_real,
-                encoder_hidden_states=text_features,
-                encoder_attention_mask=attention_mask
-            )
-            answer_logits_real = model.lm_head(decoder_outputs_real.last_hidden_state)
-            preds_real = answer_logits_real.argmax(dim=-1)
-            
-            # Test 2: WITHOUT vision (mask vision features to ZERO)
-            # 🔥 CRITICAL: Zero out vision AFTER encoding, BEFORE fusion
-            vision_features_masked = torch.zeros_like(vision_features_real)
-            
+            # 3. Fusion (with zero vision)
             fused_vision_masked = vision_features_masked
             for fusion_layer in model.flamingo_fusion:
                 fused_vision_masked = fusion_layer(fused_vision_masked, text_features, attention_mask)
             
+            # 4. Gating (if enabled)
+            gated_vision_masked = fused_vision_masked
             if model.use_vision_gate:
-                fused_vision_masked, _ = model.vision_gating(
+                text_cls = text_features[:, 0, :]
+                type_logits = model.type_head(text_cls)
+                predicted_types = torch.argmax(type_logits, dim=-1)
+                gated_vision_masked, _ = model.vision_gating(
                     fused_vision_masked,
                     text_features,
                     type_ids=predicted_types
                 )
             
-            combined_masked = torch.cat([fused_vision_masked, text_features], dim=1)
-            decoder_outputs_masked = model.decoder(
-                inputs_embeds=combined_masked,
-                encoder_hidden_states=text_features,
-                encoder_attention_mask=attention_mask
+            # 5. Prepare decoder inputs (same as model)
+            from transformers.models.mbart.modeling_mbart import shift_tokens_right
+            decoder_input_ids = shift_tokens_right(
+                labels,
+                model.config.pad_token_id,
+                model.config.decoder_start_token_id
             )
+            
+            # 6. Decoder cross-attention to masked vision
+            encoder_hidden_states = torch.cat([gated_vision_masked, text_features], dim=1)
+            encoder_attention_mask = torch.cat([
+                torch.ones(pixel_values.size(0), gated_vision_masked.size(1), device=attention_mask.device),
+                attention_mask
+            ], dim=1)
+            
+            decoder_outputs_masked = model.decoder(
+                input_ids=decoder_input_ids,
+                attention_mask=None,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask
+            )
+            
+            # 7. Generate logits
             answer_logits_masked = model.lm_head(decoder_outputs_masked.last_hidden_state)
             preds_masked = answer_logits_masked.argmax(dim=-1)
             
