@@ -27,6 +27,7 @@ import argparse
 from tqdm import tqdm
 from collections import defaultdict
 from torch.utils.data import DataLoader
+from transformers import AutoImageProcessor  # 🔥 For dataset
 
 from dataset import VQAGenDataset
 from model_no_latent import DeterministicVQA
@@ -548,12 +549,19 @@ def run_full_diagnostic(
     
     # Load dataset
     print("📥 Loading evaluation dataset...")
+    
+    # Create vision processor (DINOv2)
+    vision_processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
+    
     eval_dataset = VQAGenDataset(
-        csv_file=eval_csv,
-        image_dir=image_dir,
-        tokenizer=model.tokenizer,
-        max_length=20,
-        auto_detect_type=True  # Enable type detection
+        csv_path=eval_csv,  # 🔥 Đổi thành csv_path
+        image_folder=image_dir,  # 🔥 Đổi thành image_folder
+        vision_processor=vision_processor,  # 🔥 Thêm vision_processor
+        tokenizer_name='vinai/bartpho-syllable',
+        max_q_len=32,
+        max_a_len=20,
+        include_question_type=True,  # 🔥 Enable question type
+        auto_detect_type=True  # 🔥 Auto-detect from question text
     )
     
     eval_loader = DataLoader(
