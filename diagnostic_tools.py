@@ -251,7 +251,7 @@ def test_vision_dependency(model, dataloader, device='cuda'):
                 encoder_hidden_states=text_features,
                 encoder_attention_mask=attention_mask
             )
-            answer_logits_real = model.answer_head(decoder_outputs_real.last_hidden_state)
+            answer_logits_real = model.lm_head(decoder_outputs_real.last_hidden_state)
             preds_real = answer_logits_real.argmax(dim=-1)
             
             # Test 2: WITHOUT vision (mask vision features to ZERO)
@@ -275,7 +275,7 @@ def test_vision_dependency(model, dataloader, device='cuda'):
                 encoder_hidden_states=text_features,
                 encoder_attention_mask=attention_mask
             )
-            answer_logits_masked = model.answer_head(decoder_outputs_masked.last_hidden_state)
+            answer_logits_masked = model.lm_head(decoder_outputs_masked.last_hidden_state)
             preds_masked = answer_logits_masked.argmax(dim=-1)
             
             # Compute accuracy (token-level)
