@@ -476,10 +476,13 @@ def analyze_per_type_performance(model, dataloader, device='cuda'):
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
-            question_types = batch.get('question_types', None)
+            
+            # 🔥 Try both 'question_types' (plural) and 'question_type' (singular)
+            question_types = batch.get('question_types', batch.get('question_type', None))
             
             if question_types is None:
                 print("⚠️  Question types not available in dataset - skipping")
+                print("    Make sure dataset was created with include_question_type=True")
                 return None
             
             question_types = question_types.to(device)
@@ -741,7 +744,8 @@ def run_full_diagnostic(
         max_q_len=32,
         max_a_len=20,
         include_question_type=True,  # 🔥 Enable question type
-        auto_detect_type=True  # 🔥 Auto-detect from question text
+        auto_detect_type=True,  # 🔥 Auto-detect from question text
+        return_question_type=True  # 🔥 CRITICAL: Return type in batch
     )
     
     eval_loader = DataLoader(
