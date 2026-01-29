@@ -49,6 +49,74 @@ except ImportError:
 
 
 # ============================================================================
+# VISION DROPOUT AUGMENTATION (New!)
+# ============================================================================
+
+class VisionDropoutAugmentation:
+    """
+    Randomly mask vision features during training to force vision dependency.
+    
+    Strategy:
+        - Randomly zero out vision features with probability p
+        - Model must learn: "No vision = FAIL" → increases vision reliance
+        - Type-specific dropout rates based on diagnostic results:
+          * COUNT (42.6% acc) → HIGH dropout (0.4)
+          * COLOR (49.9% acc) → HIGH dropout (0.35)
+          * OBJECT (61.5% acc) → LOW dropout (0.2)
+          * LOCATION (65% acc) → LOW dropout (0.2)
+    
+    Expected improvement:
+        - Vision dependency drop: 14.9% → 22-25%
+        - COUNT accuracy: 42.6% → 52-56%
+        - Overall accuracy: 57.4% → 62-65%
+    """
+    def __init__(self, drop_prob=0.3, type_specific=True):
+        self.drop_prob = drop_prob
+        self.type_specific = type_specific
+        
+        # Type-specific dropout rates (based on diagnostic results)
+        if type_specific:
+            self.type_probs = {
+                0: 0.2,  # OBJECT - already good (61.5%)
+                1: 0.4,  # COUNT - weak (42.6%) → AGGRESSIVE dropout
+                2: 0.35, # COLOR - weak (49.9%) → HIGH dropout
+                3: 0.2,  # LOCATION - good (65%) → LOW dropout
+            }
+    
+    def __call__(self, vision_features, question_types=None, training=True):
+        """
+        Apply vision dropout augmentation
+        
+        Args:
+            vision_features: [batch_size, num_patches, hidden_dim]
+            question_types: [batch_size] tensor of question type IDs (0-3)
+            training: bool, only apply during training
+        
+        Returns:
+            Augmented vision features (some may be zeroed out)
+        """
+        if not training:
+            return vision_features
+        
+        batch_size = vision_features.size(0)
+        device = vision_features.device
+        
+        # Create dropout mask
+        if self.type_specific and question_types is not None:
+            # Type-specific dropout
+            mask = torch.ones(batch_size, 1, 1, device=device)
+            for i, qtype in enumerate(question_types):
+                prob = self.type_probs.get(qtype.item(), self.drop_prob)
+                if torch.rand(1).item() < prob:
+                    mask[i] = 0.0  # Zero out this sample's vision
+        else:
+            # Uniform dropout across batch
+            mask = (torch.rand(batch_size, 1, 1, device=device) > self.drop_prob).float()
+        
+        return vision_features * mask
+
+
+# ============================================================================
 # UTILITIES
 # ============================================================================
 
@@ -298,7 +366,7 @@ def save_metrics_csv(history, output_dir):
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
-    answer_weights=None, use_type_loss=False
+    answer_weights=None, use_type_loss=False, use_vision_dropout=True, vision_dropout_prob=0.3
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -308,15 +376,25 @@ def run_one_epoch_deterministic(
                                      for effective larger batch size
         answer_weights: Tensor of token-level weights for balanced loss
         use_type_loss: Whether to apply type-conditional loss weighting
+        use_vision_dropout: Whether to apply vision dropout augmentation (default: True)
+        vision_dropout_prob: Base dropout probability for vision features (default: 0.3)
     
     Returns:
         dict with metrics: loss, answer_loss
     """
     model.train() if is_training else model.eval()
     
+    # 🔥 Initialize Vision Dropout Augmentation
+    if use_vision_dropout:
+        vision_dropout = VisionDropoutAugmentation(
+            drop_prob=vision_dropout_prob,
+            type_specific=True  # Use type-specific dropout rates
+        )
+    
     total_loss = 0.0
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
+    total_gate_penalty = 0.0  # 🔥 NEW: Track gate regularization
     num_batches = 0
     
     with torch.set_grad_enabled(is_training):
@@ -328,10 +406,33 @@ def run_one_epoch_deterministic(
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
             
-            # 🔥 Extract question types if using type-conditional loss
+            # 🔥 Extract question types if using type-conditional loss OR vision dropout
             question_types = None
-            if use_type_loss and 'question_type' in batch:
+            if (use_type_loss or use_vision_dropout) and 'question_type' in batch:
                 question_types = batch['question_type'].to(device)
+            
+            # 🔥 VISION DROPOUT AUGMENTATION (apply BEFORE forward pass)
+            # This forces model to learn vision dependency by randomly masking vision
+            if use_vision_dropout and is_training:
+                # Extract raw vision features
+                with torch.no_grad():
+                    vision_outputs = model.vision_encoder(pixel_values=pixel_values)
+                    patch_tokens = vision_outputs.last_hidden_state[:, 1:, :]  # Remove CLS
+                    patch_tokens = patch_tokens + model.vision_pos_embed.expand(pixel_values.size(0), -1, -1)
+                    raw_vision_features = model.vision_proj(patch_tokens)
+                
+                # Apply dropout augmentation
+                augmented_vision = vision_dropout(raw_vision_features, question_types, training=True)
+                
+                # Check if vision was dropped for this batch
+                vision_kept = (augmented_vision.abs().sum() > 0).item()
+                
+                # Replace vision features in model's forward pass
+                # We'll do this by monkey-patching temporarily
+                original_vision_proj = model.vision_proj
+                def patched_vision_proj(x):
+                    return augmented_vision  # Return pre-augmented features
+                model.vision_proj = patched_vision_proj
             
             # Forward pass with mixed precision
             with autocast(enabled=(scaler is not None)):
@@ -347,9 +448,51 @@ def run_one_epoch_deterministic(
                 
                 loss = outputs.total_loss
                 
-                # Scale loss for gradient accumulation
-                if is_training and gradient_accumulation_steps > 1:
-                    loss = loss / gradient_accumulation_steps
+                # 🔥 GATE REGULARIZATION (add penalty for low gates)
+                # This encourages model to use vision features when available
+                gate_penalty = 0.0
+                if use_vision_dropout and is_training and question_types is not None:
+                    # ✅ Keep gradient by not calling .item()
+                    fusion_weights = outputs.fusion_weights  # [batch_size]
+                    
+                    # Verify shape
+                    assert fusion_weights.size(0) == len(question_types), \
+                        f"Batch size mismatch: {fusion_weights.size(0)} vs {len(question_types)}"
+                    
+                    # Type-specific penalties (based on diagnostic results)
+                    # Stronger penalty for weak types (COUNT, COLOR)
+                    type_penalties = {
+                        0: 0.05,  # OBJECT (61.5% acc) - moderate
+                        1: 0.15,  # COUNT (42.6% acc) - STRONG penalty
+                        2: 0.10,  # COLOR (49.9% acc) - high penalty
+                        3: 0.05,  # LOCATION (65% acc) - moderate
+                    }
+                    
+                    # ✅ Per-sample gate penalty with gradient
+                    batch_penalty = 0.0
+                    for i, qtype in enumerate(question_types):
+                        penalty_weight = type_penalties.get(qtype.item(), 0.1)
+                        
+                        # ✅ Use per-sample fusion weight, keeps gradient!
+                        sample_gate = fusion_weights[i]
+                        
+                        # Penalty = -log(gate + eps) → higher when gate is low
+                        sample_penalty = -torch.log(sample_gate + 1e-8) * penalty_weight
+                        batch_penalty = batch_penalty + sample_penalty
+                    
+                    # Average over batch
+                    gate_penalty = batch_penalty / len(question_types)
+                    
+                    # ✅ Add to loss - gradient will flow through!
+                    loss = loss + gate_penalty
+            
+            # 🔥 Restore original vision_proj if we patched it
+            if use_vision_dropout and is_training:
+                model.vision_proj = original_vision_proj
+            
+            # ✅ Scale loss for gradient accumulation (OUTSIDE the vision_dropout block!)
+            if is_training and gradient_accumulation_steps > 1:
+                loss = loss / gradient_accumulation_steps
             
             if is_training and loss is not None:
                 if scaler is not None:
@@ -368,6 +511,20 @@ def run_one_epoch_deterministic(
                         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
                         optimizer.step()
                     
+                    # 🔬 DEBUG: Verify gradient flow on first batch
+                    if batch_idx == 0 and use_vision_dropout and is_training and gate_penalty > 0:
+                        print(f"\n🔍 Gate Regularization - Gradient Flow Check:")
+                        print(f"  Gate penalty: {gate_penalty.item():.4f}")
+                        # Check if fusion layers have gradients
+                        fusion_grad_found = False
+                        for name, param in model.named_parameters():
+                            if 'fusion' in name.lower() and param.grad is not None:
+                                print(f"  ✅ {name}: grad_norm={param.grad.norm():.4f}")
+                                fusion_grad_found = True
+                                break
+                        if not fusion_grad_found:
+                            print(f"  ⚠️ WARNING: No fusion layer gradients found!")
+                    
                     optimizer.zero_grad()
             
             # Accumulate metrics (use original loss, not scaled)
@@ -380,9 +537,15 @@ def run_one_epoch_deterministic(
                 if outputs.type_loss is not None:
                     total_type_loss += outputs.type_loss.item()
                 
+                # 🔥 NEW: Track gate penalty
+                if isinstance(gate_penalty, torch.Tensor):
+                    total_gate_penalty += gate_penalty.item()
+                elif gate_penalty > 0:
+                    total_gate_penalty += gate_penalty
+                
                 num_batches += 1
                 
-                # 🔥 Extract gate statistics + type loss for progress bar
+                # 🔥 Extract gate statistics + type loss + penalties for progress bar
                 postfix = {
                     'loss': f"{actual_loss:.3f}",
                     'ans': f"{outputs.answer_loss.item():.3f}"
@@ -391,6 +554,10 @@ def run_one_epoch_deterministic(
                 # Add type loss to display if available
                 if outputs.type_loss is not None:
                     postfix['type'] = f"{outputs.type_loss.item():.3f}"
+                
+                # Add gate penalty to display
+                if gate_penalty > 0:
+                    postfix['g_pen'] = f"{gate_penalty if isinstance(gate_penalty, float) else gate_penalty.item():.3f}"
                 
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
@@ -405,13 +572,15 @@ def run_one_epoch_deterministic(
         return {
             'loss': 0.0,
             'answer_loss': 0.0,
-            'type_loss': 0.0
+            'type_loss': 0.0,
+            'gate_penalty': 0.0
         }
     
     return {
         'loss': total_loss / num_batches,
         'answer_loss': total_answer_loss / num_batches,
-        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0  # 🔥 NEW
+        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0,  # 🔥 NEW
+        'gate_penalty': total_gate_penalty / num_batches if use_vision_dropout else 0.0  # 🔥 NEW
     }
 
 
@@ -928,7 +1097,9 @@ def main():
             stage=stage,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
+            use_vision_dropout=True,               # 🔥 Enable vision dropout augmentation
+            vision_dropout_prob=0.3                # 🔥 30% dropout probability
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -943,10 +1114,16 @@ def main():
             is_training=False,
             stage=stage,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
+            use_vision_dropout=False,              # 🔥 DISABLE for validation
+            vision_dropout_prob=0.0                # 🔥 No dropout during eval
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
+        
+        # 🔥 Print gate penalty if available
+        if 'gate_penalty' in train_metrics:
+            print(f"  TRAIN -> Gate Penalty: {train_metrics['gate_penalty']:.4f}")
         
         # Track metrics in history
         epoch_metrics = {
@@ -958,6 +1135,10 @@ def main():
             'learning_rate': optimizer.param_groups[0]['lr']
         }
         
+        # 🔥 Add gate penalty to metrics if available
+        if 'gate_penalty' in train_metrics:
+            epoch_metrics['train_gate_penalty'] = train_metrics['gate_penalty']
+        
         # 🔥 Log to W&B
         if args.use_wandb:
             wandb_log = {
@@ -968,6 +1149,10 @@ def main():
                 'val/answer_loss': val_metrics['answer_loss'],
                 'learning_rate': optimizer.param_groups[0]['lr']
             }
+            
+            # 🔥 Add gate penalty to W&B if available
+            if 'gate_penalty' in train_metrics:
+                wandb_log['train/gate_penalty'] = train_metrics['gate_penalty']
         
         # 🔥 LR Scheduler step
         if scheduler is not None:
