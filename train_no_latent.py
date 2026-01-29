@@ -49,71 +49,19 @@ except ImportError:
 
 
 # ============================================================================
-# VISION DROPOUT AUGMENTATION (New!)
+# VISION DROPOUT AUGMENTATION (Inline approach - simpler!)
 # ============================================================================
 
-class VisionDropoutAugmentation:
-    """
-    Randomly mask vision features during training to force vision dependency.
-    
-    Strategy:
-        - Randomly zero out vision features with probability p
-        - Model must learn: "No vision = FAIL" → increases vision reliance
-        - Type-specific dropout rates based on diagnostic results:
-          * COUNT (42.6% acc) → HIGH dropout (0.4)
-          * COLOR (49.9% acc) → HIGH dropout (0.35)
-          * OBJECT (61.5% acc) → LOW dropout (0.2)
-          * LOCATION (65% acc) → LOW dropout (0.2)
-    
-    Expected improvement:
-        - Vision dependency drop: 14.9% → 22-25%
-        - COUNT accuracy: 42.6% → 52-56%
-        - Overall accuracy: 57.4% → 62-65%
-    """
-    def __init__(self, drop_prob=0.3, type_specific=True):
-        self.drop_prob = drop_prob
-        self.type_specific = type_specific
-        
-        # Type-specific dropout rates (based on diagnostic results)
-        if type_specific:
-            self.type_probs = {
-                0: 0.2,  # OBJECT - already good (61.5%)
-                1: 0.4,  # COUNT - weak (42.6%) → AGGRESSIVE dropout
-                2: 0.35, # COLOR - weak (49.9%) → HIGH dropout
-                3: 0.2,  # LOCATION - good (65%) → LOW dropout
-            }
-    
-    def __call__(self, vision_features, question_types=None, training=True):
-        """
-        Apply vision dropout augmentation
-        
-        Args:
-            vision_features: [batch_size, num_patches, hidden_dim]
-            question_types: [batch_size] tensor of question type IDs (0-3)
-            training: bool, only apply during training
-        
-        Returns:
-            Augmented vision features (some may be zeroed out)
-        """
-        if not training:
-            return vision_features
-        
-        batch_size = vision_features.size(0)
-        device = vision_features.device
-        
-        # Create dropout mask
-        if self.type_specific and question_types is not None:
-            # Type-specific dropout
-            mask = torch.ones(batch_size, 1, 1, device=device)
-            for i, qtype in enumerate(question_types):
-                prob = self.type_probs.get(qtype.item(), self.drop_prob)
-                if torch.rand(1).item() < prob:
-                    mask[i] = 0.0  # Zero out this sample's vision
-        else:
-            # Uniform dropout across batch
-            mask = (torch.rand(batch_size, 1, 1, device=device) > self.drop_prob).float()
-        
-        return vision_features * mask
+# NOTE: We apply vision dropout by directly zeroing pixel_values before forward pass
+# This is simpler than monkey-patching and avoids nn.Module assignment issues.
+#
+# Type-specific dropout rates (based on diagnostic results):
+#   - COUNT (42.6% acc) → 0.4 (aggressive)
+#   - COLOR (49.9% acc) → 0.35 (high)
+#   - OBJECT (61.5% acc) → 0.2 (low)
+#   - LOCATION (65% acc) → 0.2 (low)
+#
+# See implementation in run_one_epoch_deterministic() around line 410
 
 
 # ============================================================================
@@ -384,13 +332,6 @@ def run_one_epoch_deterministic(
     """
     model.train() if is_training else model.eval()
     
-    # 🔥 Initialize Vision Dropout Augmentation
-    if use_vision_dropout:
-        vision_dropout = VisionDropoutAugmentation(
-            drop_prob=vision_dropout_prob,
-            type_specific=True  # Use type-specific dropout rates
-        )
-    
     total_loss = 0.0
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
@@ -412,27 +353,23 @@ def run_one_epoch_deterministic(
                 question_types = batch['question_type'].to(device)
             
             # 🔥 VISION DROPOUT AUGMENTATION (apply BEFORE forward pass)
-            # This forces model to learn vision dependency by randomly masking vision
-            if use_vision_dropout and is_training:
-                # Extract raw vision features
-                with torch.no_grad():
-                    vision_outputs = model.vision_encoder(pixel_values=pixel_values)
-                    patch_tokens = vision_outputs.last_hidden_state[:, 1:, :]  # Remove CLS
-                    patch_tokens = patch_tokens + model.vision_pos_embed.expand(pixel_values.size(0), -1, -1)
-                    raw_vision_features = model.vision_proj(patch_tokens)
+            # Simpler approach: Zero out pixel_values directly for some samples
+            if use_vision_dropout and is_training and question_types is not None:
+                # Create dropout mask per sample based on question type
+                dropout_mask = torch.ones(pixel_values.size(0), 1, 1, 1, device=device)
                 
-                # Apply dropout augmentation
-                augmented_vision = vision_dropout(raw_vision_features, question_types, training=True)
+                for i, qtype in enumerate(question_types):
+                    qtype_idx = qtype.item()
+                    # Type-specific dropout rates
+                    type_probs = {0: 0.2, 1: 0.4, 2: 0.35, 3: 0.2}  # OBJECT, COUNT, COLOR, LOCATION
+                    prob = type_probs.get(qtype_idx, 0.3)
+                    
+                    # Random dropout
+                    if torch.rand(1).item() < prob:
+                        dropout_mask[i] = 0.0  # Zero out this sample's vision
                 
-                # Check if vision was dropped for this batch
-                vision_kept = (augmented_vision.abs().sum() > 0).item()
-                
-                # Replace vision features in model's forward pass
-                # We'll do this by monkey-patching temporarily
-                original_vision_proj = model.vision_proj
-                def patched_vision_proj(x):
-                    return augmented_vision  # Return pre-augmented features
-                model.vision_proj = patched_vision_proj
+                # Apply mask to pixel_values
+                pixel_values = pixel_values * dropout_mask
             
             # Forward pass with mixed precision
             with autocast(enabled=(scaler is not None)):
@@ -486,11 +423,7 @@ def run_one_epoch_deterministic(
                     # ✅ Add to loss - gradient will flow through!
                     loss = loss + gate_penalty
             
-            # 🔥 Restore original vision_proj if we patched it
-            if use_vision_dropout and is_training:
-                model.vision_proj = original_vision_proj
-            
-            # ✅ Scale loss for gradient accumulation (OUTSIDE the vision_dropout block!)
+            # ✅ Scale loss for gradient accumulation
             if is_training and gradient_accumulation_steps > 1:
                 loss = loss / gradient_accumulation_steps
             
