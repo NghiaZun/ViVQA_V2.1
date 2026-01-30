@@ -260,6 +260,15 @@ def main():
     has_vision_gate_new = any('vision_gating' in k for k in state_dict_keys)
     has_vision_gate = has_vision_gate_old or has_vision_gate_new
     
+    # Detect number of fusion layers from checkpoint
+    fusion_layer_indices = set()
+    for key in state_dict_keys:
+        if key.startswith('flamingo_fusion.'):
+            parts = key.split('.')
+            if len(parts) >= 2 and parts[1].isdigit():
+                fusion_layer_indices.add(int(parts[1]))
+    num_fusion_layers = max(fusion_layer_indices) + 1 if fusion_layer_indices else 4
+    
     print(f"[Model] Checkpoint features detected:")
     print(f"  • Vision LoRA: {'YES' if has_vision_lora else 'NO'}")
     print(f"  • Text LoRA: {'YES' if has_text_lora else 'NO'}")
@@ -269,13 +278,14 @@ def main():
         print(f"  • Vision Gating: YES (NEW attention-based)")
     else:
         print(f"  • Vision Gating: NO")
+    print(f"  • Fusion Layers: {num_fusion_layers}")
     
     # Build model matching checkpoint configuration
     print(f"\n[Model] Building Deterministic VQA (matching checkpoint)...")
     model = DeterministicVQA(
         dinov2_model_name='facebook/dinov2-base',
         bartpho_model_name='vinai/bartpho-syllable',
-        num_fusion_layers=4,  # 🔥 Match training default
+        num_fusion_layers=num_fusion_layers,  # 🔥 Auto-detected from checkpoint
         num_heads=8,
         dropout=0.1,
         gradient_checkpointing=False,
