@@ -214,6 +214,7 @@ def main():
     parser.add_argument('--tokenizer_name', type=str, default='vinai/bartpho-syllable', help='Tokenizer name')
     parser.add_argument('--vision_processor_name', type=str, default='facebook/dinov2-base', help='Vision processor name')
     parser.add_argument('--include_question_type', action='store_true', help='Include question type if available')
+    parser.add_argument('--output_csv', type=str, default=None, help='Path to save results CSV file')
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -347,6 +348,36 @@ def main():
         print(f"   F1:   {f1:.2f}")
     
     print("\n" + "="*80)
+    
+    # Save results to CSV if specified
+    if args.output_csv:
+        import pandas as pd
+        
+        print(f"\n[Saving] Writing results to {args.output_csv}")
+        
+        results_data = []
+        for i in range(len(results['predictions'])):
+            q = results['questions'][i]
+            pred = results['predictions'][i]
+            gt = results['ground_truths'][i]
+            q_type = results['question_types'][i]
+            type_name = TYPE_NAMES[q_type]
+            
+            em = compute_exact_match(pred, gt)
+            f1 = compute_f1_score(pred, gt)
+            
+            results_data.append({
+                'question': q,
+                'prediction': pred,
+                'ground_truth': gt,
+                'question_type': type_name,
+                'exact_match': em,
+                'f1_score': f1
+            })
+        
+        df = pd.DataFrame(results_data)
+        df.to_csv(args.output_csv, index=False)
+        print(f"[Saved] {len(results_data)} results saved to {args.output_csv}")
 
 
 if __name__ == '__main__':
