@@ -410,17 +410,23 @@ class DeterministicVQA(nn.Module):
         print(f"  📊 Vision hidden_dim: {vision_hidden_dim}")
         
         # 🔥 Enable gradient checkpointing BEFORE LoRA (if requested)
-        # This must be done on base model before PEFT wrapping
+        # NOTE: SigLIP vision_model has compatibility issues with gradient checkpointing + LoRA
+        # Since vision encoder is frozen (only LoRA adapters train), we can skip it safely
         self.gradient_checkpointing = gradient_checkpointing
         if gradient_checkpointing:
-            # For SigLIP vision_model (SiglipVisionTransformer), use config-based approach
-            if hasattr(self.vision_encoder, 'config'):
-                self.vision_encoder.config.gradient_checkpointing = True
-                print(f"  🔥 Vision Gradient Checkpointing: ENABLED (config-based for SigLIP)")
-            elif hasattr(self.vision_encoder, 'gradient_checkpointing_enable'):
-                # DINOv2 style
-                self.vision_encoder.gradient_checkpointing_enable()
-                print(f"  🔥 Vision Gradient Checkpointing: ENABLED (method-based for DINOv2)")
+            if self.is_siglip:
+                # SigLIP: Skip gradient checkpointing (frozen + LoRA = minimal memory anyway)
+                print(f"  ⚠️  Vision Gradient Checkpointing: SKIPPED for SigLIP")
+                print(f"      (SigLIP vision_model has implementation conflicts with PEFT)")
+                print(f"      (Vision encoder is frozen, only ~1M LoRA params train - memory OK)")
+            else:
+                # DINOv2: Safe to enable
+                if hasattr(self.vision_encoder, 'gradient_checkpointing_enable'):
+                    self.vision_encoder.gradient_checkpointing_enable()
+                    print(f"  🔥 Vision Gradient Checkpointing: ENABLED (DINOv2)")
+                elif hasattr(self.vision_encoder, 'config'):
+                    self.vision_encoder.config.gradient_checkpointing = True
+                    print(f"  🔥 Vision Gradient Checkpointing: ENABLED (config-based)")
         
         # 🔥 Add LoRA to vision encoder if requested (AFTER gradient checkpointing setup)
         if use_vision_lora:
