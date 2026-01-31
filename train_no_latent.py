@@ -314,7 +314,7 @@ def save_metrics_csv(history, output_dir):
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
-    answer_weights=None, use_type_loss=False, use_vision_dropout=True, vision_dropout_prob=0.3
+    answer_weights=None, use_type_loss=False
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -324,18 +324,15 @@ def run_one_epoch_deterministic(
                                      for effective larger batch size
         answer_weights: Tensor of token-level weights for balanced loss
         use_type_loss: Whether to apply type-conditional loss weighting
-        use_vision_dropout: Whether to apply vision dropout augmentation (default: True)
-        vision_dropout_prob: Base dropout probability for vision features (default: 0.3)
     
     Returns:
-        dict with metrics: loss, answer_loss
+        dict with metrics: loss, answer_loss, type_loss
     """
     model.train() if is_training else model.eval()
     
     total_loss = 0.0
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
-    total_gate_penalty = 0.0  # 🔥 NEW: Track gate regularization
     num_batches = 0
     
     with torch.set_grad_enabled(is_training):
@@ -347,29 +344,10 @@ def run_one_epoch_deterministic(
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
             
-            # 🔥 Extract question types if using type-conditional loss OR vision dropout
+            # 🔥 Extract question types if using type-conditional loss
             question_types = None
-            if (use_type_loss or use_vision_dropout) and 'question_type' in batch:
+            if use_type_loss and 'question_type' in batch:
                 question_types = batch['question_type'].to(device)
-            
-            # 🔥 VISION DROPOUT AUGMENTATION (apply BEFORE forward pass)
-            # Simpler approach: Zero out pixel_values directly for some samples
-            if use_vision_dropout and is_training and question_types is not None:
-                # Create dropout mask per sample based on question type
-                dropout_mask = torch.ones(pixel_values.size(0), 1, 1, 1, device=device)
-                
-                for i, qtype in enumerate(question_types):
-                    qtype_idx = qtype.item()
-                    # Type-specific dropout rates
-                    type_probs = {0: 0.2, 1: 0.4, 2: 0.35, 3: 0.2}  # OBJECT, COUNT, COLOR, LOCATION
-                    prob = type_probs.get(qtype_idx, 0.3)
-                    
-                    # Random dropout
-                    if torch.rand(1).item() < prob:
-                        dropout_mask[i] = 0.0  # Zero out this sample's vision
-                
-                # Apply mask to pixel_values
-                pixel_values = pixel_values * dropout_mask
             
             # Forward pass with mixed precision
             with autocast(enabled=(scaler is not None)):
@@ -385,47 +363,9 @@ def run_one_epoch_deterministic(
                 
                 loss = outputs.total_loss
                 
-                # 🔥 GATE REGULARIZATION (add penalty for low gates)
-                # This encourages model to use vision features when available
-                gate_penalty = 0.0
-                if use_vision_dropout and is_training and question_types is not None:
-                    # ✅ Keep gradient by not calling .item()
-                    fusion_weights = outputs.fusion_weights  # [batch_size]
-                    
-                    # Verify shape
-                    assert fusion_weights.size(0) == len(question_types), \
-                        f"Batch size mismatch: {fusion_weights.size(0)} vs {len(question_types)}"
-                    
-                    # Type-specific penalties (based on diagnostic results)
-                    # Stronger penalty for weak types (COUNT, COLOR)
-                    type_penalties = {
-                        0: 0.05,  # OBJECT (61.5% acc) - moderate
-                        1: 0.15,  # COUNT (42.6% acc) - STRONG penalty
-                        2: 0.10,  # COLOR (49.9% acc) - high penalty
-                        3: 0.05,  # LOCATION (65% acc) - moderate
-                    }
-                    
-                    # ✅ Per-sample gate penalty with gradient
-                    batch_penalty = 0.0
-                    for i, qtype in enumerate(question_types):
-                        penalty_weight = type_penalties.get(qtype.item(), 0.1)
-                        
-                        # ✅ Use per-sample fusion weight, keeps gradient!
-                        sample_gate = fusion_weights[i]
-                        
-                        # Penalty = -log(gate + eps) → higher when gate is low
-                        sample_penalty = -torch.log(sample_gate + 1e-8) * penalty_weight
-                        batch_penalty = batch_penalty + sample_penalty
-                    
-                    # Average over batch
-                    gate_penalty = batch_penalty / len(question_types)
-                    
-                    # ✅ Add to loss - gradient will flow through!
-                    loss = loss + gate_penalty
-            
-            # ✅ Scale loss for gradient accumulation
-            if is_training and gradient_accumulation_steps > 1:
-                loss = loss / gradient_accumulation_steps
+                # Scale loss for gradient accumulation
+                if is_training and gradient_accumulation_steps > 1:
+                    loss = loss / gradient_accumulation_steps
             
             if is_training and loss is not None:
                 if scaler is not None:
@@ -444,20 +384,6 @@ def run_one_epoch_deterministic(
                         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
                         optimizer.step()
                     
-                    # 🔬 DEBUG: Verify gradient flow on first batch
-                    if batch_idx == 0 and use_vision_dropout and is_training and gate_penalty > 0:
-                        print(f"\n🔍 Gate Regularization - Gradient Flow Check:")
-                        print(f"  Gate penalty: {gate_penalty.item():.4f}")
-                        # Check if fusion layers have gradients
-                        fusion_grad_found = False
-                        for name, param in model.named_parameters():
-                            if 'fusion' in name.lower() and param.grad is not None:
-                                print(f"  ✅ {name}: grad_norm={param.grad.norm():.4f}")
-                                fusion_grad_found = True
-                                break
-                        if not fusion_grad_found:
-                            print(f"  ⚠️ WARNING: No fusion layer gradients found!")
-                    
                     optimizer.zero_grad()
             
             # Accumulate metrics (use original loss, not scaled)
@@ -470,15 +396,9 @@ def run_one_epoch_deterministic(
                 if outputs.type_loss is not None:
                     total_type_loss += outputs.type_loss.item()
                 
-                # 🔥 NEW: Track gate penalty
-                if isinstance(gate_penalty, torch.Tensor):
-                    total_gate_penalty += gate_penalty.item()
-                elif gate_penalty > 0:
-                    total_gate_penalty += gate_penalty
-                
                 num_batches += 1
                 
-                # 🔥 Extract gate statistics + type loss + penalties for progress bar
+                # 🔥 Extract gate statistics + type loss for progress bar
                 postfix = {
                     'loss': f"{actual_loss:.3f}",
                     'ans': f"{outputs.answer_loss.item():.3f}"
@@ -487,10 +407,6 @@ def run_one_epoch_deterministic(
                 # Add type loss to display if available
                 if outputs.type_loss is not None:
                     postfix['type'] = f"{outputs.type_loss.item():.3f}"
-                
-                # Add gate penalty to display
-                if gate_penalty > 0:
-                    postfix['g_pen'] = f"{gate_penalty if isinstance(gate_penalty, float) else gate_penalty.item():.3f}"
                 
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
@@ -505,15 +421,13 @@ def run_one_epoch_deterministic(
         return {
             'loss': 0.0,
             'answer_loss': 0.0,
-            'type_loss': 0.0,
-            'gate_penalty': 0.0
+            'type_loss': 0.0
         }
     
     return {
         'loss': total_loss / num_batches,
         'answer_loss': total_answer_loss / num_batches,
-        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0,  # 🔥 NEW
-        'gate_penalty': total_gate_penalty / num_batches if use_vision_dropout else 0.0  # 🔥 NEW
+        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0  # 🔥 NEW
     }
 
 
@@ -1087,7 +1001,7 @@ def main():
             # 🔥 Add gate penalty to W&B if available
             if 'gate_penalty' in train_metrics:
                 wandb_log['train/gate_penalty'] = train_metrics['gate_penalty']
-                        
+
         # 🔥 LR Scheduler step
         if scheduler is not None:
             if isinstance(scheduler, ReduceLROnPlateau):
