@@ -409,7 +409,20 @@ class DeterministicVQA(nn.Module):
         print(f"  📊 Vision encoder: {vision_model_name}")
         print(f"  📊 Vision hidden_dim: {vision_hidden_dim}")
         
-        # 🔥 Add LoRA to vision encoder if requested
+        # 🔥 Enable gradient checkpointing BEFORE LoRA (if requested)
+        # This must be done on base model before PEFT wrapping
+        self.gradient_checkpointing = gradient_checkpointing
+        if gradient_checkpointing:
+            # For SigLIP vision_model (SiglipVisionTransformer), use config-based approach
+            if hasattr(self.vision_encoder, 'config'):
+                self.vision_encoder.config.gradient_checkpointing = True
+                print(f"  🔥 Vision Gradient Checkpointing: ENABLED (config-based for SigLIP)")
+            elif hasattr(self.vision_encoder, 'gradient_checkpointing_enable'):
+                # DINOv2 style
+                self.vision_encoder.gradient_checkpointing_enable()
+                print(f"  🔥 Vision Gradient Checkpointing: ENABLED (method-based for DINOv2)")
+        
+        # 🔥 Add LoRA to vision encoder if requested (AFTER gradient checkpointing setup)
         if use_vision_lora:
             self._inject_lora_to_vision_encoder()
             print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
@@ -485,10 +498,12 @@ class DeterministicVQA(nn.Module):
         )
         print(f"  🔥 Type-Aware Logits Bias: vocab_size={vocab_size}, 4 types")
         
-        # Gradient checkpointing
-        if gradient_checkpointing:
-            self.vision_encoder.gradient_checkpointing_enable()
-            self.encoder.gradient_checkpointing_enable()
+        # Gradient checkpointing for text encoder (vision already enabled earlier)
+        if self.gradient_checkpointing:
+            # Text encoder: Always supports gradient checkpointing via method
+            if hasattr(self.encoder, 'gradient_checkpointing_enable'):
+                self.encoder.gradient_checkpointing_enable()
+                print(f"  🔥 Text Gradient Checkpointing: ENABLED")
         
         print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
     
