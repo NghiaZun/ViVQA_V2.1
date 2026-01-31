@@ -389,15 +389,22 @@ class DeterministicVQA(nn.Module):
         self.vision_gate_init = vision_gate_init  # Store for later init
         
         # Vision encoder (SigLIP or DINOv2)
-        self.vision_encoder = AutoModel.from_pretrained(vision_model_name)
+        # For SigLIP, load full model first, then extract vision_model
+        full_vision_model = AutoModel.from_pretrained(vision_model_name)
         
-        # Get hidden_dim (different attribute names for different models)
-        if hasattr(self.vision_encoder.config, 'hidden_size'):
-            vision_hidden_dim = self.vision_encoder.config.hidden_size  # DINOv2
-        elif hasattr(self.vision_encoder.config, 'vision_config'):
-            vision_hidden_dim = self.vision_encoder.config.vision_config.hidden_size  # SigLIP
+        # Extract vision-only component if it's a multi-modal model (like SigLIP)
+        if hasattr(full_vision_model, 'vision_model'):
+            # SigLIP has separate vision_model and text_model
+            self.vision_encoder = full_vision_model.vision_model
+            vision_hidden_dim = full_vision_model.config.vision_config.hidden_size
+            self.is_siglip = True
+            print(f"  📊 Detected SigLIP - using vision_model component only")
         else:
-            raise ValueError(f"Cannot determine hidden size from vision encoder config: {self.vision_encoder.config}")
+            # DINOv2 is vision-only already
+            self.vision_encoder = full_vision_model
+            vision_hidden_dim = full_vision_model.config.hidden_size
+            self.is_siglip = False
+            print(f"  📊 Detected DINOv2 - using full model")
         
         print(f"  📊 Vision encoder: {vision_model_name}")
         print(f"  📊 Vision hidden_dim: {vision_hidden_dim}")
@@ -673,19 +680,21 @@ class DeterministicVQA(nn.Module):
         batch_size = pixel_values.size(0)
         
         # 1. Vision encoding
-        # PEFT wraps the model and requires keyword argument
+        # Note: self.vision_encoder is already vision_model component for SigLIP
+        # or full DINOv2 model. Both take pixel_values directly.
         vision_outputs = self.vision_encoder(pixel_values=pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
         
-        # Remove CLS token if present (SigLIP uses CLS, but we extract patch tokens)
-        # SigLIP returns [batch, num_patches+1, hidden_dim] where first token is CLS
-        # We only need the patch tokens for fusion
+        # Remove CLS token if present
+        # SigLIP vision_model: [batch, num_patches+1, hidden_dim] (first token is CLS)
+        # DINOv2: [batch, num_patches+1, hidden_dim] (first token is CLS)
+        # We only need patch tokens for cross-attention fusion
         if patch_tokens.size(1) > 196:  # Has CLS token (224x224 / 16x16 = 196 patches + 1 CLS)
-            patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS [batch, 196, hidden_dim]
         
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
-        vision_features = self.vision_proj(patch_tokens)
+        vision_features = self.vision_proj(patch_tokens)  # [batch, 196, bart_hidden]
         
         # 2. Text encoding
         text_encoder_outputs = self.encoder(
