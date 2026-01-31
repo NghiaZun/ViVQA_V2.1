@@ -364,7 +364,10 @@ class DeterministicVQA(nn.Module):
         text_lora_alpha: int = 32,  # 🔥 Text LoRA alpha
         text_lora_dropout: float = 0.1,  # 🔥 Text LoRA dropout
         use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
-        vision_gate_init: float = 1.5  # 🔥 Initial vision boost (>1.0 = prefer vision)
+        vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
+        use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
+        type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
+        type_adapter_bias: float = 2.0  # 🔥 Type supervision strength
     ):
         super().__init__()
         
@@ -378,6 +381,11 @@ class DeterministicVQA(nn.Module):
         self.vision_lora_r = vision_lora_r
         self.vision_lora_alpha = vision_lora_alpha
         self.vision_lora_dropout = vision_lora_dropout
+        
+        # Type adapter settings
+        self.use_type_adapter = use_type_adapter
+        self.type_adapter_rank = type_adapter_rank
+        self.type_adapter_bias = type_adapter_bias
         
         self.use_text_lora = use_text_lora  # 🔥 NEW
         self.text_lora_r = text_lora_r  # 🔥 NEW
@@ -481,6 +489,22 @@ class DeterministicVQA(nn.Module):
             for _ in range(num_fusion_layers)
         ])
         print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers")
+        
+        # 🔥 NEW: Type-Conditioned Vision Adapter (AFTER vision projection)
+        if self.use_type_adapter:
+            from type_conditioned_adapter import TypeConditionedVisionAdapter
+            
+            self.vision_adapter = TypeConditionedVisionAdapter(
+                hidden_dim=vision_hidden_dim,  # Apply to vision features (768 for SigLIP)
+                num_types=4,
+                rank=self.type_adapter_rank,
+                dropout=dropout,
+                use_type_supervision=True,
+                type_bias_strength=self.type_adapter_bias
+            )
+            print(f"  🔥 Type-Conditioned Vision Adapter: rank={self.type_adapter_rank}, bias={self.type_adapter_bias}")
+        else:
+            self.vision_adapter = None
         
         # 🔥 Initialize VisionGating NOW (after bart_hidden_dim is known)
         if self.use_vision_gate:
@@ -748,6 +772,14 @@ class DeterministicVQA(nn.Module):
             # Verify shape matches expected
             assert patch_tokens.size(1) == self.num_patches, \
                 f"Shape mismatch after CLS removal: got {patch_tokens.size(1)} patches, expected {self.num_patches}"
+        
+        # 🔥 NEW: Apply type-conditioned adapter (BEFORE position embeddings)
+        # This allows adapter to transform raw vision features based on question type
+        if self.vision_adapter is not None:
+            patch_tokens = self.vision_adapter(
+                patch_tokens,
+                type_ids=question_types  # Use ground-truth types during training
+            )
         
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)

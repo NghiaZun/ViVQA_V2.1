@@ -593,6 +593,14 @@ def main():
     parser.add_argument('--vision_gate_init', type=float, default=1.5,
                        help='Initial vision gate value (>1.0 = prefer vision, default=1.5)')
     
+    # 🔥 Type-Conditioned Vision Adapter (NEW!)
+    parser.add_argument('--use_type_adapter', action='store_true',
+                       help='Enable type-conditioned vision adapter (4 expert networks)')
+    parser.add_argument('--type_adapter_rank', type=int, default=64,
+                       help='Low-rank bottleneck for adapter experts (default: 64)')
+    parser.add_argument('--type_adapter_bias', type=float, default=2.0,
+                       help='Type supervision bias strength (default: 2.0)')
+    
     # 🔥 Answer-aware & Type-conditional Loss
     parser.add_argument('--answer_weights', type=str, default=None,
                        help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
@@ -836,7 +844,10 @@ def main():
         text_lora_alpha=args.text_lora_alpha,  # 🔥 NEW
         text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
         use_vision_gate=args.use_vision_gate,  # 🔥 NEW: Vision gating
-        vision_gate_init=args.vision_gate_init  # 🔥 NEW
+        vision_gate_init=args.vision_gate_init,  # 🔥 NEW
+        use_type_adapter=args.use_type_adapter,  # 🔥 NEW: Type-conditioned adapter
+        type_adapter_rank=args.type_adapter_rank,  # 🔥 NEW
+        type_adapter_bias=args.type_adapter_bias  # 🔥 NEW
     ).to(device)
     
     model.freeze_pretrained(
