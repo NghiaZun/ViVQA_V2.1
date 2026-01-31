@@ -1087,7 +1087,7 @@ def main():
             # 🔥 Add gate penalty to W&B if available
             if 'gate_penalty' in train_metrics:
                 wandb_log['train/gate_penalty'] = train_metrics['gate_penalty']
-        
+                        
         # 🔥 LR Scheduler step
         if scheduler is not None:
             if isinstance(scheduler, ReduceLROnPlateau):

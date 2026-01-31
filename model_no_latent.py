@@ -388,10 +388,19 @@ class DeterministicVQA(nn.Module):
         self.use_vision_gate = use_vision_gate
         self.vision_gate_init = vision_gate_init  # Store for later init
         
-        # Vision encoder (SigLIP)
+        # Vision encoder (SigLIP or DINOv2)
         self.vision_encoder = AutoModel.from_pretrained(vision_model_name)
-        vision_hidden_dim = self.vision_encoder.config.hidden_size
-        print(f"  📊 Vision encoder hidden_dim: {vision_hidden_dim}")
+        
+        # Get hidden_dim (different attribute names for different models)
+        if hasattr(self.vision_encoder.config, 'hidden_size'):
+            vision_hidden_dim = self.vision_encoder.config.hidden_size  # DINOv2
+        elif hasattr(self.vision_encoder.config, 'vision_config'):
+            vision_hidden_dim = self.vision_encoder.config.vision_config.hidden_size  # SigLIP
+        else:
+            raise ValueError(f"Cannot determine hidden size from vision encoder config: {self.vision_encoder.config}")
+        
+        print(f"  📊 Vision encoder: {vision_model_name}")
+        print(f"  📊 Vision hidden_dim: {vision_hidden_dim}")
         
         # 🔥 Add LoRA to vision encoder if requested
         if use_vision_lora:
