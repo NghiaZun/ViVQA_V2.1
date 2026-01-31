@@ -890,10 +890,19 @@ class DeterministicVQA(nn.Module):
         """
         batch_size = pixel_values.size(0)
         
-        # Encode vision (PEFT requires keyword argument)
+        # Encode vision (same logic as forward())
         vision_outputs = self.vision_encoder(pixel_values=pixel_values)
-        patch_tokens = vision_outputs.last_hidden_state
-        patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS token: [batch, 257, 768] -> [batch, 256, 768]
+        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
+        
+        # Remove CLS token if present (same as forward())
+        original_seq_len = patch_tokens.size(1)
+        if original_seq_len > self.num_patches:  # Has CLS token
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
+            # Verify shape matches expected
+            assert patch_tokens.size(1) == self.num_patches, \
+                f"Shape mismatch after CLS removal in generate(): got {patch_tokens.size(1)} patches, expected {self.num_patches}"
+        
+        # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
         vision_features = self.vision_proj(patch_tokens)
         
