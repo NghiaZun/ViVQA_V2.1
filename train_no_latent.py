@@ -945,9 +945,7 @@ def main():
             stage=stage,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
-            use_vision_dropout=True,               # 🔥 Enable vision dropout augmentation
-            vision_dropout_prob=0.3                # 🔥 30% dropout probability
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -962,16 +960,10 @@ def main():
             is_training=False,
             stage=stage,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
-            use_vision_dropout=False,              # 🔥 DISABLE for validation
-            vision_dropout_prob=0.0                # 🔥 No dropout during eval
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
-        
-        # 🔥 Print gate penalty if available
-        if 'gate_penalty' in train_metrics:
-            print(f"  TRAIN -> Gate Penalty: {train_metrics['gate_penalty']:.4f}")
         
         # Track metrics in history
         epoch_metrics = {
