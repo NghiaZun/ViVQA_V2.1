@@ -623,7 +623,8 @@ def main():
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
     
     # Model
-    parser.add_argument('--dinov2_model', type=str, default='facebook/dinov2-base', help='DINOv2 model')
+    parser.add_argument('--vision_model', type=str, default='google/siglip-base-patch16-224', 
+                       help='Vision encoder model (default: SigLIP-base)')
     parser.add_argument('--bartpho_model', type=str, default='vinai/bartpho-syllable', help='BARTpho model')
     parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads')
@@ -722,7 +723,7 @@ def main():
     num_workers = args.num_workers
     
     # Model
-    dinov2_model = args.dinov2_model
+    vision_model = args.vision_model
     bartpho_model = args.bartpho_model
     num_fusion_layers = args.num_fusion_layers
     
@@ -816,7 +817,7 @@ def main():
         from transformers import AutoProcessor
         from torch.utils.data import random_split
         
-        vision_processor = AutoProcessor.from_pretrained(dinov2_model)
+        vision_processor = AutoProcessor.from_pretrained(vision_model)
         
         # Load full training dataset
         full_train_dataset = VQAGenDataset(
@@ -904,7 +905,7 @@ def main():
     
     print("\n[Model] Building Deterministic VQA...")
     model = DeterministicVQA(
-        dinov2_model_name=dinov2_model,
+        vision_model_name=vision_model,
         bartpho_model_name=bartpho_model,
         num_fusion_layers=num_fusion_layers,
         num_heads=args.num_heads,

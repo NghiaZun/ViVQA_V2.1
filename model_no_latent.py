@@ -338,8 +338,8 @@ class DeterministicVQA(nn.Module):
     Deterministic VQA without latent reasoning bottleneck.
     
     Architecture:
-    1. Vision encoder (DINOv2) - frozen
-    2. Text encoder (BART) - frozen/partially unfrozen
+    1. Vision encoder (SigLIP) - frozen or LoRA adapted
+    2. Text encoder (BART) - frozen/partially unfrozen or LoRA adapted
     3. Vision-text fusion (Flamingo gated cross-attn)
     4. Decoder cross-attn directly to fused features
     5. Answer generation
@@ -349,7 +349,7 @@ class DeterministicVQA(nn.Module):
     
     def __init__(
         self,
-        dinov2_model_name: str = 'facebook/dinov2-base',
+        vision_model_name: str = 'google/siglip-base-patch16-224',  # 🔥 CHANGED: DINOv2 → SigLIP
         bartpho_model_name: str = 'vinai/bartpho-syllable',
         num_fusion_layers: int = 4,  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
         num_heads: int = 8,
@@ -372,6 +372,7 @@ class DeterministicVQA(nn.Module):
         print("  ✅ No VAE/KL regularization")
         print("  ✅ Direct cross-attention fusion")
         print("  ✅ Optimized for accuracy & stability")
+        print(f"  🔥 Vision Encoder: {vision_model_name}")
         
         self.use_vision_lora = use_vision_lora
         self.vision_lora_r = vision_lora_r
@@ -387,10 +388,10 @@ class DeterministicVQA(nn.Module):
         self.use_vision_gate = use_vision_gate
         self.vision_gate_init = vision_gate_init  # Store for later init
         
-        # Vision encoder
-        self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
+        # Vision encoder (SigLIP)
+        self.vision_encoder = AutoModel.from_pretrained(vision_model_name)
         vision_hidden_dim = self.vision_encoder.config.hidden_size
-        print(f"  📊 DINOv2 hidden_dim: {vision_hidden_dim}")
+        print(f"  📊 Vision encoder hidden_dim: {vision_hidden_dim}")
         
         # 🔥 Add LoRA to vision encoder if requested
         if use_vision_lora:
@@ -500,14 +501,14 @@ class DeterministicVQA(nn.Module):
         
         print(f"  [LoRA] Using PEFT library for vision encoder...")
         
-        # LoRA config for vision encoder (DINOv2)
+        # LoRA config for vision encoder (SigLIP)
         lora_config = LoraConfig(
             r=self.vision_lora_r,
             lora_alpha=self.vision_lora_alpha,
             lora_dropout=self.vision_lora_dropout,
-            target_modules=["query", "key", "value"],  # Attention Q/K/V projections
+            target_modules=["q_proj", "k_proj", "v_proj"],  # SigLIP uses different naming: q_proj/k_proj/v_proj
             bias="none",
-            task_type="FEATURE_EXTRACTION"  # DINOv2 is feature extractor
+            task_type="FEATURE_EXTRACTION"  # SigLIP vision encoder is feature extractor
         )
         
         # Apply LoRA (PEFT automatically hooks into forward pass!)
@@ -667,9 +668,11 @@ class DeterministicVQA(nn.Module):
         vision_outputs = self.vision_encoder(pixel_values=pixel_values)
         patch_tokens = vision_outputs.last_hidden_state
         
-        # Remove CLS token (DINOv2 returns [batch, 257, 768] where first token is CLS)
-        # We only need the 256 patch tokens for fusion
-        patch_tokens = patch_tokens[:, 1:, :]  # [batch, 256, 768]
+        # Remove CLS token if present (SigLIP uses CLS, but we extract patch tokens)
+        # SigLIP returns [batch, num_patches+1, hidden_dim] where first token is CLS
+        # We only need the patch tokens for fusion
+        if patch_tokens.size(1) > 196:  # Has CLS token (224x224 / 16x16 = 196 patches + 1 CLS)
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS
         
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
