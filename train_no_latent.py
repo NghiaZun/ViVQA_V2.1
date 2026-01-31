@@ -543,6 +543,8 @@ def main():
     parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate')
+    parser.add_argument('--label_smoothing', type=float, default=0.1, 
+                       help='Label smoothing factor for answer generation (0.0-0.2, default=0.1)')
     
     # Training
     parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
