@@ -457,11 +457,15 @@ class DeterministicVQA(nn.Module):
             self._inject_lora_to_text_encoder()
             print(f"  🔥 Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}, dropout={text_lora_dropout}")
         
-        # Vision position embeddings
-        self.num_patches = 256
+        # Vision position embeddings (calculate dynamically based on model)
+        # SigLIP & DINOv2: 224x224 image with patch_size=16 → 14x14 = 196 patches
+        # Note: Models return [batch, num_patches+1, hidden] where +1 is CLS token
+        # We'll initialize for 196 patches (after removing CLS)
+        self.num_patches = 196  # Standard for 224x224 with patch_size=16
         self.vision_pos_embed = nn.Parameter(
             torch.randn(1, self.num_patches, vision_hidden_dim) * 0.02
         )
+        print(f"  📊 Vision position embeddings: {self.num_patches} patches")
         
         # Vision projection
         self.vision_proj = nn.Sequential(
@@ -517,15 +521,43 @@ class DeterministicVQA(nn.Module):
         """
         Inject LoRA into vision encoder using HuggingFace PEFT library.
         
-        PEFT is the ONLY supported method - no manual fallback!
+        CRITICAL WARNING: SigLIP vision_model has compatibility issues with PEFT LoRA!
+        - Bug: SigLIP encoder forward() conflicts with PEFT wrapper
+        - Error: "got multiple values for keyword argument 'inputs_embeds'"
+        - Root cause: SigLIP internal implementation incompatible with PEFT hooks
         
-        Why PEFT only:
-        - Battle-tested by HuggingFace
-        - Handles all edge cases
-        - Efficient implementation
-        - Active maintenance & bug fixes
-        - No risk of custom bugs
+        RECOMMENDED SOLUTIONS:
+        1. Use DINOv2 instead: --vision_model facebook/dinov2-base
+        2. OR disable vision LoRA for SigLIP (freeze vision encoder completely)
+        
+        This method will RAISE ERROR if SigLIP + LoRA detected!
         """
+        # 🚨 CRITICAL CHECK: Block SigLIP + LoRA combination
+        if self.is_siglip:
+            raise RuntimeError(
+                "\n"
+                "="*70 + "\n"
+                "❌ CRITICAL ERROR: SigLIP + Vision LoRA is NOT SUPPORTED!\n"
+                "="*70 + "\n"
+                "SigLIP vision_model has implementation conflicts with PEFT LoRA.\n"
+                "Error: 'got multiple values for keyword argument inputs_embeds'\n"
+                "\n"
+                "SOLUTIONS:\n"
+                "  1. Use DINOv2 (RECOMMENDED):\n"
+                "     --vision_model facebook/dinov2-base \\\n"
+                "     --use_vision_lora --vision_lora_r 8\n"
+                "\n"
+                "  2. Use SigLIP WITHOUT vision LoRA:\n"
+                "     --vision_model google/siglip-base-patch16-224 \\\n"
+                "     (remove --use_vision_lora flag)\n"
+                "\n"
+                "  3. Use text LoRA only (still beneficial!):\n"
+                "     --vision_model google/siglip-base-patch16-224 \\\n"
+                "     --use_text_lora --text_lora_r 16\n"
+                "="*70 + "\n"
+            )
+        
+        # DINOv2: Safe to apply LoRA
         try:
             from peft import LoraConfig, get_peft_model
         except ImportError:
@@ -704,14 +736,18 @@ class DeterministicVQA(nn.Module):
         # Note: self.vision_encoder is already vision_model component for SigLIP
         # or full DINOv2 model. Both take pixel_values directly.
         vision_outputs = self.vision_encoder(pixel_values=pixel_values)
-        patch_tokens = vision_outputs.last_hidden_state
+        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
         
         # Remove CLS token if present
-        # SigLIP vision_model: [batch, num_patches+1, hidden_dim] (first token is CLS)
-        # DINOv2: [batch, num_patches+1, hidden_dim] (first token is CLS)
+        # SigLIP vision_model: [batch, 197, hidden_dim] → 196 patches + 1 CLS
+        # DINOv2: [batch, 197, hidden_dim] → 196 patches + 1 CLS  
         # We only need patch tokens for cross-attention fusion
-        if patch_tokens.size(1) > 196:  # Has CLS token (224x224 / 16x16 = 196 patches + 1 CLS)
-            patch_tokens = patch_tokens[:, 1:, :]  # Remove CLS [batch, 196, hidden_dim]
+        original_seq_len = patch_tokens.size(1)
+        if original_seq_len > self.num_patches:  # Has CLS token
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
+            # Verify shape matches expected
+            assert patch_tokens.size(1) == self.num_patches, \
+                f"Shape mismatch after CLS removal: got {patch_tokens.size(1)} patches, expected {self.num_patches}"
         
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
