@@ -41,6 +41,7 @@ def evaluate(model, dataloader, device, tokenizer):
     
     all_predictions = []
     all_ground_truths = []
+    all_questions = []
     
     total_loss = 0.0
     num_batches = 0
@@ -78,7 +79,12 @@ def evaluate(model, dataloader, device, tokenizer):
                 num_beams=3
             )
             
-            # Decode
+            # Decode questions
+            for inp in input_ids:
+                question_text = tokenizer.decode(inp, skip_special_tokens=True)
+                all_questions.append(question_text)
+            
+            # Decode ground truths
             for label in labels:
                 label_tokens = label[label != -100].cpu().tolist()
                 gt_text = tokenizer.decode(label_tokens, skip_special_tokens=True)
@@ -112,7 +118,8 @@ def evaluate(model, dataloader, device, tokenizer):
         'exact_match': exact_match_acc,
         'f1_score': f1_score_avg,
         'predictions': all_predictions,
-        'ground_truths': all_ground_truths
+        'ground_truths': all_ground_truths,
+        'questions': all_questions
     }
 
 
@@ -218,15 +225,47 @@ def main():
     
     # Save CSV
     if args.output_csv:
-        import pandas as pd
-        df = pd.DataFrame({
-            'prediction': results['predictions'],
-            'ground_truth': results['ground_truths'],
-            'exact_match': [compute_exact_match(p, g) for p, g in zip(results['predictions'], results['ground_truths'])],
-            'f1_score': [compute_f1_score(p, g) for p, g in zip(results['predictions'], results['ground_truths'])]
-        })
-        df.to_csv(args.output_csv, index=False)
-        print(f"\nSaved to {args.output_csv}")
+        try:
+            import pandas as pd
+            
+            # Prepare data
+            save_data = {
+                'question': results['questions'],
+                'prediction': results['predictions'],
+                'ground_truth': results['ground_truths'],
+                'exact_match': [compute_exact_match(p, g) for p, g in zip(results['predictions'], results['ground_truths'])],
+                'f1_score': [compute_f1_score(p, g) for p, g in zip(results['predictions'], results['ground_truths'])]
+            }
+            
+            df = pd.DataFrame(save_data)
+            
+            # Ensure directory exists
+            import os
+            output_dir = os.path.dirname(args.output_csv) or '.'
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Save CSV
+            df.to_csv(args.output_csv, index=False, encoding='utf-8')
+            
+            # Verify file was saved
+            if os.path.exists(args.output_csv):
+                file_size = os.path.getsize(args.output_csv)
+                print(f"\n✅ Saved to {args.output_csv}")
+                print(f"   File size: {file_size:,} bytes ({len(df)} rows)")
+            else:
+                print(f"\n❌ ERROR: File was not created at {args.output_csv}")
+                
+        except Exception as e:
+            print(f"\n❌ ERROR saving CSV: {e}")
+            print(f"   Attempted path: {args.output_csv}")
+            
+            # Fallback: save to current directory
+            try:
+                fallback_path = 'results_fallback.csv'
+                df.to_csv(fallback_path, index=False, encoding='utf-8')
+                print(f"   Saved to fallback location: {fallback_path}")
+            except Exception as e2:
+                print(f"   Fallback also failed: {e2}")
 
 
 if __name__ == '__main__':
