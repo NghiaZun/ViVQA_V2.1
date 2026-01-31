@@ -36,18 +36,48 @@ def compute_f1_score(prediction: str, ground_truth: str) -> float:
     return f1
 
 
+def detect_question_type(question_text: str) -> str:
+    """
+    Detect question type from Vietnamese text
+    
+    Returns:
+        'OBJECT', 'COUNT', 'COLOR', or 'LOCATION'
+    """
+    q = question_text.lower()
+    
+    # COUNT patterns
+    if any(word in q for word in ['bao nhiêu', 'mấy', 'số lượng']):
+        return 'COUNT'
+    
+    # COLOR patterns
+    if any(word in q for word in ['màu', 'màu sắc']):
+        return 'COLOR'
+    
+    # LOCATION patterns
+    if any(word in q for word in ['đâu', 'ở đâu', 'chỗ nào', 'vị trí', 'bên', 'phía']):
+        return 'LOCATION'
+    
+    # Default: OBJECT
+    return 'OBJECT'
+
+
 def evaluate(model, dataloader, device, tokenizer):
     model.eval()
     
     all_predictions = []
     all_ground_truths = []
     all_questions = []
+    all_question_types = []
     
     total_loss = 0.0
     num_batches = 0
     
     exact_matches = []
     f1_scores = []
+    
+    # Per-type tracking
+    type_exact_matches = defaultdict(list)
+    type_f1_scores = defaultdict(list)
     
     with torch.no_grad():
         pbar = tqdm(dataloader, desc="Evaluating")
@@ -79,10 +109,12 @@ def evaluate(model, dataloader, device, tokenizer):
                 num_beams=3
             )
             
-            # Decode questions
+            # Decode questions and detect types
             for inp in input_ids:
                 question_text = tokenizer.decode(inp, skip_special_tokens=True)
                 all_questions.append(question_text)
+                q_type = detect_question_type(question_text)
+                all_question_types.append(q_type)
             
             # Decode ground truths
             for label in labels:
@@ -92,12 +124,19 @@ def evaluate(model, dataloader, device, tokenizer):
             
             all_predictions.extend(predictions)
             
-            # Metrics
-            for pred, gt in zip(predictions, all_ground_truths[-len(predictions):]):
+            # Metrics (overall and per-type)
+            batch_start_idx = len(all_ground_truths) - len(predictions)
+            for i, (pred, gt) in enumerate(zip(predictions, all_ground_truths[-len(predictions):])):
                 em = compute_exact_match(pred, gt)
                 f1 = compute_f1_score(pred, gt)
+                q_type = all_question_types[batch_start_idx + i]
+                
                 exact_matches.append(em)
                 f1_scores.append(f1)
+                
+                # Track per-type
+                type_exact_matches[q_type].append(em)
+                type_f1_scores[q_type].append(f1)
             
             # Progress
             current_em = sum(exact_matches) / len(exact_matches) * 100
@@ -113,13 +152,26 @@ def evaluate(model, dataloader, device, tokenizer):
     exact_match_acc = sum(exact_matches) / len(exact_matches) * 100
     f1_score_avg = sum(f1_scores) / len(f1_scores) * 100
     
+    # Compute per-type metrics
+    per_type_results = {}
+    for q_type in sorted(type_exact_matches.keys()):
+        type_em = sum(type_exact_matches[q_type]) / len(type_exact_matches[q_type]) * 100 if type_exact_matches[q_type] else 0
+        type_f1 = sum(type_f1_scores[q_type]) / len(type_f1_scores[q_type]) * 100 if type_f1_scores[q_type] else 0
+        per_type_results[q_type] = {
+            'exact_match': type_em,
+            'f1_score': type_f1,
+            'count': len(type_exact_matches[q_type])
+        }
+    
     return {
         'loss': avg_loss,
         'exact_match': exact_match_acc,
         'f1_score': f1_score_avg,
+        'per_type': per_type_results,
         'predictions': all_predictions,
         'ground_truths': all_ground_truths,
-        'questions': all_questions
+        'questions': all_questions,
+        'question_types': all_question_types
     }
 
 
@@ -221,6 +273,16 @@ def main():
     print(f"Loss: {results['loss']:.4f}")
     print(f"Exact Match: {results['exact_match']:.2f}%")
     print(f"F1 Score: {results['f1_score']:.2f}%")
+    
+    # Per-type breakdown
+    if results.get('per_type'):
+        print(f"\nPer Question Type:")
+        print(f"  {'Type':<12} {'EM':<8} {'F1':<8} {'Count':<8}")
+        print(f"  {'-'*40}")
+        for q_type in sorted(results['per_type'].keys()):
+            type_data = results['per_type'][q_type]
+            print(f"  {q_type:<12} {type_data['exact_match']:<8.2f} {type_data['f1_score']:<8.2f} {type_data['count']:<8}")
+    
     print("="*80)
     
     # Save CSV
@@ -228,11 +290,12 @@ def main():
         try:
             import pandas as pd
             
-            # Prepare data
+            # Prepare data (include question_type)
             save_data = {
                 'question': results['questions'],
                 'prediction': results['predictions'],
                 'ground_truth': results['ground_truths'],
+                'question_type': results['question_types'],
                 'exact_match': [compute_exact_match(p, g) for p, g in zip(results['predictions'], results['ground_truths'])],
                 'f1_score': [compute_f1_score(p, g) for p, g in zip(results['predictions'], results['ground_truths'])]
             }
