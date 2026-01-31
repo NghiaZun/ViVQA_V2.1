@@ -212,8 +212,8 @@ def main():
     parser.add_argument('--max_q_len', type=int, default=32, help='Max question length')
     parser.add_argument('--max_a_len', type=int, default=10, help='Max answer length')
     parser.add_argument('--tokenizer_name', type=str, default='vinai/bartpho-syllable', help='Tokenizer name')
-    parser.add_argument('--vision_model_name', type=str, default=None, 
-                        help='Vision encoder name (auto-detect from checkpoint if not specified)')
+    parser.add_argument('--vision_model_name', type=str, default='google/siglip-base-patch16-224', 
+                        help='Vision encoder name (default: SigLIP, use "facebook/dinov2-base" for DINOv2)')
     parser.add_argument('--include_question_type', action='store_true', help='Include question type if available')
     parser.add_argument('--output_csv', type=str, default=None, help='Path to save results CSV file')
     args = parser.parse_args()
@@ -228,21 +228,11 @@ def main():
     # Detect features from checkpoint state_dict
     state_dict_keys = checkpoint['model_state_dict'].keys()
     
-    # Auto-detect vision encoder type
-    has_siglip_keys = any('vision_model' in k for k in state_dict_keys)
-    
     # Determine vision model name
-    if args.vision_model_name:
-        vision_model_name = args.vision_model_name
-        print(f"[Vision] Using specified model: {vision_model_name}")
-    else:
-        # Auto-detect from checkpoint or use default
-        if has_siglip_keys or checkpoint.get('vision_model_name'):
-            vision_model_name = checkpoint.get('vision_model_name', 'google/siglip-base-patch16-224')
-            print(f"[Vision] Auto-detected SigLIP: {vision_model_name}")
-        else:
-            vision_model_name = 'facebook/dinov2-base'
-            print(f"[Vision] Auto-detected DINOv2: {vision_model_name}")
+    # Since checkpoint doesn't save vision_model_name metadata yet,
+    # we rely on user input (default: SigLIP)
+    vision_model_name = args.vision_model_name
+    print(f"[Vision] Using vision encoder: {vision_model_name}")
     
     # Determine vision processor name
     if 'siglip' in vision_model_name.lower():
@@ -321,7 +311,7 @@ def main():
     print(f"\n[Model] Building Deterministic VQA (matching checkpoint)...")
     model = DeterministicVQA(
         vision_model_name=vision_model_name,  # 🔥 Auto-detected
-        text_model_name='vinai/bartpho-syllable',
+        bartpho_model_name='vinai/bartpho-syllable',  # 🔥 FIXED: was text_model_name
         num_fusion_layers=num_fusion_layers,
         num_heads=8,
         dropout=0.1,
