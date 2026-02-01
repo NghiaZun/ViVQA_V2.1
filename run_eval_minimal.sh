@@ -10,7 +10,7 @@ echo ""
 echo "🚀 Running evaluation..."
 
 python eval_minimal.py \
-    --checkpoint /kaggle/input/sigclip-test2/transformers/default/1/best_model(1).pt \
+    --checkpoint "/kaggle/input/sigclip-test2/transformers/default/1/best_model(1).pt" \
     --csv_path /kaggle/input/vivqa/data/test.csv \
     --image_folder /kaggle/input/vivqa/data/images/test \
     --vision_model google/siglip-base-patch16-224 \
