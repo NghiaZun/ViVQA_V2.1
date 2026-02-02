@@ -75,4 +75,14 @@ if 'config' in checkpoint:
         print(f"use_vision_gate: {config.get('use_vision_gate', 'NOT FOUND')}")
         print(f"use_type_loss: {config.get('use_type_loss', 'NOT FOUND')}")
 
+# Check training info
+print("\n" + "="*80)
+print("TRAINING INFO")
+print("="*80)
+print(f"Epoch: {checkpoint.get('epoch', 'NOT FOUND')}")
+print(f"Stage: {checkpoint.get('stage', 'NOT FOUND')}")
+print(f"Train loss: {checkpoint.get('train_loss', 'NOT FOUND')}")
+print(f"Val loss: {checkpoint.get('val_loss', 'NOT FOUND')}")
+print(f"Best val loss: {checkpoint.get('best_val_loss', 'NOT FOUND')}")
+
 print("\n" + "="*80)
