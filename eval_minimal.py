@@ -223,6 +223,7 @@ def main():
     has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in state_dict_keys if 'vision' in k)
     has_text_lora = any('encoder.base_model.model' in k for k in state_dict_keys)
     has_vision_gate = any('vision_gating' in k for k in state_dict_keys)
+    has_type_adapter = any('vision_adapter' in k for k in state_dict_keys)  # 🔥 NEW
     
     # Detect fusion layers
     fusion_layer_indices = set()
@@ -237,6 +238,7 @@ def main():
     print(f"  Vision LoRA: {has_vision_lora}")
     print(f"  Text LoRA: {has_text_lora}")
     print(f"  Vision Gate: {has_vision_gate}")
+    print(f"  Type Adapter: {has_type_adapter}")  # 🔥 NEW
     print(f"  Fusion Layers: {num_fusion_layers}")
     
     # Build model
@@ -256,7 +258,10 @@ def main():
         text_lora_r=16,
         text_lora_alpha=32,
         text_lora_dropout=0.1,
-        use_vision_gate=has_vision_gate
+        use_vision_gate=has_vision_gate,
+        use_type_adapter=has_type_adapter,  # 🔥 NEW
+        type_adapter_rank=64,  # 🔥 NEW
+        type_adapter_bias=2.0  # 🔥 NEW
     ).to(device)
     
     # Load weights
