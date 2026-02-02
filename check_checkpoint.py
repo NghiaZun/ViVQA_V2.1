@@ -18,23 +18,48 @@ if 'model_state_dict' in checkpoint:
     state_dict = checkpoint['model_state_dict']
     print(f"\n✅ Model state dict found with {len(state_dict)} keys")
     
-    # Look for adapter keys
-    adapter_keys = [k for k in state_dict.keys() if 'type_adapter' in k.lower()]
+    # Look for adapter and vision-related keys
+    adapter_keys = [k for k in state_dict.keys() if 'adapter' in k.lower()]
+    vision_keys = [k for k in state_dict.keys() if k.startswith('vision')]
+    gate_keys = [k for k in state_dict.keys() if 'gate' in k.lower()]
+    fusion_keys = [k for k in state_dict.keys() if 'fusion' in k.lower()]
     
     if adapter_keys:
-        print(f"\n🎯 TYPE ADAPTER FOUND! ({len(adapter_keys)} parameters)")
+        print(f"\n🎯 ADAPTER FOUND! ({len(adapter_keys)} parameters)")
         print("\nAdapter parameters:")
-        for key in adapter_keys[:10]:  # Show first 10
+        for key in adapter_keys:
             print(f"  - {key}: {state_dict[key].shape}")
-        if len(adapter_keys) > 10:
-            print(f"  ... and {len(adapter_keys) - 10} more")
     else:
-        print("\n❌ NO TYPE ADAPTER FOUND!")
-        print("\nAll keys:")
-        for key in sorted(state_dict.keys())[:20]:
-            print(f"  - {key}")
-        if len(state_dict) > 20:
-            print(f"  ... and {len(state_dict) - 20} more")
+        print("\n❌ NO ADAPTER KEYS FOUND!")
+    
+    if vision_keys:
+        print(f"\n👁️  Vision-related keys ({len(vision_keys)}):")
+        for key in vision_keys[:10]:
+            print(f"  - {key}: {state_dict[key].shape}")
+        if len(vision_keys) > 10:
+            print(f"  ... and {len(vision_keys) - 10} more")
+    
+    if gate_keys:
+        print(f"\n🚪 Gate keys ({len(gate_keys)}):")
+        for key in gate_keys:
+            print(f"  - {key}: {state_dict[key].shape}")
+    
+    if fusion_keys:
+        print(f"\n🔗 Fusion keys ({len(fusion_keys)}):")
+        for key in fusion_keys[:5]:
+            print(f"  - {key}: {state_dict[key].shape}")
+        if len(fusion_keys) > 5:
+            print(f"  ... and {len(fusion_keys) - 5} more")
+    
+    # Component breakdown
+    print(f"\n📊 Component breakdown:")
+    components = {}
+    for k in state_dict.keys():
+        prefix = k.split('.')[0]
+        components[prefix] = components.get(prefix, 0) + 1
+    
+    for prefix in sorted(components.keys()):
+        print(f"  {prefix}: {components[prefix]} keys")
 else:
     print("\n❌ No model_state_dict found!")
     print(f"Available keys: {list(checkpoint.keys())}")
