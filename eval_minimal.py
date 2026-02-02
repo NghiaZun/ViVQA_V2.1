@@ -234,9 +234,33 @@ def main():
                 fusion_layer_indices.add(int(parts[1]))
     num_fusion_layers = max(fusion_layer_indices) + 1 if fusion_layer_indices else 4
     
+    # 🔥 Detect LoRA ranks from checkpoint weights
+    text_lora_r = 16  # default
+    vision_lora_r = 8  # default
+    
+    if has_text_lora:
+        # Check shape of text LoRA weight to infer rank
+        for key in state_dict_keys:
+            if 'encoder.base_model.model.layers.0.self_attn.q_proj.lora_A.default.weight' in key:
+                shape = checkpoint['model_state_dict'][key].shape
+                text_lora_r = shape[0]  # First dim is rank
+                break
+    
+    if has_vision_lora:
+        # Check shape of vision LoRA weight to infer rank
+        for key in state_dict_keys:
+            if 'vision_lora_A' in key:
+                shape = checkpoint['model_state_dict'][key].shape
+                vision_lora_r = shape[0]  # First dim is rank
+                break
+    
     print(f"\nCheckpoint features:")
     print(f"  Vision LoRA: {has_vision_lora}")
+    if has_vision_lora:
+        print(f"    └─ Rank: {vision_lora_r}")
     print(f"  Text LoRA: {has_text_lora}")
+    if has_text_lora:
+        print(f"    └─ Rank: {text_lora_r}")
     print(f"  Vision Gate: {has_vision_gate}")
     print(f"  Type Adapter: {has_type_adapter}")  # 🔥 NEW
     print(f"  Fusion Layers: {num_fusion_layers}")
@@ -251,11 +275,11 @@ def main():
         dropout=0.1,
         gradient_checkpointing=False,
         use_vision_lora=has_vision_lora,
-        vision_lora_r=8,
+        vision_lora_r=vision_lora_r,
         vision_lora_alpha=16,
         vision_lora_dropout=0.1,
         use_text_lora=has_text_lora,
-        text_lora_r=16,
+        text_lora_r=text_lora_r,
         text_lora_alpha=32,
         text_lora_dropout=0.1,
         use_vision_gate=has_vision_gate,
