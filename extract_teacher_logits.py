@@ -338,12 +338,32 @@ def extract_teachers_for_dataset(
     
     print(f"  ✓ Loaded {len(dataset)} samples")
     
+    # Custom collate to get raw text (teachers need text, not tokens!)
+    def collate_with_text(batch):
+        # Standard collation
+        pixel_values = torch.stack([b['pixel_values'] for b in batch])
+        input_ids = torch.stack([b['input_ids'] for b in batch])
+        attention_mask = torch.stack([b['attention_mask'] for b in batch])
+        labels = torch.stack([b['labels'] for b in batch])
+        
+        # Get raw text from dataset by indices
+        # Need to access dataset.data directly
+        indices = [i for i in range(len(batch))]  # This won't work - need actual indices!
+        
+        return {
+            'pixel_values': pixel_values,
+            'input_ids': input_ids,
+            'attention_mask': attention_mask,
+            'labels': labels,
+            'batch_indices': indices  # Will get text via dataset.data.iloc[idx]
+        }
+    
     # Create dataloader
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=False,
-        num_workers=4,
+        shuffle=False,  # CRITICAL: maintain index order!
+        num_workers=0,  # Single process to track indices
         pin_memory=True
     )
     
@@ -369,14 +389,22 @@ def extract_teachers_for_dataset(
     
     # NO answer outputs - skip distillation for answer generation!
     
+    # Track global index for getting raw text
+    global_idx = 0
+    
     # Extract batch by batch
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Extracting")):
         # Get batch data
         pixel_values = batch['pixel_values'].to(device)
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
-        questions = batch['question']  # List of strings
-        answers = batch['answer']  # List of strings
+        
+        # Get raw text from dataset.data (teachers need text, not tokens!)
+        batch_size_actual = pixel_values.shape[0]
+        batch_indices = range(global_idx, global_idx + batch_size_actual)
+        questions = [dataset.data.iloc[i]['question'] for i in batch_indices]
+        answers = [dataset.data.iloc[i]['answer'] for i in batch_indices]
+        global_idx += batch_size_actual
         
         # (A) Vision teacher: Patch embeddings + CLS + intermediate features
         patch_emb, cls_emb, intermediate_feats = vision_teacher.extract_features(pixel_values)
