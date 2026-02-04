@@ -367,53 +367,70 @@ def extract_teachers_for_dataset(
         pin_memory=True
     )
     
-    # Initialize teachers (VISION + TEXT ONLY)
-    print(f"\n[2/5] Initializing teachers...")
-    vision_teacher = TeacherVisionEncoder(device=device)
-    text_teacher = TeacherTextEncoder(device=device)
-    # NO answer teacher - answers learn from ground truth labels!
+    # ========================================================================
+    # SEQUENTIAL EXTRACTION (to avoid OOM - 2 large models don't fit together!)
+    # ========================================================================
+    # Strategy: Extract vision features first, then text features
+    # This keeps only 1 teacher model on GPU at a time
     
-    # Storage arrays
-    print(f"\n[3/5] Extracting features...")
+    print(f"\n[2/5] STEP 1: Extracting VISION features...")
+    print(f"  (Will extract text features separately to avoid OOM)")
     
-    # Vision outputs
+    # Storage arrays for vision
     vision_patch_emb_list = []
     vision_cls_emb_list = []
     vision_intermediate_list = []
     
-    # Text outputs
-    text_token_emb_list = []
-    text_cls_emb_list = []
-    text_attention_list = []
-    text_qa_similarity_list = []
+    # Initialize vision teacher ONLY
+    vision_teacher = TeacherVisionEncoder(device=device)
     
-    # NO answer outputs - skip distillation for answer generation!
-    
-    # Track global index for getting raw text
+    # Track global index
     global_idx = 0
     
-    # Extract batch by batch
-    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Extracting")):
-        # Get batch data
+    # Extract vision features
+    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Vision")):
         pixel_values = batch['pixel_values'].to(device)
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
         
-        # Get raw text from dataset.data (teachers need text, not tokens!)
-        batch_size_actual = pixel_values.shape[0]
-        batch_indices = range(global_idx, global_idx + batch_size_actual)
-        questions = [dataset.data.iloc[i]['question'] for i in batch_indices]
-        answers = [dataset.data.iloc[i]['answer'] for i in batch_indices]
-        global_idx += batch_size_actual
-        
-        # (A) Vision teacher: Patch embeddings + CLS + intermediate features
+        # Extract vision features
         patch_emb, cls_emb, intermediate_feats = vision_teacher.extract_features(pixel_values)
         
         vision_patch_emb_list.append(patch_emb.cpu().numpy())
         vision_cls_emb_list.append(cls_emb.cpu().numpy())
         vision_intermediate_list.append(intermediate_feats.cpu().numpy())
+    
+    # Free vision teacher from GPU
+    del vision_teacher
+    torch.cuda.empty_cache()
+    print(f"  ✓ Vision extraction complete. GPU memory freed.")
+    
+    # ========================================================================
+    # STEP 2: Extract TEXT features
+    # ========================================================================
+    
+    print(f"\n[3/5] STEP 2: Extracting TEXT features...")
+    
+    # Storage arrays for text
+    text_token_emb_list = []
+    text_cls_emb_list = []
+    text_attention_list = []
+    text_qa_similarity_list = []
+    
+    # Initialize text teacher ONLY
+    text_teacher = TeacherTextEncoder(device=device)
+    
+    # Reset index counter
+    global_idx = 0
+    
+    # Extract text features
+    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Text")):
+        # Get raw text from dataset.data (teachers need text, not tokens!)
+        batch_size_actual = batch['pixel_values'].shape[0]
+        batch_indices = range(global_idx, global_idx + batch_size_actual)
+        questions = [dataset.data.iloc[i]['question'] for i in batch_indices]
+        answers = [dataset.data.iloc[i]['answer'] for i in batch_indices]
+        global_idx += batch_size_actual
         
-        # (B) Text teacher: Question embeddings + attention patterns + Q-A similarity
+        # Extract text features
         token_emb, text_cls, attention_weights = text_teacher.extract_question_embeddings(questions)
         qa_similarity = text_teacher.compute_qa_similarity(questions, answers)
         
@@ -421,12 +438,19 @@ def extract_teachers_for_dataset(
         text_cls_emb_list.append(text_cls.cpu().numpy())
         text_attention_list.append(attention_weights.cpu().numpy())
         text_qa_similarity_list.append(qa_similarity.cpu().numpy())
-        
-        # (C) Answer generation: NO distillation - learns from ground truth only!
+    
+    # Free text teacher from GPU
+    del text_teacher
+    torch.cuda.empty_cache()
+    print(f"  ✓ Text extraction complete. GPU memory freed.")
+    
+    # ========================================================================
+    # STEP 3: Concatenate and save
+    # ========================================================================
+    
+    print(f"\n[4/5] Concatenating all features...")
     
     # Concatenate all batches
-    print(f"\n[4/5] Saving to {output_dir}...")
-    
     # Vision features
     vision_patch_emb = np.concatenate(vision_patch_emb_list, axis=0)
     vision_cls_emb = np.concatenate(vision_cls_emb_list, axis=0)
@@ -438,7 +462,7 @@ def extract_teachers_for_dataset(
     text_attention = np.concatenate(text_attention_list, axis=0)
     text_qa_similarity = np.concatenate(text_qa_similarity_list, axis=0)
     
-    # NO answer features - answers learn from ground truth labels!
+    print(f"  ✓ All features concatenated")
     
     # Save to .npy files
     print(f"\n[5/5] Saving to {output_dir}...")
