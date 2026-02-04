@@ -47,7 +47,7 @@ from transformers import (
 # Reuse dataset from existing code
 import sys
 sys.path.append(os.path.dirname(__file__))
-from dataset import ViVQADataset
+from dataset import VQAGenDataset  # CORRECTED: VQAGenDataset not ViVQADataset
 
 
 class TeacherVisionEncoder:
@@ -320,7 +320,17 @@ def extract_teachers_for_dataset(
     
     # Load dataset
     print(f"\n[1/5] Loading dataset: {csv_path}")
-    dataset = ViVQADataset(csv_path, image_folder, split='train')
+    
+    # Create vision processor for dataset
+    from transformers import AutoProcessor
+    vision_processor = AutoProcessor.from_pretrained('google/siglip-base-patch16-224')
+    
+    dataset = VQAGenDataset(
+        csv_path=csv_path,
+        image_folder=image_folder,
+        vision_processor=vision_processor,
+        include_question_type=False
+    )
     
     if max_samples:
         dataset.data = dataset.data[:max_samples]
