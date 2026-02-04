@@ -77,18 +77,16 @@ class TeacherVisionEncoder:
         print(f"  📊 Model: ~400-430M params (SO400M = 400M training pairs)")
         self.device = device
         
-        # Load full SigLIP model
-        self.model = AutoModel.from_pretrained(model_name).to(device)
-        self.model.eval()
-        
-        # Extract vision encoder
-        self.vision_encoder = self.model.vision_model
+        # Load vision model directly (not full SigLIP model)
+        from transformers import SiglipVisionModel
+        self.vision_encoder = SiglipVisionModel.from_pretrained(model_name).to(device)
+        self.vision_encoder.eval()
         
         # Processor for 384px images
         self.processor = AutoImageProcessor.from_pretrained(model_name)
         
         # Get hidden dimension
-        self.hidden_dim = self.model.config.vision_config.hidden_size
+        self.hidden_dim = self.vision_encoder.config.hidden_size
         print(f"  ✓ Vision teacher loaded: {self.hidden_dim}D features, 729 patches (patch14@384px)")
         print(f"  ✓ Advantage: 4-5× student capacity + multilingual alignment")
     
