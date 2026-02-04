@@ -27,7 +27,7 @@ python extract_teacher_logits.py \
     --csv_path train.csv \
     --image_folder vivqa/images \
     --output_dir /kaggle/working/teacher_cache \
-    --batch_size 16 \
+    --batch_size 8 \
     --device cuda
 
 echo ""
@@ -39,7 +39,7 @@ python extract_teacher_logits.py \
     --csv_path OpenViVQA/dev.json \
     --image_folder vivqa/images \
     --output_dir /kaggle/working/teacher_cache \
-    --batch_size 16 \
+    --batch_size 8 \
     --device cuda
 
 echo ""

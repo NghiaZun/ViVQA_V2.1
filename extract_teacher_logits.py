@@ -285,7 +285,7 @@ def extract_teachers_for_dataset(
     image_folder,
     output_dir,
     student_checkpoint_path,
-    batch_size=16,
+    batch_size=8,  # Reduced from 16 to avoid OOM (large teacher models!)
     max_samples=None,
     device='cuda'
 ):
@@ -394,9 +394,15 @@ def extract_teachers_for_dataset(
         # Extract vision features
         patch_emb, cls_emb, intermediate_feats = vision_teacher.extract_features(pixel_values)
         
+        # Move to CPU immediately to free GPU memory
         vision_patch_emb_list.append(patch_emb.cpu().numpy())
         vision_cls_emb_list.append(cls_emb.cpu().numpy())
         vision_intermediate_list.append(intermediate_feats.cpu().numpy())
+        
+        # Free GPU memory after each batch (prevents accumulation)
+        del pixel_values, patch_emb, cls_emb, intermediate_feats
+        if batch_idx % 10 == 0:  # Clear cache every 10 batches
+            torch.cuda.empty_cache()
     
     # Free vision teacher from GPU
     del vision_teacher
@@ -434,10 +440,16 @@ def extract_teachers_for_dataset(
         token_emb, text_cls, attention_weights = text_teacher.extract_question_embeddings(questions)
         qa_similarity = text_teacher.compute_qa_similarity(questions, answers)
         
+        # Move to CPU immediately to free GPU memory
         text_token_emb_list.append(token_emb.cpu().numpy())
         text_cls_emb_list.append(text_cls.cpu().numpy())
         text_attention_list.append(attention_weights.cpu().numpy())
         text_qa_similarity_list.append(qa_similarity.cpu().numpy())
+        
+        # Free GPU memory after each batch
+        del token_emb, text_cls, attention_weights, qa_similarity
+        if batch_idx % 10 == 0:
+            torch.cuda.empty_cache()
     
     # Free text teacher from GPU
     del text_teacher
@@ -534,8 +546,8 @@ if __name__ == '__main__':
                        help='Output directory for .npy files')
     parser.add_argument('--student_checkpoint', type=str, default=None,
                        help='[UNUSED - kept for compatibility]')
-    parser.add_argument('--batch_size', type=int, default=16,
-                       help='Batch size for extraction (lower if OOM)')
+    parser.add_argument('--batch_size', type=int, default=8,
+                       help='Batch size for extraction (default: 8, lower if OOM on smaller GPUs)')
     parser.add_argument('--max_samples', type=int, default=None,
                        help='Limit samples for testing (None = full dataset)')
     parser.add_argument('--device', type=str, default='cuda',
