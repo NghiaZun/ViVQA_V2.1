@@ -79,7 +79,10 @@ class TeacherVisionEncoder:
         
         # Load vision model directly (not full SigLIP model)
         from transformers import SiglipVisionModel
-        self.vision_encoder = SiglipVisionModel.from_pretrained(model_name).to(device)
+        self.vision_encoder = SiglipVisionModel.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16  # 🔥 Load in FP16 to save VRAM!
+        ).to(device)
         self.vision_encoder.eval()
         
         # Processor for 384px images
@@ -87,7 +90,15 @@ class TeacherVisionEncoder:
         
         # Get hidden dimension
         self.hidden_dim = self.vision_encoder.config.hidden_size
-        print(f"  ✓ Vision teacher loaded: {self.hidden_dim}D features, 729 patches (patch14@384px)")
+        
+        # 🔥 Print memory usage
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(device) / 1e9
+            reserved = torch.cuda.memory_reserved(device) / 1e9
+            print(f"  ✓ Vision teacher loaded: {self.hidden_dim}D features, 729 patches (patch14@384px)")
+            print(f"  ✓ GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+        else:
+            print(f"  ✓ Vision teacher loaded: {self.hidden_dim}D features, 729 patches (patch14@384px)")
         print(f"  ✓ Advantage: 4-5× student capacity + multilingual alignment")
     
     @torch.no_grad()
@@ -177,8 +188,11 @@ class TeacherTextEncoder:
         print(f"  📊 Role: REPRESENTATION teacher (NOT generative!)")
         self.device = device
         
-        # Load PhoBERT-large
-        self.model = AutoModelForMaskedLM.from_pretrained(model_name).to(device)
+        # Load PhoBERT-large in FP16 to save VRAM
+        self.model = AutoModelForMaskedLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16  # 🔥 Load in FP16!
+        ).to(device)
         self.model.eval()
         
         # Tokenizer
@@ -186,7 +200,15 @@ class TeacherTextEncoder:
         
         # Hidden dimension
         self.hidden_dim = self.model.config.hidden_size
-        print(f"  ✓ Text teacher loaded: {self.hidden_dim}D features")
+        
+        # 🔥 Print memory usage
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(device) / 1e9
+            reserved = torch.cuda.memory_reserved(device) / 1e9
+            print(f"  ✓ Text teacher loaded: {self.hidden_dim}D features")
+            print(f"  ✓ GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+        else:
+            print(f"  ✓ Text teacher loaded: {self.hidden_dim}D features")
         print(f"  ✓ Will teach: question embeddings + attention patterns + Q-A similarity")
     
     @torch.no_grad()
@@ -375,34 +397,79 @@ def extract_teachers_for_dataset(
     
     print(f"\n[2/5] STEP 1: Extracting VISION features...")
     print(f"  (Will extract text features separately to avoid OOM)")
-    
-    # Storage arrays for vision
-    vision_patch_emb_list = []
-    vision_cls_emb_list = []
-    vision_intermediate_list = []
+    print(f"  🔥 Using memory-mapped arrays to avoid RAM overflow")
     
     # Initialize vision teacher ONLY
     vision_teacher = TeacherVisionEncoder(device=device)
     
-    # Track global index
-    global_idx = 0
+    # Get feature dimensions from first batch
+    print(f"  Getting feature dimensions from first sample...")
+    first_batch = next(iter(dataloader))
+    first_pixel = first_batch['pixel_values'][:1].to(device)
+    with torch.no_grad():
+        sample_patch, sample_cls, sample_intermediate = vision_teacher.extract_features(first_pixel)
     
-    # Extract vision features
+    patch_shape = sample_patch.shape[1:]  # (729, hidden)
+    cls_shape = sample_cls.shape[1:]      # (hidden,)
+    intermediate_shape = sample_intermediate.shape[1:]  # (4, 729, hidden)
+    
+    del first_batch, first_pixel, sample_patch, sample_cls, sample_intermediate
+    torch.cuda.empty_cache()
+    
+    # Create memory-mapped arrays (can be larger than RAM!)
+    num_samples = len(dataset)
+    split_name = Path(csv_path).stem
+    
+    print(f"  Creating memory-mapped arrays for {num_samples} samples...")
+    vision_patch_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/vision_patch_emb_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *patch_shape)
+    )
+    vision_cls_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/vision_cls_emb_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *cls_shape)
+    )
+    vision_intermediate_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/vision_intermediate_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *intermediate_shape)
+    )
+    
+    # Extract vision features and write directly to memmap
+    global_idx = 0
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Vision")):
         pixel_values = batch['pixel_values'].to(device)
+        batch_size_actual = pixel_values.shape[0]
         
         # Extract vision features
         patch_emb, cls_emb, intermediate_feats = vision_teacher.extract_features(pixel_values)
         
-        # Move to CPU immediately to free GPU memory
-        vision_patch_emb_list.append(patch_emb.cpu().numpy())
-        vision_cls_emb_list.append(cls_emb.cpu().numpy())
-        vision_intermediate_list.append(intermediate_feats.cpu().numpy())
+        # Write to memmap arrays (by index, not batch!)
+        start_idx = global_idx
+        end_idx = global_idx + batch_size_actual
         
-        # Free GPU memory after each batch (prevents accumulation)
+        vision_patch_mmap[start_idx:end_idx] = patch_emb.cpu().numpy()
+        vision_cls_mmap[start_idx:end_idx] = cls_emb.cpu().numpy()
+        vision_intermediate_mmap[start_idx:end_idx] = intermediate_feats.cpu().numpy()
+        
+        global_idx += batch_size_actual
+        
+        # Free GPU memory after each batch
         del pixel_values, patch_emb, cls_emb, intermediate_feats
-        if batch_idx % 10 == 0:  # Clear cache every 10 batches
+        if batch_idx % 10 == 0:
             torch.cuda.empty_cache()
+    
+    # Flush memmap to disk
+    vision_patch_mmap.flush()
+    vision_cls_mmap.flush()
+    vision_intermediate_mmap.flush()
+    
+    del vision_patch_mmap, vision_cls_mmap, vision_intermediate_mmap
     
     # Free vision teacher from GPU
     del vision_teacher
@@ -414,42 +481,91 @@ def extract_teachers_for_dataset(
     # ========================================================================
     
     print(f"\n[3/5] STEP 2: Extracting TEXT features...")
-    
-    # Storage arrays for text
-    text_token_emb_list = []
-    text_cls_emb_list = []
-    text_attention_list = []
-    text_qa_similarity_list = []
+    print(f"  🔥 Using memory-mapped arrays to avoid RAM overflow")
     
     # Initialize text teacher ONLY
     text_teacher = TeacherTextEncoder(device=device)
     
-    # Reset index counter
-    global_idx = 0
+    # Get feature dimensions from first sample
+    print(f"  Getting feature dimensions from first sample...")
+    first_questions = [dataset.data.iloc[0]['question']]
+    first_answers = [dataset.data.iloc[0]['answer']]
     
-    # Extract text features
+    with torch.no_grad():
+        sample_token, sample_cls, sample_attn = text_teacher.extract_question_embeddings(first_questions)
+        sample_qa_sim = text_teacher.compute_qa_similarity(first_questions, first_answers)
+    
+    token_shape = sample_token.shape[1:]  # (seq, 1024)
+    cls_shape = sample_cls.shape[1:]      # (1024,)
+    attn_shape = sample_attn.shape[1:]    # (heads, seq, seq)
+    qa_sim_shape = sample_qa_sim.shape[1:] if len(sample_qa_sim.shape) > 1 else ()  # scalar or shape
+    
+    del sample_token, sample_cls, sample_attn, sample_qa_sim
+    torch.cuda.empty_cache()
+    
+    # Create memory-mapped arrays for text features
+    print(f"  Creating memory-mapped arrays for {num_samples} samples...")
+    text_token_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/text_token_emb_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *token_shape)
+    )
+    text_cls_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/text_cls_emb_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *cls_shape)
+    )
+    text_attention_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/text_attention_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples, *attn_shape)
+    )
+    text_qa_sim_mmap = np.lib.format.open_memmap(
+        f"{output_dir}/text_qa_similarity_{split_name}.npy",
+        mode='w+',
+        dtype=np.float32,
+        shape=(num_samples,) if qa_sim_shape == () else (num_samples, *qa_sim_shape)
+    )
+    
+    # Extract text features and write directly to memmap
+    global_idx = 0
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Text")):
         # Get raw text from dataset.data (teachers need text, not tokens!)
         batch_size_actual = batch['pixel_values'].shape[0]
         batch_indices = range(global_idx, global_idx + batch_size_actual)
         questions = [dataset.data.iloc[i]['question'] for i in batch_indices]
         answers = [dataset.data.iloc[i]['answer'] for i in batch_indices]
-        global_idx += batch_size_actual
         
         # Extract text features
         token_emb, text_cls, attention_weights = text_teacher.extract_question_embeddings(questions)
         qa_similarity = text_teacher.compute_qa_similarity(questions, answers)
         
-        # Move to CPU immediately to free GPU memory
-        text_token_emb_list.append(token_emb.cpu().numpy())
-        text_cls_emb_list.append(text_cls.cpu().numpy())
-        text_attention_list.append(attention_weights.cpu().numpy())
-        text_qa_similarity_list.append(qa_similarity.cpu().numpy())
+        # Write to memmap arrays
+        start_idx = global_idx
+        end_idx = global_idx + batch_size_actual
+        
+        text_token_mmap[start_idx:end_idx] = token_emb.cpu().numpy()
+        text_cls_mmap[start_idx:end_idx] = text_cls.cpu().numpy()
+        text_attention_mmap[start_idx:end_idx] = attention_weights.cpu().numpy()
+        text_qa_sim_mmap[start_idx:end_idx] = qa_similarity.cpu().numpy()
+        
+        global_idx += batch_size_actual
         
         # Free GPU memory after each batch
         del token_emb, text_cls, attention_weights, qa_similarity
         if batch_idx % 10 == 0:
             torch.cuda.empty_cache()
+    
+    # Flush memmap to disk
+    text_token_mmap.flush()
+    text_cls_mmap.flush()
+    text_attention_mmap.flush()
+    text_qa_sim_mmap.flush()
+    
+    del text_token_mmap, text_cls_mmap, text_attention_mmap, text_qa_sim_mmap
     
     # Free text teacher from GPU
     del text_teacher
@@ -457,39 +573,19 @@ def extract_teachers_for_dataset(
     print(f"  ✓ Text extraction complete. GPU memory freed.")
     
     # ========================================================================
-    # STEP 3: Concatenate and save
+    # STEP 3: Save metadata
     # ========================================================================
     
-    print(f"\n[4/5] Concatenating all features...")
+    print(f"\n[4/5] Creating metadata...")
     
-    # Concatenate all batches
-    # Vision features
-    vision_patch_emb = np.concatenate(vision_patch_emb_list, axis=0)
-    vision_cls_emb = np.concatenate(vision_cls_emb_list, axis=0)
-    vision_intermediate = np.concatenate(vision_intermediate_list, axis=0)
-    
-    # Text features
-    text_token_emb = np.concatenate(text_token_emb_list, axis=0)
-    text_cls_emb = np.concatenate(text_cls_emb_list, axis=0)
-    text_attention = np.concatenate(text_attention_list, axis=0)
-    text_qa_similarity = np.concatenate(text_qa_similarity_list, axis=0)
-    
-    print(f"  ✓ All features concatenated")
-    
-    # Save to .npy files
-    print(f"\n[5/5] Saving to {output_dir}...")
-    split_name = Path(csv_path).stem  # 'train' or 'val'
-    
-    # Vision outputs
-    np.save(f"{output_dir}/vision_patch_emb_{split_name}.npy", vision_patch_emb)
-    np.save(f"{output_dir}/vision_cls_emb_{split_name}.npy", vision_cls_emb)
-    np.save(f"{output_dir}/vision_intermediate_{split_name}.npy", vision_intermediate)
-    
-    # Text outputs
-    np.save(f"{output_dir}/text_token_emb_{split_name}.npy", text_token_emb)
-    np.save(f"{output_dir}/text_cls_emb_{split_name}.npy", text_cls_emb)
-    np.save(f"{output_dir}/text_attention_{split_name}.npy", text_attention)
-    np.save(f"{output_dir}/text_qa_similarity_{split_name}.npy", text_qa_similarity)
+    # Load one sample to get final shapes
+    vision_patch_emb = np.load(f"{output_dir}/vision_patch_emb_{split_name}.npy", mmap_mode='r')
+    vision_cls_emb = np.load(f"{output_dir}/vision_cls_emb_{split_name}.npy", mmap_mode='r')
+    vision_intermediate = np.load(f"{output_dir}/vision_intermediate_{split_name}.npy", mmap_mode='r')
+    text_token_emb = np.load(f"{output_dir}/text_token_emb_{split_name}.npy", mmap_mode='r')
+    text_cls_emb = np.load(f"{output_dir}/text_cls_emb_{split_name}.npy", mmap_mode='r')
+    text_attention = np.load(f"{output_dir}/text_attention_{split_name}.npy", mmap_mode='r')
+    text_qa_similarity = np.load(f"{output_dir}/text_qa_similarity_{split_name}.npy", mmap_mode='r')
     
     # Save metadata
     metadata = {
