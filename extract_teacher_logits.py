@@ -321,9 +321,11 @@ def extract_teachers_for_dataset(
     # Load dataset
     print(f"\n[1/5] Loading dataset: {csv_path}")
     
-    # Create vision processor for dataset
+    # CRITICAL: Use TEACHER's vision processor (SO400M), not student's!
+    # Teacher expects 384x384 images (729 patches), student uses 224x224 (256 patches)
     from transformers import AutoProcessor
-    vision_processor = AutoProcessor.from_pretrained('google/siglip-base-patch16-224')
+    vision_processor = AutoProcessor.from_pretrained('google/siglip-so400m-patch14-384')
+    print(f"  Using SigLIP-SO400M processor: 384x384 images → 729 patches")
     
     dataset = VQAGenDataset(
         csv_path=csv_path,
