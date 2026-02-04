@@ -1,22 +1,23 @@
 """
-TEACHER LOGITS EXTRACTION FOR OFFLINE DISTILLATION
-===================================================
+TEACHER REPRESENTATIONS EXTRACTION FOR OFFLINE DISTILLATION
+============================================================
 
-Extract high-capacity teacher outputs for knowledge distillation.
+Extract high-capacity teacher REPRESENTATIONS (not logits!) for knowledge distillation.
 
-Teachers:
-  1. Vision: SigLIP-SO400M/14 (878M params, 384px, multilingual)
+Teachers (NO student checkpoint needed!):
+  1. Vision: SigLIP-SO400M/14 (~400-430M params, 384px, multilingual)
   2. Text: PhoBERT-large (307M params, Vietnamese-optimized)
 
-Outputs saved to .npy files for offline training:
-  - vision_features_train.npy: [10200, 729, 1152]  # 729 patches from 384px
-  - text_features_train.npy: [10200, seq_len, 1024]
-  - answer_logits_train.npy: [10200, max_len, vocab_size]
+What is saved (REPRESENTATIONS ONLY):
+  - vision_patch_emb_train.npy: [10200, 729, hidden] - Spatial features
+  - vision_cls_emb_train.npy: [10200, hidden] - Global scene
+  - text_token_emb_train.npy: [10200, seq, 1024] - Question embeddings
+  - text_cls_emb_train.npy: [10200, 1024] - Question representation
   
-Storage: ~2.5GB for full dataset (train + val)
-Runtime: ~2 hours on GPU for 12K samples
+Storage: ~2.0GB for full dataset (train + val)
+Runtime: ~1.5 hours on GPU for 12K samples
 
-Usage:
+Usage (NO checkpoint required!):
     python extract_teacher_logits.py \
         --csv_path train.csv \
         --image_folder vivqa/images \
@@ -281,98 +282,6 @@ class TeacherTextEncoder:
         return qa_similarity
 
 
-class AnswerTeacher:
-    """
-    Answer Teacher: Use TRAINED student decoder from r=96 checkpoint
-    
-    CRITICAL DESIGN DECISION:
-    ❌ PhoBERT CANNOT be answer teacher (it's MLM, not generative!)
-    ✅ Use student's OWN decoder that was already trained to r=96 (65.78% EM)
-    
-    Why this works:
-    - r=96 checkpoint already learned good answer generation (65.78% EM)
-    - We distill from "future self" (self-distillation / teacher-student self-training)
-    - Benefits: No need external generative model, consistent architecture
-    
-    Alternative approaches (if needed):
-    - Use mBART-large or mT5-base (multilingual seq2seq)
-    - But adds complexity + VRAM overhead
-    - Current approach is simpler and proven effective in literature
-    
-    What to teach:
-    ✅ Answer token distribution (soft labels from trained decoder)
-    ✅ Decoder attention patterns (how to attend to vision+text)
-    ❌ NOT PhoBERT logits (it doesn't generate answers!)
-    """
-    def __init__(self, checkpoint_path, device='cuda'):
-        print(f"[Answer Teacher] Loading TRAINED student decoder from checkpoint...")
-        print(f"  📊 Using r=96 checkpoint (65.78% EM) as answer teacher")
-        print(f"  📊 Strategy: Self-distillation (student learns from own trained weights)")
-        self.device = device
-        
-        # Load trained student model
-        from model_no_latent import DeterministicVQA
-        
-        self.model = DeterministicVQA(
-            vision_model_name='google/siglip-base-patch16-224',
-            bartpho_model_name='vinai/bartpho-syllable',
-            num_fusion_layers=6,
-            use_text_lora=True,
-            text_lora_r=96,
-            text_lora_alpha=192,
-            gradient_checkpointing=False
-        ).to(device)
-        
-        # Load trained weights
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        self.model.eval()
-        
-        print(f"  ✓ Answer teacher loaded from: {checkpoint_path}")
-        print(f"  ✓ Will teach: answer distribution + decoder attention patterns")
-    
-    @torch.no_grad()
-    def generate_answer_distribution(
-        self,
-        pixel_values,
-        input_ids,
-        attention_mask,
-        answer_input_ids,
-        question_types=None
-    ):
-        """
-        Generate answer distribution using trained student decoder
-        
-        Args:
-            pixel_values: [B, 3, H, W] - Images
-            input_ids: [B, seq_len] - Question tokens
-            attention_mask: [B, seq_len] - Question mask
-            answer_input_ids: [B, max_len] - Ground truth answer (for teacher forcing)
-            question_types: [B] - Question types (optional)
-        
-        Returns:
-            answer_logits: [B, max_len, vocab_size] - Soft answer distribution
-            decoder_attention: [B, num_heads, max_len, seq_len] - Cross-attention patterns
-        """
-        # Forward through trained model
-        outputs = self.model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=answer_input_ids,
-            question_types=question_types
-        )
-        
-        # Get answer logits (teacher's prediction)
-        answer_logits = outputs.answer_logits  # [B, max_len, vocab_size]
-        
-        # TODO: Extract decoder cross-attention if needed
-        # (requires modifying model to return attention weights)
-        decoder_attention = None
-        
-        return answer_logits, decoder_attention
-
-
 def extract_teachers_for_dataset(
     csv_path,
     image_folder,
@@ -385,25 +294,25 @@ def extract_teachers_for_dataset(
     """
     Extract teacher features for entire dataset and save to .npy files
     
-    CORRECTED APPROACH:
+    CORRECTED APPROACH (VISION + TEXT REPRESENTATIONS ONLY):
     - Vision: SigLIP-SO400M (~400-430M params) for patch embeddings + CLS + intermediate features
     - Text: PhoBERT-large (307M) for question embeddings + attention patterns + Q-A similarity
-    - Answer: Trained student r=96 checkpoint (self-distillation)
+    - Answer: Learn from ground truth labels (NO answer teacher needed)
     
     Args:
         csv_path: Path to train.csv or val.csv
         image_folder: Path to vivqa/images
         output_dir: Where to save .npy files
-        student_checkpoint_path: Path to trained r=96 checkpoint (for answer teacher)
+        student_checkpoint_path: [UNUSED - kept for compatibility]
         batch_size: Batch size for extraction
         max_samples: Limit samples for testing (None = full dataset)
     """
     print("="*80)
-    print("TEACHER FEATURE EXTRACTION (CORRECTED)")
+    print("TEACHER REPRESENTATIONS EXTRACTION")
     print("="*80)
     print("Vision: SigLIP-SO400M (~400-430M params)")
     print("Text: PhoBERT-large (307M params, representation teacher)")
-    print("Answer: Trained student r=96 (self-distillation)")
+    print("Answer: Ground truth labels ONLY (no distillation)")
     print("="*80)
     
     # Create output directory
@@ -428,11 +337,11 @@ def extract_teachers_for_dataset(
         pin_memory=True
     )
     
-    # Initialize teachers
+    # Initialize teachers (VISION + TEXT ONLY)
     print(f"\n[2/5] Initializing teachers...")
     vision_teacher = TeacherVisionEncoder(device=device)
     text_teacher = TeacherTextEncoder(device=device)
-    answer_teacher = AnswerTeacher(student_checkpoint_path, device=device)
+    # NO answer teacher - answers learn from ground truth labels!
     
     # Storage arrays
     print(f"\n[3/5] Extracting features...")
@@ -448,8 +357,7 @@ def extract_teachers_for_dataset(
     text_attention_list = []
     text_qa_similarity_list = []
     
-    # Answer outputs
-    answer_logits_list = []
+    # NO answer outputs - skip distillation for answer generation!
     
     # Extract batch by batch
     for batch_idx, batch in enumerate(tqdm(dataloader, desc="Extracting")):
@@ -476,31 +384,7 @@ def extract_teachers_for_dataset(
         text_attention_list.append(attention_weights.cpu().numpy())
         text_qa_similarity_list.append(qa_similarity.cpu().numpy())
         
-        # (C) Answer teacher: Use trained student r=96 checkpoint
-        answer_encodings = answer_teacher.model.tokenizer(
-            answers,
-            padding=True,
-            truncation=True,
-            max_length=20,
-            return_tensors='pt'
-        )
-        answer_input_ids = answer_encodings['input_ids'].to(device)
-        
-        # Get question types if available in batch
-        question_types = batch.get('question_type', None)
-        if question_types is not None:
-            question_types = question_types.to(device)
-        
-        # Generate answer distribution from trained student
-        answer_logits, _ = answer_teacher.generate_answer_distribution(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            answer_input_ids=answer_input_ids,
-            question_types=question_types
-        )
-        
-        answer_logits_list.append(answer_logits.cpu().numpy())
+        # (C) Answer generation: NO distillation - learns from ground truth only!
     
     # Concatenate all batches
     print(f"\n[4/5] Saving to {output_dir}...")
@@ -516,8 +400,7 @@ def extract_teachers_for_dataset(
     text_attention = np.concatenate(text_attention_list, axis=0)
     text_qa_similarity = np.concatenate(text_qa_similarity_list, axis=0)
     
-    # Answer features
-    answer_logits = np.concatenate(answer_logits_list, axis=0)
+    # NO answer features - answers learn from ground truth labels!
     
     # Save to .npy files
     print(f"\n[5/5] Saving to {output_dir}...")
@@ -534,9 +417,6 @@ def extract_teachers_for_dataset(
     np.save(f"{output_dir}/text_attention_{split_name}.npy", text_attention)
     np.save(f"{output_dir}/text_qa_similarity_{split_name}.npy", text_qa_similarity)
     
-    # Answer outputs
-    np.save(f"{output_dir}/answer_logits_{split_name}.npy", answer_logits)
-    
     # Save metadata
     metadata = {
         'num_samples': len(vision_patch_emb),
@@ -547,10 +427,9 @@ def extract_teachers_for_dataset(
         'text_cls_emb_shape': text_cls_emb.shape,
         'text_attention_shape': text_attention.shape,
         'text_qa_similarity_shape': text_qa_similarity.shape,
-        'answer_logits_shape': answer_logits.shape,
         'vision_teacher': 'google/siglip-so400m-patch14-384 (~400-430M params)',
         'text_teacher': 'vinai/phobert-large (307M params, representation teacher)',
-        'answer_teacher': 'Trained student r=96 checkpoint (self-distillation)',
+        'answer_supervision': 'Ground truth labels ONLY (no distillation)',
         'csv_path': csv_path
     }
     
@@ -570,13 +449,10 @@ def extract_teachers_for_dataset(
     print(f"  - CLS embedding: {text_cls_emb.shape} ({text_cls_emb.nbytes/1e6:.2f} MB)")
     print(f"  - Attention patterns: {text_attention.shape} ({text_attention.nbytes/1e6:.2f} MB)")
     print(f"  - Q-A similarity: {text_qa_similarity.shape} ({text_qa_similarity.nbytes/1e6:.2f} MB)")
-    print(f"\nAnswer outputs:")
-    print(f"  - Answer logits: {answer_logits.shape} ({answer_logits.nbytes/1e9:.2f} GB)")
     
     total_size = (
         vision_patch_emb.nbytes + vision_cls_emb.nbytes + vision_intermediate.nbytes +
-        text_token_emb.nbytes + text_cls_emb.nbytes + text_attention.nbytes + text_qa_similarity.nbytes +
-        answer_logits.nbytes
+        text_token_emb.nbytes + text_cls_emb.nbytes + text_attention.nbytes + text_qa_similarity.nbytes
     )
     print(f"\n💾 Total storage: {total_size/1e9:.2f} GB")
     print(f"📁 Saved to: {output_dir}")
@@ -585,7 +461,7 @@ def extract_teachers_for_dataset(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Extract teacher features for offline distillation (CORRECTED VERSION)'
+        description='Extract teacher representations for offline distillation (Vision + Text ONLY)'
     )
     
     parser.add_argument('--csv_path', type=str, required=True,
@@ -594,8 +470,8 @@ if __name__ == '__main__':
                        help='Path to vivqa/images folder')
     parser.add_argument('--output_dir', type=str, default='/kaggle/working/teacher_cache',
                        help='Output directory for .npy files')
-    parser.add_argument('--student_checkpoint', type=str, required=True,
-                       help='Path to trained r=96 checkpoint (for answer teacher)')
+    parser.add_argument('--student_checkpoint', type=str, default=None,
+                       help='[UNUSED - kept for compatibility]')
     parser.add_argument('--batch_size', type=int, default=16,
                        help='Batch size for extraction (lower if OOM)')
     parser.add_argument('--max_samples', type=int, default=None,
@@ -610,7 +486,7 @@ if __name__ == '__main__':
         csv_path=args.csv_path,
         image_folder=args.image_folder,
         output_dir=args.output_dir,
-        student_checkpoint_path=args.student_checkpoint,
+        student_checkpoint_path=args.student_checkpoint,  # Ignored
         batch_size=args.batch_size,
         max_samples=args.max_samples,
         device=args.device
@@ -625,9 +501,10 @@ if __name__ == '__main__':
     print(f"       --image_folder vivqa/images \\")
     print(f"       --output_dir {args.output_dir}")
     print()
-    print("2. Modify train_no_latent.py to load teacher features:")
-    print("   - Add TeacherDistillationDataset class")
-    print("   - Add distillation losses (vision KD + text KD + answer KD)")
+    print("2. Implement training code with vision + text distillation:")
+    print("   - Add TeacherDistillationDataset loading vision+text .npy files")
+    print("   - Add distillation losses (vision KD + text KD ONLY)")
+    print("   - Answer generation learns from ground truth labels!")
     print("   - Weight: 0.3*vision_kd + 0.3*text_kd + 0.4*answer_kd + 1.0*ce_loss")
     print()
     print("3. Train with distillation:")
