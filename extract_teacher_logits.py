@@ -1,0 +1,639 @@
+"""
+TEACHER LOGITS EXTRACTION FOR OFFLINE DISTILLATION
+===================================================
+
+Extract high-capacity teacher outputs for knowledge distillation.
+
+Teachers:
+  1. Vision: SigLIP-SO400M/14 (878M params, 384px, multilingual)
+  2. Text: PhoBERT-large (307M params, Vietnamese-optimized)
+
+Outputs saved to .npy files for offline training:
+  - vision_features_train.npy: [10200, 729, 1152]  # 729 patches from 384px
+  - text_features_train.npy: [10200, seq_len, 1024]
+  - answer_logits_train.npy: [10200, max_len, vocab_size]
+  
+Storage: ~2.5GB for full dataset (train + val)
+Runtime: ~2 hours on GPU for 12K samples
+
+Usage:
+    python extract_teacher_logits.py \
+        --csv_path train.csv \
+        --image_folder vivqa/images \
+        --output_dir /kaggle/working/teacher_cache \
+        --batch_size 32
+"""
+
+import os
+import json
+import argparse
+import numpy as np
+from tqdm import tqdm
+from pathlib import Path
+
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from PIL import Image
+
+from transformers import (
+    AutoModel,
+    AutoImageProcessor,
+    AutoTokenizer,
+    AutoModelForMaskedLM
+)
+
+# Reuse dataset from existing code
+import sys
+sys.path.append(os.path.dirname(__file__))
+from dataset import ViVQADataset
+
+
+class TeacherVisionEncoder:
+    """
+    SigLIP-SO400M/14 Vision Teacher (~400-430M params)
+    
+    CRITICAL CORRECTION:
+    - SO400M = 400M training image-text PAIRS (not params!)
+    - Model params: ~400-430M (NOT 878M - that was config misread)
+    
+    Why this is the RIGHT teacher for Vietnamese VQA:
+    ✅ Multilingual contrastive alignment (includes Vietnamese contexts)
+    ✅ 4-5× student capacity (400M vs 90M SigLIP-base)
+    ✅ 729 patches (patch14@384px) vs 196 patches (patch16@224px) = richer spatial info
+    ✅ Contrastive signal is "smooth" → excellent for KD (vs classification teachers)
+    
+    What to distill (THESIS-CRITICAL):
+    1. CLS embedding: Global scene understanding
+    2. Patch embeddings: Spatial visual features (downsample 729→196 to match student)
+    3. Image-text similarity: Cross-modal alignment score
+    4. (Optional) Intermediate layer features: Multi-scale representations
+    
+    ❌ NOT JUST LOGITS! Representation learning is key for VQA.
+    """
+    def __init__(self, model_name='google/siglip-so400m-patch14-384', device='cuda'):
+        print(f"[Vision Teacher] Loading {model_name}...")
+        print(f"  📊 Model: ~400-430M params (SO400M = 400M training pairs)")
+        self.device = device
+        
+        # Load full SigLIP model
+        self.model = AutoModel.from_pretrained(model_name).to(device)
+        self.model.eval()
+        
+        # Extract vision encoder
+        self.vision_encoder = self.model.vision_model
+        
+        # Processor for 384px images
+        self.processor = AutoImageProcessor.from_pretrained(model_name)
+        
+        # Get hidden dimension
+        self.hidden_dim = self.model.config.vision_config.hidden_size
+        print(f"  ✓ Vision teacher loaded: {self.hidden_dim}D features, 729 patches (patch14@384px)")
+        print(f"  ✓ Advantage: 4-5× student capacity + multilingual alignment")
+    
+    @torch.no_grad()
+    def extract_features(self, images):
+        """
+        Extract vision features from teacher
+        
+        Args:
+            images: List of PIL Images or [B, 3, H, W] tensor
+        
+        Returns:
+            patch_embeddings: [B, 729, hidden_dim] - Spatial visual features
+            cls_embedding: [B, hidden_dim] - Global scene representation
+            intermediate_features: [B, num_layers, 729, hidden_dim] - Multi-scale features
+            
+        NOTE: Removed attention_weights - use CLS embedding instead for global context
+        """
+        # Preprocess images to 384x384
+        if isinstance(images, list):
+            pixel_values = self.processor(images, return_tensors='pt')['pixel_values']
+        else:
+            pixel_values = images
+        
+        pixel_values = pixel_values.to(self.device)
+        
+        # Forward through vision encoder with intermediate outputs
+        outputs = self.vision_encoder(
+            pixel_values=pixel_values,
+            output_hidden_states=True  # Get intermediate layers
+        )
+        
+        # Extract features
+        last_hidden = outputs.last_hidden_state  # [B, 730, hidden_dim] (729 patches + 1 CLS)
+        
+        cls_embedding = last_hidden[:, 0, :]  # [B, hidden_dim] - Global scene understanding
+        patch_embeddings = last_hidden[:, 1:, :]  # [B, 729, hidden_dim] - Spatial features
+        
+        # Extract intermediate layer features (multi-scale representations)
+        # hidden_states: tuple of (num_layers + 1) tensors
+        # We take layers [6, 12, 18, 24] for multi-scale (assuming 24 layers)
+        num_layers = len(outputs.hidden_states) - 1  # Exclude embedding layer
+        sample_layers = [num_layers // 4, num_layers // 2, 3 * num_layers // 4, num_layers - 1]
+        
+        intermediate_features = []
+        for layer_idx in sample_layers:
+            layer_hidden = outputs.hidden_states[layer_idx + 1]  # +1 to skip embedding layer
+            layer_patches = layer_hidden[:, 1:, :]  # Remove CLS, keep patches
+            intermediate_features.append(layer_patches)
+        
+        # Stack: [B, 4, 729, hidden_dim]
+        intermediate_features = torch.stack(intermediate_features, dim=1)
+        
+        return patch_embeddings, cls_embedding, intermediate_features
+
+
+class TeacherTextEncoder:
+    """
+    PhoBERT-large Text Teacher (307M params)
+    
+    CRITICAL ROLE CLARIFICATION:
+    PhoBERT is a REPRESENTATION teacher, NOT a GENERATIVE teacher!
+    
+    ✅ What PhoBERT SHOULD teach:
+    1. Question embeddings (contextual Vietnamese understanding)
+    2. Token-level attention patterns (which words matter)
+    3. Question-Answer semantic similarity (cross-modal alignment)
+    
+    ❌ What PhoBERT CANNOT teach:
+    - Answer generation (it's MLM, not seq2seq!)
+    - Answer logits distribution (no generative head!)
+    - Long-form rationales (not designed for generation!)
+    
+    Why PhoBERT-large is the RIGHT representation teacher:
+    ✅ Vietnamese native (tokenization + morphology correct)
+    ✅ Trained on 20GB Vietnamese corpus (news + wiki)
+    ✅ 2× student capacity (307M vs ~135M BARTpho encoder)
+    ✅ Lightweight (≈2GB VRAM FP16)
+    ✅ Contextual embeddings are high-quality
+    
+    Advantages over student BARTpho-base encoder:
+    - Deeper understanding of Vietnamese syntax
+    - Better handling of rare words / compound words
+    - Stronger semantic representations
+    """
+    def __init__(self, model_name='vinai/phobert-large', device='cuda'):
+        print(f"[Text Teacher] Loading {model_name}...")
+        print(f"  📊 Role: REPRESENTATION teacher (NOT generative!)")
+        self.device = device
+        
+        # Load PhoBERT-large
+        self.model = AutoModelForMaskedLM.from_pretrained(model_name).to(device)
+        self.model.eval()
+        
+        # Tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        
+        # Hidden dimension
+        self.hidden_dim = self.model.config.hidden_size
+        print(f"  ✓ Text teacher loaded: {self.hidden_dim}D features")
+        print(f"  ✓ Will teach: question embeddings + attention patterns + Q-A similarity")
+    
+    @torch.no_grad()
+    def extract_question_embeddings(self, questions):
+        """
+        Extract question representations from PhoBERT teacher
+        
+        Args:
+            questions: List of Vietnamese question strings
+        
+        Returns:
+            token_embeddings: [B, seq_len, hidden_dim] - Contextual token embeddings
+            cls_embedding: [B, hidden_dim] - Question-level representation
+            attention_weights: [B, num_heads, seq_len, seq_len] - Token attention patterns
+        """
+        # Tokenize
+        encodings = self.tokenizer(
+            questions,
+            padding=True,
+            truncation=True,
+            max_length=128,
+            return_tensors='pt'
+        )
+        
+        input_ids = encodings['input_ids'].to(self.device)
+        attention_mask = encodings['attention_mask'].to(self.device)
+        
+        # Forward through PhoBERT with attention outputs
+        outputs = self.model.roberta(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            output_attentions=True
+        )
+        
+        # Extract features
+        token_embeddings = outputs.last_hidden_state  # [B, seq_len, hidden_dim]
+        cls_embedding = token_embeddings[:, 0, :]  # [B, hidden_dim] - CLS token
+        
+        # Extract attention from last layer (teacher's learned attention pattern)
+        # Shape: [B, num_heads, seq_len, seq_len]
+        attention_weights = outputs.attentions[-1]
+        
+        return token_embeddings, cls_embedding, attention_weights
+    
+    @torch.no_grad()
+    def compute_qa_similarity(self, questions, answers):
+        """
+        Compute semantic similarity between questions and answers
+        
+        This teaches the student which question-answer pairs are semantically aligned.
+        
+        Args:
+            questions: List of question strings
+            answers: List of answer strings
+        
+        Returns:
+            qa_similarity: [B] - Cosine similarity scores between Q and A embeddings
+        """
+        # Encode questions
+        q_encodings = self.tokenizer(
+            questions,
+            padding=True,
+            truncation=True,
+            max_length=128,
+            return_tensors='pt'
+        )
+        q_outputs = self.model.roberta(
+            input_ids=q_encodings['input_ids'].to(self.device),
+            attention_mask=q_encodings['attention_mask'].to(self.device)
+        )
+        q_cls = q_outputs.last_hidden_state[:, 0, :]  # [B, hidden_dim]
+        
+        # Encode answers
+        a_encodings = self.tokenizer(
+            answers,
+            padding=True,
+            truncation=True,
+            max_length=64,
+            return_tensors='pt'
+        )
+        a_outputs = self.model.roberta(
+            input_ids=a_encodings['input_ids'].to(self.device),
+            attention_mask=a_encodings['attention_mask'].to(self.device)
+        )
+        a_cls = a_outputs.last_hidden_state[:, 0, :]  # [B, hidden_dim]
+        
+        # Compute cosine similarity
+        qa_similarity = F.cosine_similarity(q_cls, a_cls, dim=-1)  # [B]
+        
+        return qa_similarity
+
+
+class AnswerTeacher:
+    """
+    Answer Teacher: Use TRAINED student decoder from r=96 checkpoint
+    
+    CRITICAL DESIGN DECISION:
+    ❌ PhoBERT CANNOT be answer teacher (it's MLM, not generative!)
+    ✅ Use student's OWN decoder that was already trained to r=96 (65.78% EM)
+    
+    Why this works:
+    - r=96 checkpoint already learned good answer generation (65.78% EM)
+    - We distill from "future self" (self-distillation / teacher-student self-training)
+    - Benefits: No need external generative model, consistent architecture
+    
+    Alternative approaches (if needed):
+    - Use mBART-large or mT5-base (multilingual seq2seq)
+    - But adds complexity + VRAM overhead
+    - Current approach is simpler and proven effective in literature
+    
+    What to teach:
+    ✅ Answer token distribution (soft labels from trained decoder)
+    ✅ Decoder attention patterns (how to attend to vision+text)
+    ❌ NOT PhoBERT logits (it doesn't generate answers!)
+    """
+    def __init__(self, checkpoint_path, device='cuda'):
+        print(f"[Answer Teacher] Loading TRAINED student decoder from checkpoint...")
+        print(f"  📊 Using r=96 checkpoint (65.78% EM) as answer teacher")
+        print(f"  📊 Strategy: Self-distillation (student learns from own trained weights)")
+        self.device = device
+        
+        # Load trained student model
+        from model_no_latent import DeterministicVQA
+        
+        self.model = DeterministicVQA(
+            vision_model_name='google/siglip-base-patch16-224',
+            bartpho_model_name='vinai/bartpho-syllable',
+            num_fusion_layers=6,
+            use_text_lora=True,
+            text_lora_r=96,
+            text_lora_alpha=192,
+            gradient_checkpointing=False
+        ).to(device)
+        
+        # Load trained weights
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        self.model.load_state_dict(checkpoint['model_state_dict'])
+        self.model.eval()
+        
+        print(f"  ✓ Answer teacher loaded from: {checkpoint_path}")
+        print(f"  ✓ Will teach: answer distribution + decoder attention patterns")
+    
+    @torch.no_grad()
+    def generate_answer_distribution(
+        self,
+        pixel_values,
+        input_ids,
+        attention_mask,
+        answer_input_ids,
+        question_types=None
+    ):
+        """
+        Generate answer distribution using trained student decoder
+        
+        Args:
+            pixel_values: [B, 3, H, W] - Images
+            input_ids: [B, seq_len] - Question tokens
+            attention_mask: [B, seq_len] - Question mask
+            answer_input_ids: [B, max_len] - Ground truth answer (for teacher forcing)
+            question_types: [B] - Question types (optional)
+        
+        Returns:
+            answer_logits: [B, max_len, vocab_size] - Soft answer distribution
+            decoder_attention: [B, num_heads, max_len, seq_len] - Cross-attention patterns
+        """
+        # Forward through trained model
+        outputs = self.model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=answer_input_ids,
+            question_types=question_types
+        )
+        
+        # Get answer logits (teacher's prediction)
+        answer_logits = outputs.answer_logits  # [B, max_len, vocab_size]
+        
+        # TODO: Extract decoder cross-attention if needed
+        # (requires modifying model to return attention weights)
+        decoder_attention = None
+        
+        return answer_logits, decoder_attention
+
+
+def extract_teachers_for_dataset(
+    csv_path,
+    image_folder,
+    output_dir,
+    student_checkpoint_path,
+    batch_size=16,
+    max_samples=None,
+    device='cuda'
+):
+    """
+    Extract teacher features for entire dataset and save to .npy files
+    
+    CORRECTED APPROACH:
+    - Vision: SigLIP-SO400M (~400-430M params) for patch embeddings + CLS + intermediate features
+    - Text: PhoBERT-large (307M) for question embeddings + attention patterns + Q-A similarity
+    - Answer: Trained student r=96 checkpoint (self-distillation)
+    
+    Args:
+        csv_path: Path to train.csv or val.csv
+        image_folder: Path to vivqa/images
+        output_dir: Where to save .npy files
+        student_checkpoint_path: Path to trained r=96 checkpoint (for answer teacher)
+        batch_size: Batch size for extraction
+        max_samples: Limit samples for testing (None = full dataset)
+    """
+    print("="*80)
+    print("TEACHER FEATURE EXTRACTION (CORRECTED)")
+    print("="*80)
+    print("Vision: SigLIP-SO400M (~400-430M params)")
+    print("Text: PhoBERT-large (307M params, representation teacher)")
+    print("Answer: Trained student r=96 (self-distillation)")
+    print("="*80)
+    
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load dataset
+    print(f"\n[1/5] Loading dataset: {csv_path}")
+    dataset = ViVQADataset(csv_path, image_folder, split='train')
+    
+    if max_samples:
+        dataset.data = dataset.data[:max_samples]
+        print(f"  ⚠️  Limited to {max_samples} samples for testing")
+    
+    print(f"  ✓ Loaded {len(dataset)} samples")
+    
+    # Create dataloader
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True
+    )
+    
+    # Initialize teachers
+    print(f"\n[2/5] Initializing teachers...")
+    vision_teacher = TeacherVisionEncoder(device=device)
+    text_teacher = TeacherTextEncoder(device=device)
+    answer_teacher = AnswerTeacher(student_checkpoint_path, device=device)
+    
+    # Storage arrays
+    print(f"\n[3/5] Extracting features...")
+    
+    # Vision outputs
+    vision_patch_emb_list = []
+    vision_cls_emb_list = []
+    vision_intermediate_list = []
+    
+    # Text outputs
+    text_token_emb_list = []
+    text_cls_emb_list = []
+    text_attention_list = []
+    text_qa_similarity_list = []
+    
+    # Answer outputs
+    answer_logits_list = []
+    
+    # Extract batch by batch
+    for batch_idx, batch in enumerate(tqdm(dataloader, desc="Extracting")):
+        # Get batch data
+        pixel_values = batch['pixel_values'].to(device)
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        questions = batch['question']  # List of strings
+        answers = batch['answer']  # List of strings
+        
+        # (A) Vision teacher: Patch embeddings + CLS + intermediate features
+        patch_emb, cls_emb, intermediate_feats = vision_teacher.extract_features(pixel_values)
+        
+        vision_patch_emb_list.append(patch_emb.cpu().numpy())
+        vision_cls_emb_list.append(cls_emb.cpu().numpy())
+        vision_intermediate_list.append(intermediate_feats.cpu().numpy())
+        
+        # (B) Text teacher: Question embeddings + attention patterns + Q-A similarity
+        token_emb, text_cls, attention_weights = text_teacher.extract_question_embeddings(questions)
+        qa_similarity = text_teacher.compute_qa_similarity(questions, answers)
+        
+        text_token_emb_list.append(token_emb.cpu().numpy())
+        text_cls_emb_list.append(text_cls.cpu().numpy())
+        text_attention_list.append(attention_weights.cpu().numpy())
+        text_qa_similarity_list.append(qa_similarity.cpu().numpy())
+        
+        # (C) Answer teacher: Use trained student r=96 checkpoint
+        answer_encodings = answer_teacher.model.tokenizer(
+            answers,
+            padding=True,
+            truncation=True,
+            max_length=20,
+            return_tensors='pt'
+        )
+        answer_input_ids = answer_encodings['input_ids'].to(device)
+        
+        # Get question types if available in batch
+        question_types = batch.get('question_type', None)
+        if question_types is not None:
+            question_types = question_types.to(device)
+        
+        # Generate answer distribution from trained student
+        answer_logits, _ = answer_teacher.generate_answer_distribution(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            answer_input_ids=answer_input_ids,
+            question_types=question_types
+        )
+        
+        answer_logits_list.append(answer_logits.cpu().numpy())
+    
+    # Concatenate all batches
+    print(f"\n[4/5] Saving to {output_dir}...")
+    
+    # Vision features
+    vision_patch_emb = np.concatenate(vision_patch_emb_list, axis=0)
+    vision_cls_emb = np.concatenate(vision_cls_emb_list, axis=0)
+    vision_intermediate = np.concatenate(vision_intermediate_list, axis=0)
+    
+    # Text features
+    text_token_emb = np.concatenate(text_token_emb_list, axis=0)
+    text_cls_emb = np.concatenate(text_cls_emb_list, axis=0)
+    text_attention = np.concatenate(text_attention_list, axis=0)
+    text_qa_similarity = np.concatenate(text_qa_similarity_list, axis=0)
+    
+    # Answer features
+    answer_logits = np.concatenate(answer_logits_list, axis=0)
+    
+    # Save to .npy files
+    print(f"\n[5/5] Saving to {output_dir}...")
+    split_name = Path(csv_path).stem  # 'train' or 'val'
+    
+    # Vision outputs
+    np.save(f"{output_dir}/vision_patch_emb_{split_name}.npy", vision_patch_emb)
+    np.save(f"{output_dir}/vision_cls_emb_{split_name}.npy", vision_cls_emb)
+    np.save(f"{output_dir}/vision_intermediate_{split_name}.npy", vision_intermediate)
+    
+    # Text outputs
+    np.save(f"{output_dir}/text_token_emb_{split_name}.npy", text_token_emb)
+    np.save(f"{output_dir}/text_cls_emb_{split_name}.npy", text_cls_emb)
+    np.save(f"{output_dir}/text_attention_{split_name}.npy", text_attention)
+    np.save(f"{output_dir}/text_qa_similarity_{split_name}.npy", text_qa_similarity)
+    
+    # Answer outputs
+    np.save(f"{output_dir}/answer_logits_{split_name}.npy", answer_logits)
+    
+    # Save metadata
+    metadata = {
+        'num_samples': len(vision_patch_emb),
+        'vision_patch_emb_shape': vision_patch_emb.shape,
+        'vision_cls_emb_shape': vision_cls_emb.shape,
+        'vision_intermediate_shape': vision_intermediate.shape,
+        'text_token_emb_shape': text_token_emb.shape,
+        'text_cls_emb_shape': text_cls_emb.shape,
+        'text_attention_shape': text_attention.shape,
+        'text_qa_similarity_shape': text_qa_similarity.shape,
+        'answer_logits_shape': answer_logits.shape,
+        'vision_teacher': 'google/siglip-so400m-patch14-384 (~400-430M params)',
+        'text_teacher': 'vinai/phobert-large (307M params, representation teacher)',
+        'answer_teacher': 'Trained student r=96 checkpoint (self-distillation)',
+        'csv_path': csv_path
+    }
+    
+    with open(f"{output_dir}/metadata_{split_name}.json", 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"\n{'='*80}")
+    print(f"✅ EXTRACTION COMPLETE!")
+    print(f"{'='*80}")
+    print(f"Samples: {len(vision_patch_emb)}")
+    print(f"\nVision outputs:")
+    print(f"  - Patch embeddings: {vision_patch_emb.shape} ({vision_patch_emb.nbytes/1e9:.2f} GB)")
+    print(f"  - CLS embedding: {vision_cls_emb.shape} ({vision_cls_emb.nbytes/1e6:.2f} MB)")
+    print(f"  - Intermediate features: {vision_intermediate.shape} ({vision_intermediate.nbytes/1e9:.2f} GB)")
+    print(f"\nText outputs:")
+    print(f"  - Token embeddings: {text_token_emb.shape} ({text_token_emb.nbytes/1e9:.2f} GB)")
+    print(f"  - CLS embedding: {text_cls_emb.shape} ({text_cls_emb.nbytes/1e6:.2f} MB)")
+    print(f"  - Attention patterns: {text_attention.shape} ({text_attention.nbytes/1e6:.2f} MB)")
+    print(f"  - Q-A similarity: {text_qa_similarity.shape} ({text_qa_similarity.nbytes/1e6:.2f} MB)")
+    print(f"\nAnswer outputs:")
+    print(f"  - Answer logits: {answer_logits.shape} ({answer_logits.nbytes/1e9:.2f} GB)")
+    
+    total_size = (
+        vision_patch_emb.nbytes + vision_cls_emb.nbytes + vision_intermediate.nbytes +
+        text_token_emb.nbytes + text_cls_emb.nbytes + text_attention.nbytes + text_qa_similarity.nbytes +
+        answer_logits.nbytes
+    )
+    print(f"\n💾 Total storage: {total_size/1e9:.2f} GB")
+    print(f"📁 Saved to: {output_dir}")
+    print(f"{'='*80}")
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Extract teacher features for offline distillation (CORRECTED VERSION)'
+    )
+    
+    parser.add_argument('--csv_path', type=str, required=True,
+                       help='Path to train.csv or val.csv')
+    parser.add_argument('--image_folder', type=str, required=True,
+                       help='Path to vivqa/images folder')
+    parser.add_argument('--output_dir', type=str, default='/kaggle/working/teacher_cache',
+                       help='Output directory for .npy files')
+    parser.add_argument('--student_checkpoint', type=str, required=True,
+                       help='Path to trained r=96 checkpoint (for answer teacher)')
+    parser.add_argument('--batch_size', type=int, default=16,
+                       help='Batch size for extraction (lower if OOM)')
+    parser.add_argument('--max_samples', type=int, default=None,
+                       help='Limit samples for testing (None = full dataset)')
+    parser.add_argument('--device', type=str, default='cuda',
+                       help='Device to use (cuda or cpu)')
+    
+    args = parser.parse_args()
+    
+    # Run extraction
+    extract_teachers_for_dataset(
+        csv_path=args.csv_path,
+        image_folder=args.image_folder,
+        output_dir=args.output_dir,
+        student_checkpoint_path=args.student_checkpoint,
+        batch_size=args.batch_size,
+        max_samples=args.max_samples,
+        device=args.device
+    )
+    
+    print("\n" + "="*80)
+    print("NEXT STEPS:")
+    print("="*80)
+    print("1. Extract validation set:")
+    print(f"   python extract_teacher_logits.py \\")
+    print(f"       --csv_path OpenViVQA/dev.json \\")
+    print(f"       --image_folder vivqa/images \\")
+    print(f"       --output_dir {args.output_dir}")
+    print()
+    print("2. Modify train_no_latent.py to load teacher features:")
+    print("   - Add TeacherDistillationDataset class")
+    print("   - Add distillation losses (vision KD + text KD + answer KD)")
+    print("   - Weight: 0.3*vision_kd + 0.3*text_kd + 0.4*answer_kd + 1.0*ce_loss")
+    print()
+    print("3. Train with distillation:")
+    print("   python train_no_latent.py \\")
+    print("       --use_teacher_distillation \\")
+    print(f"       --teacher_cache_dir {args.output_dir} \\")
+    print("       --distill_alpha 0.5 \\")
+    print("       --text_lora_r 96")
+    print("="*80)
