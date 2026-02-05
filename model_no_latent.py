@@ -22,6 +22,7 @@ import re
 from transformers import (
     AutoModel,
     AutoImageProcessor,
+    AutoTokenizer,
     BartphoTokenizer,
     MBartForConditionalGeneration
 )
@@ -327,6 +328,8 @@ class DeterministicVQAOutput:
     type_logits: Optional[torch.Tensor] = None  # 🔥 NEW: Type predictions [B, num_types]
     attention_weights: Optional[torch.Tensor] = None
     gate_stats: Optional[dict] = None  # Vision gate statistics
+    vision_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Vision distillation loss
+    text_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Text distillation loss
 
 
 # ============================================================================
@@ -367,7 +370,13 @@ class DeterministicVQA(nn.Module):
         vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
         use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
         type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
-        type_adapter_bias: float = 2.0  # 🔥 Type supervision strength
+        type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
+        # 🔥🔥🔥 ONLINE DISTILLATION 🔥🔥🔥
+        use_distillation: bool = False,  # Enable online knowledge distillation
+        vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
+        text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
+        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
+        distill_temperature: float = 2.0  # Temperature for soft targets
     ):
         super().__init__()
         
@@ -376,6 +385,11 @@ class DeterministicVQA(nn.Module):
         print("  ✅ Direct cross-attention fusion")
         print("  ✅ Optimized for accuracy & stability")
         print(f"  🔥 Vision Encoder: {vision_model_name}")
+        
+        # Store distillation config
+        self.use_distillation = use_distillation
+        self.distill_alpha = distill_alpha
+        self.distill_temperature = distill_temperature
         
         self.use_vision_lora = use_vision_lora
         self.vision_lora_r = vision_lora_r
@@ -538,6 +552,68 @@ class DeterministicVQA(nn.Module):
             if hasattr(self.encoder, 'gradient_checkpointing_enable'):
                 self.encoder.gradient_checkpointing_enable()
                 print(f"  🔥 Text Gradient Checkpointing: ENABLED")
+        
+        # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
+        if self.use_distillation:
+            print("\n" + "="*80)
+            print("🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION ENABLED 🔥🔥🔥")
+            print("="*80)
+            
+            # Vision Teacher (SigLIP-SO400M)
+            print(f"  📚 Loading Vision Teacher: {vision_teacher_name}")
+            vision_teacher_full = AutoModel.from_pretrained(
+                vision_teacher_name,
+                torch_dtype=torch.float16  # FP16 to save VRAM
+            )
+            if hasattr(vision_teacher_full, 'vision_model'):
+                self.vision_teacher = vision_teacher_full.vision_model
+            else:
+                self.vision_teacher = vision_teacher_full
+            
+            # Freeze vision teacher
+            for param in self.vision_teacher.parameters():
+                param.requires_grad = False
+            self.vision_teacher.eval()
+            
+            # Get teacher's vision processor for 384px images
+            self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name)
+            teacher_vision_hidden = self.vision_teacher.config.hidden_size
+            print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
+            
+            # Text Teacher (PhoBERT-large)
+            print(f"  📚 Loading Text Teacher: {text_teacher_name}")
+            self.text_teacher = AutoModel.from_pretrained(
+                text_teacher_name,
+                torch_dtype=torch.float16  # FP16 to save VRAM
+            )
+            
+            # Freeze text teacher
+            for param in self.text_teacher.parameters():
+                param.requires_grad = False
+            self.text_teacher.eval()
+            
+            # Get teacher's tokenizer
+            self.text_teacher_tokenizer = AutoTokenizer.from_pretrained(text_teacher_name)
+            teacher_text_hidden = self.text_teacher.config.hidden_size
+            print(f"     ✅ Text Teacher loaded: {teacher_text_hidden}D, FP16, frozen")
+            
+            # Projection layers for distillation (match dimensions)
+            # Vision: student patches (196) → teacher patches (729) via pooling/interpolation
+            # Then project to same dimension for MSE loss
+            self.vision_distill_proj = nn.Linear(vision_hidden_dim, teacher_vision_hidden)
+            
+            # Text: student text embeddings → teacher text embeddings
+            self.text_distill_proj = nn.Linear(bart_hidden_dim, teacher_text_hidden)
+            
+            print(f"  🎯 Distillation α={distill_alpha:.2f}, T={distill_temperature:.1f}")
+            print(f"  🎯 Vision proj: {vision_hidden_dim} → {teacher_vision_hidden}")
+            print(f"  🎯 Text proj: {bart_hidden_dim} → {teacher_text_hidden}")
+            print("="*80 + "\n")
+        else:
+            self.vision_teacher = None
+            self.text_teacher = None
+            self.vision_teacher_processor = None
+            self.text_teacher_tokenizer = None
         
         print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
     
@@ -731,6 +807,98 @@ class DeterministicVQA(nn.Module):
                 param.requires_grad = False
             print(f"[Freeze] Decoder + LM head: FROZEN")
     
+    def _extract_teacher_vision_features(self, images_384):
+        """
+        Extract vision teacher features (SigLIP-SO400M at 384px)
+        
+        Args:
+            images_384: [B, 3, 384, 384] - Images preprocessed for teacher
+            
+        Returns:
+            teacher_vision_features: [B, 729, 1152] - Teacher patch embeddings
+        """
+        with torch.no_grad():
+            teacher_outputs = self.vision_teacher(pixel_values=images_384.half())
+            teacher_patches = teacher_outputs.last_hidden_state  # [B, 730, 1152] with CLS
+            
+            # Remove CLS token
+            if teacher_patches.size(1) == 730:  # 729 patches + 1 CLS
+                teacher_patches = teacher_patches[:, 1:, :]  # [B, 729, 1152]
+            
+            return teacher_patches.float()  # Convert back to FP32 for loss
+    
+    def _extract_teacher_text_features(self, raw_questions):
+        """
+        Extract text teacher features (PhoBERT-large)
+        
+        Args:
+            raw_questions: List[str] - Raw Vietnamese questions
+            
+        Returns:
+            teacher_text_features: [B, 1024] - Teacher question embeddings (CLS)
+        """
+        with torch.no_grad():
+            # Tokenize with teacher's tokenizer
+            teacher_inputs = self.text_teacher_tokenizer(
+                raw_questions,
+                padding=True,
+                truncation=True,
+                max_length=128,
+                return_tensors='pt'
+            ).to(self.text_teacher.device)
+            
+            teacher_outputs = self.text_teacher(**teacher_inputs)
+            teacher_cls = teacher_outputs.last_hidden_state[:, 0, :]  # [B, 1024]
+            
+            return teacher_cls.half().float()  # FP16 → FP32
+    
+    def compute_distillation_loss(
+        self,
+        student_vision_patches,  # [B, 196, vision_hidden]
+        student_text_features,   # [B, bart_hidden]
+        teacher_vision_patches,  # [B, 729, teacher_vision_hidden]
+        teacher_text_features    # [B, teacher_text_hidden]
+    ):
+        """
+        Compute knowledge distillation losses
+        
+        Returns:
+            vision_kd_loss: MSE between student and teacher vision features
+            text_kd_loss: MSE between student and teacher text features
+        """
+        # Vision KD: Student 196 patches → Teacher 729 patches
+        # Strategy: Downsample teacher 729 → 196 via adaptive pooling
+        B = student_vision_patches.size(0)
+        
+        # Reshape teacher patches for pooling: [B, 729, D] → [B, D, 27, 27]
+        teacher_vision_hidden = teacher_vision_patches.size(-1)
+        teacher_patches_2d = teacher_vision_patches.transpose(1, 2).reshape(
+            B, teacher_vision_hidden, 27, 27
+        )
+        
+        # Downsample to 14x14 = 196 patches
+        teacher_patches_downsampled = F.adaptive_avg_pool2d(
+            teacher_patches_2d, 
+            output_size=(14, 14)
+        )  # [B, teacher_D, 14, 14]
+        
+        # Reshape back: [B, teacher_D, 14, 14] → [B, 196, teacher_D]
+        teacher_patches_downsampled = teacher_patches_downsampled.reshape(
+            B, teacher_vision_hidden, 196
+        ).transpose(1, 2)  # [B, 196, teacher_D]
+        
+        # Project student to teacher dimension
+        student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
+        
+        # MSE loss
+        vision_kd_loss = F.mse_loss(student_vision_proj, teacher_patches_downsampled)
+        
+        # Text KD: Direct MSE between CLS embeddings
+        student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
+        text_kd_loss = F.mse_loss(student_text_proj, teacher_text_features)
+        
+        return vision_kd_loss, text_kd_loss
+    
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -739,7 +907,9 @@ class DeterministicVQA(nn.Module):
         labels: Optional[torch.Tensor] = None,
         stage: int = 3,  # Kept for compatibility, but ignored
         answer_weights: Optional[torch.Tensor] = None,  # 🔥 NEW: Token-level weights for balanced loss
-        question_types: Optional[torch.Tensor] = None   # 🔥 NEW: Question type (0=object_id, 1=counting, 2=color, 3=location)
+        question_types: Optional[torch.Tensor] = None,  # 🔥 NEW: Question type (0=object_id, 1=counting, 2=color, 3=location)
+        images_384: Optional[torch.Tensor] = None,  # 🔥🔥🔥 For vision teacher (384px)
+        raw_questions: Optional[list] = None  # 🔥🔥🔥 For text teacher (raw strings)
     ):
         """
         Forward pass - deterministic fusion
@@ -870,9 +1040,11 @@ class DeterministicVQA(nn.Module):
             predicted_types = torch.argmax(type_logits, dim=-1)
             answer_logits = self.logits_bias(base_answer_logits, predicted_types)
         
-        # 7. 🔥 MULTI-TASK LOSS: Type + Answer
+        # 7. 🔥 MULTI-TASK LOSS: Type + Answer + Distillation
         answer_loss = None
         total_loss = None
+        vision_kd_loss = None
+        text_kd_loss = None
         
         if labels is not None:
             # (A) Answer generation loss
@@ -884,13 +1056,34 @@ class DeterministicVQA(nn.Module):
                 label_smoothing=0.1
             )
             
-            # (B) Multi-task loss: Type (auxiliary) + Answer (main)
+            # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
+            if self.use_distillation and images_384 is not None and raw_questions is not None:
+                # Extract teacher features
+                teacher_vision_patches = self._extract_teacher_vision_features(images_384)
+                teacher_text_features = self._extract_teacher_text_features(raw_questions)
+                
+                # Compute KD losses
+                vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
+                    student_vision_patches=patch_tokens,  # Before projection! [B, 196, vision_hidden]
+                    student_text_features=text_cls,  # Question CLS embedding [B, bart_hidden]
+                    teacher_vision_patches=teacher_vision_patches,  # [B, 729, teacher_hidden]
+                    teacher_text_features=teacher_text_features  # [B, teacher_hidden]
+                )
+                
+                # Combine: (1-α)*CE + α*KD
+                # KD = 0.5*vision + 0.5*text (equal weight)
+                kd_loss = 0.5 * vision_kd_loss + 0.5 * text_kd_loss
+                answer_loss_with_kd = (1 - self.distill_alpha) * answer_loss + self.distill_alpha * kd_loss
+            else:
+                answer_loss_with_kd = answer_loss
+            
+            # (C) Multi-task loss: Type (auxiliary) + Answer (main) + KD
             if type_loss is not None:
                 # Weight type loss lower (auxiliary signal, not primary task)
                 # λ_type = 0.2 means type contributes 20% to total loss
-                total_loss = answer_loss + 0.2 * type_loss
+                total_loss = answer_loss_with_kd + 0.2 * type_loss
             else:
-                total_loss = answer_loss
+                total_loss = answer_loss_with_kd
         
         return DeterministicVQAOutput(
             answer_logits=answer_logits,
@@ -898,7 +1091,9 @@ class DeterministicVQA(nn.Module):
             type_loss=type_loss,  # 🔥 NEW
             total_loss=total_loss,
             type_logits=type_logits,  # 🔥 NEW
-            gate_stats=gate_stats
+            gate_stats=gate_stats,
+            vision_kd_loss=vision_kd_loss,  # 🔥🔥🔥 NEW
+            text_kd_loss=text_kd_loss  # 🔥🔥🔥 NEW
         )
     
     @torch.inference_mode()  # Faster than @torch.no_grad()!

@@ -349,6 +349,14 @@ def run_one_epoch_deterministic(
             if use_type_loss and 'question_type' in batch:
                 question_types = batch['question_type'].to(device)
             
+            # 🔥🔥🔥 Extract teacher inputs for distillation
+            images_384 = None
+            raw_questions = None
+            if 'images_384' in batch:
+                images_384 = batch['images_384'].to(device)
+            if 'raw_question' in batch:
+                raw_questions = batch['raw_question']  # List[str], keep on CPU
+            
             # Forward pass with mixed precision
             with autocast(enabled=(scaler is not None)):
                 outputs = model(
@@ -358,7 +366,9 @@ def run_one_epoch_deterministic(
                     labels=labels,
                     stage=stage,
                     answer_weights=answer_weights,  # 🔥 Pass answer weights
-                    question_types=question_types   # 🔥 Pass question types
+                    question_types=question_types,  # 🔥 Pass question types
+                    images_384=images_384,  # 🔥🔥🔥 Teacher vision input
+                    raw_questions=raw_questions  # 🔥🔥🔥 Teacher text input
                 )
                 
                 loss = outputs.total_loss
@@ -396,6 +406,14 @@ def run_one_epoch_deterministic(
                 if outputs.type_loss is not None:
                     total_type_loss += outputs.type_loss.item()
                 
+                # 🔥🔥🔥 NEW: Track distillation losses
+                total_vision_kd_loss = 0
+                total_text_kd_loss = 0
+                if outputs.vision_kd_loss is not None:
+                    total_vision_kd_loss += outputs.vision_kd_loss.item()
+                if outputs.text_kd_loss is not None:
+                    total_text_kd_loss += outputs.text_kd_loss.item()
+                
                 num_batches += 1
                 
                 # 🔥 Extract gate statistics + type loss for progress bar
@@ -407,6 +425,12 @@ def run_one_epoch_deterministic(
                 # Add type loss to display if available
                 if outputs.type_loss is not None:
                     postfix['type'] = f"{outputs.type_loss.item():.3f}"
+                
+                # 🔥🔥🔥 Add distillation losses
+                if outputs.vision_kd_loss is not None:
+                    postfix['vkd'] = f"{outputs.vision_kd_loss.item():.3f}"
+                if outputs.text_kd_loss is not None:
+                    postfix['tkd'] = f"{outputs.text_kd_loss.item():.3f}"
                 
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
@@ -607,6 +631,18 @@ def main():
     parser.add_argument('--use_type_loss', action='store_true',
                        help='Enable type-conditional loss (1.5x counting, 1.4x location, 1.3x color)')
     
+    # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
+    parser.add_argument('--use_distillation', action='store_true',
+                       help='Enable online knowledge distillation from large teachers')
+    parser.add_argument('--vision_teacher', type=str, default='google/siglip-so400m-patch14-384',
+                       help='Vision teacher model (default: SigLIP-SO400M at 384px)')
+    parser.add_argument('--text_teacher', type=str, default='vinai/phobert-large',
+                       help='Text teacher model (default: PhoBERT-large)')
+    parser.add_argument('--distill_alpha', type=float, default=0.5,
+                       help='Distillation weight: (1-α)*CE + α*KD (default: 0.5 = balanced)')
+    parser.add_argument('--distill_temperature', type=float, default=2.0,
+                       help='Temperature for soft targets (default: 2.0)')
+    
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
@@ -743,6 +779,12 @@ def main():
         
         vision_processor = AutoProcessor.from_pretrained(vision_model)
         
+        # 🔥🔥🔥 Load teacher vision processor if distillation enabled
+        teacher_vision_processor = None
+        if args.use_distillation:
+            print(f"[Distillation] Loading teacher vision processor: {args.vision_teacher}")
+            teacher_vision_processor = AutoProcessor.from_pretrained(args.vision_teacher)
+        
         # Load full training dataset
         full_train_dataset = VQAGenDataset(
             csv_path=args.train_csv,
@@ -750,7 +792,9 @@ def main():
             vision_processor=vision_processor,
             tokenizer_name=bartpho_model,
             include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
-            auto_detect_type=True  # 🔥 Auto-detect from Vietnamese question patterns
+            auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
+            use_distillation=args.use_distillation,  # 🔥🔥🔥
+            teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
         )
         
         # Check if val_csv provided
@@ -762,7 +806,9 @@ def main():
                 vision_processor=vision_processor,
                 tokenizer_name=bartpho_model,
                 include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
-                auto_detect_type=True  # 🔥 Auto-detect from Vietnamese question patterns
+                auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
+                use_distillation=args.use_distillation,  # 🔥🔥🔥
+                teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
             )
             train_dataset = full_train_dataset
         else:
@@ -847,7 +893,12 @@ def main():
         vision_gate_init=args.vision_gate_init,  # 🔥 NEW
         use_type_adapter=args.use_type_adapter,  # 🔥 NEW: Type-conditioned adapter
         type_adapter_rank=args.type_adapter_rank,  # 🔥 NEW
-        type_adapter_bias=args.type_adapter_bias  # 🔥 NEW
+        type_adapter_bias=args.type_adapter_bias,  # 🔥 NEW
+        use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
+        vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
+        text_teacher_name=args.text_teacher,  # 🔥🔥🔥
+        distill_alpha=args.distill_alpha,  # 🔥🔥🔥
+        distill_temperature=args.distill_temperature  # 🔥🔥🔥
     ).to(device)
     
     model.freeze_pretrained(

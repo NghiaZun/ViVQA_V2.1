@@ -49,7 +49,9 @@ class VQAGenDataset(Dataset):
                  tokenizer_name='vinai/bartpho-syllable',
                  max_q_len=32, max_a_len=10,
                  include_question_type=False,  # 🔥 Enable question type
-                 auto_detect_type=False):  # 🔥 NEW: Auto-detect from question text
+                 auto_detect_type=False,  # 🔥 NEW: Auto-detect from question text
+                 use_distillation=False,  # 🔥🔥🔥 Enable teacher inputs
+                 teacher_vision_processor=None):  # 🔥🔥🔥 Teacher's processor (384px)
 
         self.data = pd.read_csv(csv_path)
         self.image_folder = image_folder
@@ -60,6 +62,8 @@ class VQAGenDataset(Dataset):
         self.max_a_len = max_a_len
         self.include_question_type = include_question_type
         self.auto_detect_type = auto_detect_type  # 🔥 NEW
+        self.use_distillation = use_distillation  # 🔥🔥🔥
+        self.teacher_vision_processor = teacher_vision_processor  # 🔥🔥🔥
 
     def __len__(self):
         return len(self.data)
@@ -106,6 +110,15 @@ class VQAGenDataset(Dataset):
             'attention_mask': attention_mask,
             'labels': labels
         }
+        
+        # 🔥🔥🔥 Add teacher inputs for online distillation
+        if self.use_distillation and self.teacher_vision_processor is not None:
+            # Process same image at 384px for vision teacher
+            teacher_vision_inputs = self.teacher_vision_processor(images=image, return_tensors='pt')
+            result['images_384'] = teacher_vision_inputs['pixel_values'].squeeze(0)  # [3, 384, 384]
+            
+            # Raw question string for text teacher
+            result['raw_question'] = question
         
         # 🔥 Get question type
         if self.include_question_type:
