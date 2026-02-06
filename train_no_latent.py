@@ -640,8 +640,6 @@ def main():
                        help='Text teacher model (default: PhoBERT-large)')
     parser.add_argument('--distill_alpha', type=float, default=0.5,
                        help='Distillation weight: (1-α)*CE + α*KD (default: 0.5 = balanced)')
-    parser.add_argument('--distill_temperature', type=float, default=2.0,
-                       help='Temperature for soft targets (default: 2.0)')
     
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
@@ -897,8 +895,7 @@ def main():
         use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
-        distill_alpha=args.distill_alpha,  # 🔥🔥🔥
-        distill_temperature=args.distill_temperature  # 🔥🔥🔥
+        distill_alpha=args.distill_alpha  # 🔥🔥🔥
     ).to(device)
     
     model.freeze_pretrained(

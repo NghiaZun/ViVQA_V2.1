@@ -375,8 +375,7 @@ class DeterministicVQA(nn.Module):
         use_distillation: bool = False,  # Enable online knowledge distillation
         vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
         text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
-        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
-        distill_temperature: float = 2.0  # Temperature for soft targets
+        distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
     ):
         super().__init__()
         
@@ -389,7 +388,6 @@ class DeterministicVQA(nn.Module):
         # Store distillation config
         self.use_distillation = use_distillation
         self.distill_alpha = distill_alpha
-        self.distill_temperature = distill_temperature
         
         self.use_vision_lora = use_vision_lora
         self.vision_lora_r = vision_lora_r
@@ -597,15 +595,25 @@ class DeterministicVQA(nn.Module):
             teacher_text_hidden = self.text_teacher.config.hidden_size
             print(f"     ✅ Text Teacher loaded: {teacher_text_hidden}D, FP16, frozen")
             
-            # Projection layers for distillation (match dimensions)
-            # Vision: student patches (196) → teacher patches (729) via pooling/interpolation
-            # Then project to same dimension for MSE loss
+            # Projection layers for distillation
+            # Vision: Use attention-based matching (student attends to teacher's 729 patches)
+            # Project student patches to same dimension as teacher
             self.vision_distill_proj = nn.Linear(vision_hidden_dim, teacher_vision_hidden)
+            
+            # Attention for cross-matching (student queries attend to teacher keys/values)
+            # This allows student to "select" important features from all 729 teacher patches
+            self.vision_distill_attn = nn.MultiheadAttention(
+                embed_dim=teacher_vision_hidden,
+                num_heads=8,  # 8 heads for 1152D (144D per head)
+                dropout=0.1,
+                batch_first=True
+            )
             
             # Text: student text embeddings → teacher text embeddings
             self.text_distill_proj = nn.Linear(bart_hidden_dim, teacher_text_hidden)
             
-            print(f"  🎯 Distillation α={distill_alpha:.2f}, T={distill_temperature:.1f}")
+            print(f"  🎯 Distillation α={distill_alpha:.2f}")
+            print(f"  🎯 Vision: Attention-based matching (196 → 729 patches)")
             print(f"  🎯 Vision proj: {vision_hidden_dim} → {teacher_vision_hidden}")
             print(f"  🎯 Text proj: {bart_hidden_dim} → {teacher_text_hidden}")
             print("="*80 + "\n")
@@ -860,38 +868,32 @@ class DeterministicVQA(nn.Module):
         teacher_text_features    # [B, teacher_text_hidden]
     ):
         """
-        Compute knowledge distillation losses
+        Compute knowledge distillation losses using attention-based matching
+        
+        Vision KD: Student queries attend to all 729 teacher patches (no downsampling!)
+        Text KD: Direct MSE between CLS embeddings
         
         Returns:
-            vision_kd_loss: MSE between student and teacher vision features
+            vision_kd_loss: MSE between student and attention-aligned teacher features
             text_kd_loss: MSE between student and teacher text features
         """
-        # Vision KD: Student 196 patches → Teacher 729 patches
-        # Strategy: Downsample teacher 729 → 196 via adaptive pooling
-        B = student_vision_patches.size(0)
-        
-        # Reshape teacher patches for pooling: [B, 729, D] → [B, D, 27, 27]
-        teacher_vision_hidden = teacher_vision_patches.size(-1)
-        teacher_patches_2d = teacher_vision_patches.transpose(1, 2).reshape(
-            B, teacher_vision_hidden, 27, 27
-        )
-        
-        # Downsample to 14x14 = 196 patches
-        teacher_patches_downsampled = F.adaptive_avg_pool2d(
-            teacher_patches_2d, 
-            output_size=(14, 14)
-        )  # [B, teacher_D, 14, 14]
-        
-        # Reshape back: [B, teacher_D, 14, 14] → [B, 196, teacher_D]
-        teacher_patches_downsampled = teacher_patches_downsampled.reshape(
-            B, teacher_vision_hidden, 196
-        ).transpose(1, 2)  # [B, 196, teacher_D]
+        # Vision KD: Attention-based matching
+        # Student (196 patches) attends to Teacher (729 patches)
         
         # Project student to teacher dimension
         student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
         
-        # MSE loss
-        vision_kd_loss = F.mse_loss(student_vision_proj, teacher_patches_downsampled)
+        # Cross-attention: student queries attend to teacher keys/values
+        # This lets student "select" important features from all 729 teacher patches
+        attn_output, _ = self.vision_distill_attn(
+            query=student_vision_proj,       # [B, 196, teacher_D]
+            key=teacher_vision_patches,      # [B, 729, teacher_D]
+            value=teacher_vision_patches,    # [B, 729, teacher_D]
+            need_weights=False
+        )  # → [B, 196, teacher_D]
+        
+        # MSE between student and attention-aligned teacher
+        vision_kd_loss = F.mse_loss(student_vision_proj, attn_output)
         
         # Text KD: Direct MSE between CLS embeddings
         student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
