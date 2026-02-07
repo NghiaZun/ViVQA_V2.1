@@ -915,7 +915,8 @@ def main():
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=learning_rate,
-        weight_decay=weight_decay
+        weight_decay=weight_decay,
+        eps=1e-10  # Better than default 1e-8: keeps Adam adaptive in flat loss regions
     )
     
     # Mixed precision scaler (use new API to avoid deprecation warning)
