@@ -574,7 +574,7 @@ class DeterministicVQA(nn.Module):
             self.vision_teacher.eval()
             
             # Get teacher's vision processor for 384px images
-            self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name)
+            self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name, use_fast=False)
             teacher_vision_hidden = self.vision_teacher.config.hidden_size
             print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
             
