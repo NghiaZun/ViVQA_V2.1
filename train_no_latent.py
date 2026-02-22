@@ -913,14 +913,6 @@ def main():
         unfreeze_decoder=unfreeze_decoder
     )
     
-    # 🚀 SPEED OPTIMIZATION: torch.compile() for 20-30% speedup (PyTorch 2.0+)
-    if hasattr(torch, 'compile'):
-        print("🚀 [Optimization] Compiling model with torch.compile()...")
-        model = torch.compile(model, mode='reduce-overhead')
-        print("   ✅ Model compiled! Expect 20-30% speedup after warmup (2-3 batches)")
-    else:
-        print("   ⚠️  torch.compile() not available (requires PyTorch 2.0+)")
-    
     # 🚀 SPEED OPTIMIZATION: channels_last memory format for conv layers (+10-20% speed)
     try:
         model = model.to(memory_format=torch.channels_last)
@@ -1015,9 +1007,8 @@ def main():
     print("\n" + "🚀"*40)
     print("SPEED OPTIMIZATIONS ENABLED:")
     print("  ✅ DataLoader: 4 workers + persistent_workers + prefetch_factor=2")
-    print("  ✅ torch.compile(): reduce-overhead mode (if PyTorch 2.0+)")
     print("  ✅ channels_last: Memory format optimization for conv layers")
-    print("  📈 Expected speedup: ~60% faster training!")
+    print("  📈 Expected speedup: ~40% faster training!")
     print("🚀"*40 + "\n")
     
     stage = 3
