@@ -20,6 +20,8 @@ Version: 2.0 with improvements:
 import os
 import json
 import argparse
+import random
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
@@ -671,7 +673,12 @@ def main():
             raise ValueError("If using CSV structure, must provide both: --train_csv and --image_dir")
         # val_csv is optional - will auto-split if not provided
     
-    # Set seed
+    # ========================================================================
+    # Random seed (basic setup like 7/2)
+    # ========================================================================
+    # Set all random seeds for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
@@ -844,22 +851,25 @@ def main():
             bartpho_model_name=bartpho_model
         )
     
-    # 🚀 SPEED OPTIMIZATION: Parallel data loading with persistent workers
+    # Create generator for reproducible shuffling
+    train_generator = torch.Generator().manual_seed(args.seed)
+    
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,  # 🚀 Parallel loading (4 workers = +25% speed)
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True if num_workers > 0 else False,  # 🚀 Keep workers alive between epochs
-        prefetch_factor=2 if num_workers > 0 else None  # 🚀 Pre-load 2 batches ahead
+        persistent_workers=True if num_workers > 0 else False,
+        prefetch_factor=2 if num_workers > 0 else None,
+        generator=train_generator  # ✅ FIX: Deterministic shuffle!
     )
     
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,  # 🚀 Parallel loading for validation too
+        num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True if num_workers > 0 else False,
         prefetch_factor=2 if num_workers > 0 else None
