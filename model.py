@@ -44,13 +44,29 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
 # Note: Manual LoRALayer removed - PEFT library handles all LoRA functionality
 
 class FlamingoGatedCrossAttention(nn.Module):
-    """Flamingo-style Gated Cross Attention"""
-    def __init__(self, hidden_dim=1024, num_heads=16, dropout=0.1):
+    """
+    Flamingo-style Gated Cross Attention with configurable fusion direction
+    
+    Fusion types:
+        - 'text2vision': Vision attends to text (original Flamingo)
+        - 'vision2text': Text attends to vision (inverse)
+        - 'bidirectional': Both directions with separate gates
+    """
+    def __init__(self, hidden_dim=1024, num_heads=16, dropout=0.1, fusion_type='text2vision'):
         super().__init__()
         
+        self.fusion_type = fusion_type
+        
+        # Primary cross-attention (text2vision or vision2text)
         self.cross_attn = nn.MultiheadAttention(
             hidden_dim, num_heads, dropout=dropout, batch_first=True
         )
+        
+        # Bidirectional: add reverse cross-attention
+        if fusion_type == 'bidirectional':
+            self.cross_attn_reverse = nn.MultiheadAttention(
+                hidden_dim, num_heads, dropout=dropout, batch_first=True
+            )
         
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim * 4),
@@ -66,24 +82,103 @@ class FlamingoGatedCrossAttention(nn.Module):
         self.gate_cross = nn.Parameter(torch.zeros(1))
         self.gate_ffn = nn.Parameter(torch.zeros(1))
         
+        # Bidirectional: add reverse gates
+        if fusion_type == 'bidirectional':
+            self.norm_cross_reverse = nn.LayerNorm(hidden_dim)
+            self.norm_ffn_reverse = nn.LayerNorm(hidden_dim)
+            self.gate_cross_reverse = nn.Parameter(torch.zeros(1))
+            self.gate_ffn_reverse = nn.Parameter(torch.zeros(1))
+            
+            # Separate FFN for text in bidirectional mode
+            self.ffn_reverse = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim * 4),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim * 4, hidden_dim),
+                nn.Dropout(dropout)
+            )
+        
     def forward(self, vision_features, text_features, text_attention_mask=None):
-        key_padding_mask = None
+        """
+        Args:
+            vision_features: [B, num_patches, D]
+            text_features: [B, seq_len, D]
+            text_attention_mask: [B, seq_len]
+        
+        Returns:
+            vision_features, text_features (both updated if bidirectional)
+        """
+        # Prepare padding masks
+        text_key_padding_mask = None
         if text_attention_mask is not None:
-            key_padding_mask = (text_attention_mask == 0)
+            text_key_padding_mask = (text_attention_mask == 0)
         
-        attn_out, attn_weights = self.cross_attn(
-            query=vision_features,
-            key=text_features,
-            value=text_features,
-            key_padding_mask=key_padding_mask
-        )
+        if self.fusion_type == 'text2vision':
+            # Vision attends to text (original Flamingo)
+            attn_out, _ = self.cross_attn(
+                query=vision_features,
+                key=text_features,
+                value=text_features,
+                key_padding_mask=text_key_padding_mask
+            )
+            
+            vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_out)
+            
+            ffn_out = self.ffn(vision_features)
+            vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out)
+            
+            return vision_features, text_features
         
-        vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_out)
+        elif self.fusion_type == 'vision2text':
+            # Text attends to vision (inverse)
+            attn_out, _ = self.cross_attn(
+                query=text_features,
+                key=vision_features,
+                value=vision_features,
+                key_padding_mask=None  # Vision has no padding
+            )
+            
+            text_features = text_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_out)
+            
+            ffn_out = self.ffn(text_features)
+            text_features = text_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out)
+            
+            return vision_features, text_features
         
-        ffn_out = self.ffn(vision_features)
-        vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out)
+        elif self.fusion_type == 'bidirectional':
+            # Both directions
+            # 1. Vision attends to text
+            attn_v2t, _ = self.cross_attn(
+                query=vision_features,
+                key=text_features,
+                value=text_features,
+                key_padding_mask=text_key_padding_mask
+            )
+            
+            vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_v2t)
+            
+            # 2. Text attends to vision
+            attn_t2v, _ = self.cross_attn_reverse(
+                query=text_features,
+                key=vision_features,
+                value=vision_features,
+                key_padding_mask=None
+            )
+            
+            text_features = text_features + torch.tanh(self.gate_cross_reverse) * self.norm_cross_reverse(attn_t2v)
+            
+            # 3. FFN for vision
+            ffn_out_v = self.ffn(vision_features)
+            vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out_v)
+            
+            # 4. FFN for text
+            ffn_out_t = self.ffn_reverse(text_features)
+            text_features = text_features + torch.tanh(self.gate_ffn_reverse) * self.norm_ffn_reverse(ffn_out_t)
+            
+            return vision_features, text_features
         
-        return vision_features
+        else:
+            raise ValueError(f"Unknown fusion_type: {self.fusion_type}")
 
 
 # ============================================================================
@@ -357,6 +452,7 @@ class DeterministicVQA(nn.Module):
         num_fusion_layers: int = 4,  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
         num_heads: int = 8,
         dropout: float = 0.1,
+        fusion_type: str = 'text2vision',  # 🔥 NEW: 'text2vision', 'vision2text', 'bidirectional'
         gradient_checkpointing: bool = True,
         use_vision_lora: bool = False,  # 🔥 Use LoRA for vision encoder
         vision_lora_r: int = 8,  # 🔥 LoRA rank (8 recommended for ~10K samples)
@@ -383,6 +479,7 @@ class DeterministicVQA(nn.Module):
         print("  ✅ No VAE/KL regularization")
         print("  ✅ Direct cross-attention fusion")
         print("  ✅ Optimized for accuracy & stability")
+        print(f"  🔥 Fusion type: {fusion_type}")
         print(f"  🔥 Vision Encoder: {vision_model_name}")
         
         # Store distillation config
@@ -495,12 +592,13 @@ class DeterministicVQA(nn.Module):
         )
         print(f"  ✅ Vision projection: {vision_hidden_dim} → {bart_hidden_dim}")
         
-        # Flamingo-style fusion
+        # Flamingo-style fusion with configurable direction
+        self.fusion_type = fusion_type
         self.flamingo_fusion = nn.ModuleList([
-            FlamingoGatedCrossAttention(bart_hidden_dim, num_heads, dropout)
+            FlamingoGatedCrossAttention(bart_hidden_dim, num_heads, dropout, fusion_type=fusion_type)
             for _ in range(num_fusion_layers)
         ])
-        print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers")
+        print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers ({fusion_type} mode)")
         
         # 🔥 NEW: Type-Conditioned Vision Adapter (AFTER vision projection)
         if self.use_type_adapter:
@@ -974,19 +1072,39 @@ class DeterministicVQA(nn.Module):
         if question_types is not None:
             type_loss = F.cross_entropy(type_logits, question_types)
         
-        # 3. Vision-text fusion (Flamingo style)
+        # 3. Vision-text fusion (Flamingo style with configurable direction)
         fused_vision = vision_features
+        fused_text = text_features  # Track text too for bidirectional
+        
         for fusion_layer in self.flamingo_fusion:
-            fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
+            fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
+        
+        # 🔥 CRITICAL: Select features based on fusion type
+        # Purpose: Decoder should cross-attend to the UPDATED modality
+        if self.fusion_type == 'text2vision':
+            # Vision learned from text → vision is primary for decoder
+            vision_for_decoder = fused_vision  # Updated
+            text_for_concat = fused_text       # Unchanged (original text context)
+        elif self.fusion_type == 'vision2text':
+            # Text learned from vision → text is primary for decoder
+            vision_for_decoder = fused_vision  # Unchanged (original vision context)
+            text_for_concat = fused_text       # Updated (text enriched with vision info)
+        elif self.fusion_type == 'bidirectional':
+            # Both learned from each other → both are enriched
+            vision_for_decoder = fused_vision  # Updated
+            text_for_concat = fused_text       # Updated
+        else:
+            raise ValueError(f"Unknown fusion_type: {self.fusion_type}")
         
         # 🔥 Type-Conditioned Vision Gating
+        # NOTE: Only gate vision features, not text!
         gate_stats = None
         if self.use_vision_gate:
             # Use predicted types during inference, ground truth during training
             type_ids_for_gating = question_types if question_types is not None else torch.argmax(type_logits, dim=-1)
             gated_vision, gate_values = self.vision_gating(
-                fused_vision, 
-                text_features,
+                vision_for_decoder,  # Gate vision only
+                text_for_concat,     # Use text as context
                 type_ids=type_ids_for_gating  # 🔥 Type-conditioned!
             )
             
@@ -997,8 +1115,7 @@ class DeterministicVQA(nn.Module):
                 'min': gate_values.min().item(),
                 'max': gate_values.max().item()
             }
-        else:
-            gated_vision = fused_vision
+            vision_for_decoder = gated_vision  # Use gated version
         
         # 4. Prepare decoder inputs
         if labels is not None:
@@ -1015,12 +1132,12 @@ class DeterministicVQA(nn.Module):
                 device=pixel_values.device
             )
         
-        # 5. Decoder: Cross-attend to fused vision features
-        # 🔥 Vision-First Ordering: Put vision tokens BEFORE text
-        # Reason: Decoder attends to earlier tokens first, increasing vision usage
-        encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
+        # 5. Decoder: Cross-attend to fused features
+        # 🔥 Concatenate vision + text for decoder cross-attention
+        # Order matters: vision first = decoder sees vision tokens first
+        encoder_hidden_states = torch.cat([vision_for_decoder, text_for_concat], dim=1)
         encoder_attention_mask = torch.cat([
-            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            torch.ones(batch_size, vision_for_decoder.size(1), device=attention_mask.device),
             attention_mask
         ], dim=1)
         

@@ -572,6 +572,9 @@ def main():
                        help='Vision encoder model (default: SigLIP-base)')
     parser.add_argument('--bartpho_model', type=str, default='vinai/bartpho-syllable', help='BARTpho model')
     parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
+    parser.add_argument('--fusion_type', type=str, default='text2vision', 
+                       choices=['text2vision', 'vision2text', 'bidirectional'],
+                       help='Fusion direction: text2vision (vision attends to text), vision2text (text attends to vision), or bidirectional (both)')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate')
     parser.add_argument('--label_smoothing', type=float, default=0.1, 
@@ -896,6 +899,7 @@ def main():
         vision_model_name=vision_model,
         bartpho_model_name=bartpho_model,
         num_fusion_layers=num_fusion_layers,
+        fusion_type=args.fusion_type,  # 🔥 NEW: Fusion direction
         num_heads=args.num_heads,
         dropout=args.dropout,
         gradient_checkpointing=not args.no_gradient_checkpointing,
