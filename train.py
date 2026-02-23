@@ -1,723 +1,1231 @@
-#!/usr/bin/env python3
 """
-Full 3-Stage Training Pipeline (Continuous)
-============================================
+TRAINING SCRIPT FOR DETERMINISTIC VQA (No Latent Reasoning)
+============================================================
 
-Run all 3 stages in a single continuous training session
-Automatically switches stages based on epoch milestones
+Simplified training without VAE/KL complexity:
+- Stage 1: SKIP (no latent to train)
+- Stage 2: SKIP (no KL warmup needed)
+- Stage 3: Direct end-to-end training
 
-Usage:
-    python train.py --csv_path <path> --image_folder <path>
+Focus: Maximize accuracy and training stability for Vietnamese VQA.
+
+Version: 2.0 with improvements:
+- LR scheduler (ReduceLROnPlateau)
+- Early stopping
+- Better metrics (EM + F1 score)
+- Label smoothing
+- Proper beam search generation
 """
 
-import torch
 import os
+import json
+import argparse
+import random
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from tqdm import tqdm
+from collections import Counter
 import csv
 import matplotlib.pyplot as plt
-import pandas as pd
-from dataclasses import dataclass
-from train_utils import (
-    FixedTrainConfig, set_seed, run_one_epoch
-)
-from model import FixedLatentReasoningVQA, TeacherEvaluator, TrainingCurriculum
 from dataset import VQAGenDataset
-from transformers import AutoImageProcessor
-from torch.utils.data import DataLoader, random_split
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.cuda.amp import GradScaler
-from tqdm import tqdm
+
+from model import DeterministicVQA
+
+try:
+    from rouge_score import rouge_scorer
+    ROUGE_AVAILABLE = True
+except ImportError:
+    ROUGE_AVAILABLE = False
+    print("⚠️  Warning: rouge_score not installed. ROUGE metrics will be skipped.")
+    print("   Install with: pip install rouge-score")
+
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 
-def get_current_stage(epoch: int, stage1_epochs: int, stage2_epochs: int):
-    """Determine current stage based on epoch number"""
-    if epoch < stage1_epochs:
-        return 1
-    elif epoch < stage1_epochs + stage2_epochs:
-        return 2
+# ============================================================================
+# VISION DROPOUT AUGMENTATION (Inline approach - simpler!)
+# ============================================================================
+
+# NOTE: We apply vision dropout by directly zeroing pixel_values before forward pass
+# This is simpler than monkey-patching and avoids nn.Module assignment issues.
+#
+# Type-specific dropout rates (based on diagnostic results):
+#   - COUNT (42.6% acc) → 0.4 (aggressive)
+#   - COLOR (49.9% acc) → 0.35 (high)
+#   - OBJECT (61.5% acc) → 0.2 (low)
+#   - LOCATION (65% acc) → 0.2 (low)
+#
+# See implementation in run_one_epoch_deterministic() around line 410
+
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+
+class EarlyStopping:
+    """Early stopping to prevent overfitting"""
+    def __init__(self, patience=5, min_delta=0.001, verbose=True):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.verbose = verbose
+        self.counter = 0
+        self.best_loss = float('inf')
+        self.early_stop = False
+    
+    def __call__(self, val_loss):
+        if val_loss < self.best_loss - self.min_delta:
+            if self.verbose:
+                print(f"  📉 Validation loss improved: {self.best_loss:.4f} → {val_loss:.4f}")
+            self.best_loss = val_loss
+            self.counter = 0
+            return False
+        else:
+            self.counter += 1
+            if self.verbose:
+                print(f"  ⚠️  No improvement for {self.counter}/{self.patience} epochs")
+            if self.counter >= self.patience:
+                if self.verbose:
+                    print(f"  🛑 Early stopping triggered!")
+                self.early_stop = True
+                return True
+        return False
+
+
+def compute_f1_score(prediction: str, ground_truth: str) -> float:
+    """
+    Compute F1 score between prediction and ground truth
+    
+    F1 is better than exact match for VQA because it gives partial credit!
+    """
+    pred_tokens = prediction.lower().split()
+    gt_tokens = ground_truth.lower().split()
+    
+    # Edge case: both empty (should be 1.0, not 0.0)
+    # If both model and ground truth produce nothing, it's technically correct
+    if len(pred_tokens) == 0 and len(gt_tokens) == 0:
+        return 1.0
+    
+    # Edge case: one empty, one not
+    if len(pred_tokens) == 0 or len(gt_tokens) == 0:
+        return 0.0
+    
+    common = Counter(pred_tokens) & Counter(gt_tokens)
+    num_same = sum(common.values())
+    
+    if num_same == 0:
+        return 0.0
+    
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gt_tokens)
+    f1 = 2 * precision * recall / (precision + recall)
+    
+    return f1
+
+
+def compute_rouge_scores(prediction: str, ground_truth: str) -> dict:
+    """
+    Compute ROUGE-1 and ROUGE-L scores
+    
+    ROUGE-1: Unigram overlap (measures word-level similarity)
+    ROUGE-L: Longest common subsequence (measures fluency/order)
+    
+    Returns:
+        dict with 'rouge1' and 'rougeL' F1 scores (0-1 range)
+    """
+    if not ROUGE_AVAILABLE:
+        return {'rouge1': 0.0, 'rougeL': 0.0}
+    
+    # use_stemmer=False because Vietnamese is an isolating language
+    # (tiếng Việt là ngôn ngữ đơn lập - words don't change form like English)
+    # Stemming is designed for inflectional languages (English: running→run)
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rougeL'], use_stemmer=False)
+    scores = scorer.score(ground_truth, prediction)
+    
+    return {
+        'rouge1': scores['rouge1'].fmeasure,
+        'rougeL': scores['rougeL'].fmeasure
+    }
+
+
+def analyze_dataset(dataset, tokenizer, num_samples=1000):
+    """Analyze dataset to detect imbalance"""
+    print("\n[Dataset Analysis]")
+    
+    # Handle Subset (from random_split)
+    from torch.utils.data import Subset
+    actual_dataset = dataset.dataset if isinstance(dataset, Subset) else dataset
+    indices = dataset.indices if isinstance(dataset, Subset) else range(len(dataset))
+    
+    answers = []
+    question_lengths = []
+    answer_lengths = []
+    
+    sample_indices = list(indices)[:min(num_samples, len(indices))]
+    
+    for idx in sample_indices:
+        item = actual_dataset[idx]
+        
+        # Handle both dict and tuple returns
+        if isinstance(item, dict):
+            labels = item['labels']
+            input_ids = item['input_ids']
+        else:
+            # tuple: (pixel_values, input_ids, attention_mask, labels)
+            _, input_ids, _, labels = item
+        
+        label_tokens = labels[labels != -100]
+        answer = tokenizer.decode(label_tokens, skip_special_tokens=True)
+        answers.append(answer)
+        
+        question = tokenizer.decode(input_ids, skip_special_tokens=True)
+        question_lengths.append(len(question.split()))
+        answer_lengths.append(len(answer.split()))
+    
+    answer_counts = Counter(answers)
+    
+    print(f"  Unique answers: {len(answer_counts)}")
+    print(f"  Top 10 most common answers:")
+    for ans, count in answer_counts.most_common(10):
+        pct = count / len(answers) * 100
+        print(f"    '{ans}': {count} ({pct:.1f}%)")
+    
+    # Check imbalance
+    if answer_counts.most_common(1)[0][1] / len(answers) > 0.3:
+        print(f"  ⚠️  Dataset appears imbalanced! Top answer accounts for {answer_counts.most_common(1)[0][1] / len(answers) * 100:.1f}%")
+    
+    print(f"  Avg question length: {sum(question_lengths)/len(question_lengths):.1f} tokens")
+    print(f"  Avg answer length: {sum(answer_lengths)/len(answer_lengths):.1f} tokens")
+
+
+def plot_training_curves(history, output_dir):
+    """
+    Plot and save training curves
+    
+    Args:
+        history: List of dicts with metrics per epoch
+        output_dir: Directory to save plots
+    """
+    if not history:
+        return
+    
+    epochs = [h['epoch'] for h in history]
+    train_losses = [h['train_loss'] for h in history]
+    val_losses = [h['val_loss'] for h in history]
+    learning_rates = [h['learning_rate'] for h in history]
+    
+    # Extract metrics if available
+    exact_matches = [h.get('exact_match', None) for h in history]
+    f1_scores = [h.get('f1_score', None) for h in history]
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    fig.suptitle('Training Metrics', fontsize=16, fontweight='bold')
+    
+    # 1. Loss curves
+    axes[0, 0].plot(epochs, train_losses, 'b-o', label='Train Loss', linewidth=2)
+    axes[0, 0].plot(epochs, val_losses, 'r-o', label='Val Loss', linewidth=2)
+    axes[0, 0].set_xlabel('Epoch')
+    axes[0, 0].set_ylabel('Loss')
+    axes[0, 0].set_title('Training & Validation Loss')
+    axes[0, 0].legend()
+    axes[0, 0].grid(True, alpha=0.3)
+    
+    # 2. Learning rate
+    axes[0, 1].plot(epochs, learning_rates, 'g-o', linewidth=2)
+    axes[0, 1].set_xlabel('Epoch')
+    axes[0, 1].set_ylabel('Learning Rate')
+    axes[0, 1].set_title('Learning Rate Schedule')
+    axes[0, 1].set_yscale('log')
+    axes[0, 1].grid(True, alpha=0.3)
+    
+    # 3. Exact Match (if available)
+    if any(em is not None for em in exact_matches):
+        valid_epochs = [e for e, em in zip(epochs, exact_matches) if em is not None]
+        valid_ems = [em for em in exact_matches if em is not None]
+        axes[1, 0].plot(valid_epochs, valid_ems, 'm-o', linewidth=2)
+        axes[1, 0].set_xlabel('Epoch')
+        axes[1, 0].set_ylabel('Exact Match (%)')
+        axes[1, 0].set_title('Exact Match Score')
+        axes[1, 0].grid(True, alpha=0.3)
     else:
-        return 3
-
-
-def plot_training_curves(csv_path: str, save_dir: str):
-    """
-    Plot training curves from CSV log
+        axes[1, 0].text(0.5, 0.5, 'No EM data', ha='center', va='center')
+        axes[1, 0].set_title('Exact Match Score')
     
-    Creates 4 subplots:
-    1. Total Loss (train vs val)
-    2. Answer Loss (train vs val)
-    3. KL Loss (train vs val with raw KL)
-    4. Overfitting Ratio + KL Weight
-    """
-    print(f"\n[PLOTTING] Loading training log from {csv_path}...")
-    df = pd.read_csv(csv_path)
+    # 4. F1 Score (if available)
+    if any(f1 is not None for f1 in f1_scores):
+        valid_epochs = [e for e, f1 in zip(epochs, f1_scores) if f1 is not None]
+        valid_f1s = [f1 for f1 in f1_scores if f1 is not None]
+        axes[1, 1].plot(valid_epochs, valid_f1s, 'c-o', linewidth=2)
+        axes[1, 1].set_xlabel('Epoch')
+        axes[1, 1].set_ylabel('F1 Score (%)')
+        axes[1, 1].set_title('F1 Score')
+        axes[1, 1].grid(True, alpha=0.3)
+    else:
+        axes[1, 1].text(0.5, 0.5, 'No F1 data', ha='center', va='center')
+        axes[1, 1].set_title('F1 Score')
     
-    # Create figure with 2x2 subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle('Training Curves - ViVQA Latent Reasoning', fontsize=16, fontweight='bold')
-    
-    # Plot 1: Total Loss
-    ax1 = axes[0, 0]
-    ax1.plot(df['epoch'], df['train_total'], 'b-', label='Train Total', linewidth=2)
-    ax1.plot(df['epoch'], df['val_total'], 'r-', label='Val Total', linewidth=2)
-    ax1.set_xlabel('Epoch', fontsize=12)
-    ax1.set_ylabel('Total Loss', fontsize=12)
-    ax1.set_title('Total Loss (Answer + KL + Ortho + Teacher)', fontsize=14, fontweight='bold')
-    ax1.legend(loc='upper right', fontsize=10)
-    ax1.grid(True, alpha=0.3)
-    
-    # Add stage boundaries
-    for stage_name, stage_epoch in zip(['Stage 1→2', 'Stage 2→3'], 
-                                       df[df['stage'].diff() != 0]['epoch'].tolist()):
-        ax1.axvline(x=stage_epoch, color='gray', linestyle='--', alpha=0.5, label=stage_name)
-    
-    # Plot 2: Answer Loss (more important!)
-    ax2 = axes[0, 1]
-    ax2.plot(df['epoch'], df['train_answer'], 'b-', label='Train Answer', linewidth=2)
-    ax2.plot(df['epoch'], df['val_answer'], 'r-', label='Val Answer', linewidth=2)
-    ax2.set_xlabel('Epoch', fontsize=12)
-    ax2.set_ylabel('Answer Loss', fontsize=12)
-    ax2.set_title('Answer Loss (Without Regularization)', fontsize=14, fontweight='bold')
-    ax2.legend(loc='upper right', fontsize=10)
-    ax2.grid(True, alpha=0.3)
-    
-    # Highlight best epoch
-    best_epoch = df.loc[df['val_answer'].idxmin(), 'epoch']
-    best_val = df['val_answer'].min()
-    ax2.scatter([best_epoch], [best_val], color='red', s=100, marker='*', 
-                label=f'Best: Epoch {best_epoch}', zorder=5)
-    ax2.legend(loc='upper right', fontsize=10)
-    
-    # Plot 3: KL Loss (with raw KL)
-    ax3 = axes[1, 0]
-    ax3.plot(df['epoch'], df['train_kl'], 'b-', label='Train KL (after free bits)', linewidth=2)
-    ax3.plot(df['epoch'], df['val_kl'], 'r-', label='Val KL (after free bits)', linewidth=2)
-    if 'train_kl_raw' in df.columns:
-        ax3.plot(df['epoch'], df['train_kl_raw'], 'b--', label='Train KL (raw)', linewidth=1, alpha=0.7)
-    ax3.set_xlabel('Epoch', fontsize=12)
-    ax3.set_ylabel('KL Loss', fontsize=12)
-    ax3.set_title('KL Divergence (Raw vs After Free Bits)', fontsize=14, fontweight='bold')
-    ax3.legend(loc='upper right', fontsize=10)
-    ax3.grid(True, alpha=0.3)
-    
-    # Add healthy KL range
-    ax3.axhspan(0.03, 0.08, alpha=0.2, color='green', label='Healthy KL Range')
-    ax3.legend(loc='upper right', fontsize=10)
-    
-    # Plot 4: Overfitting Ratio + KL Weight
-    ax4 = axes[1, 1]
-    ax4_twin = ax4.twinx()
-    
-    # Overfitting ratio
-    line1 = ax4.plot(df['epoch'], df['overfitting_ratio'], 'purple', 
-                     label='Overfitting Ratio (Val/Train)', linewidth=2)
-    ax4.axhline(y=2.0, color='orange', linestyle='--', alpha=0.5, label='Warning (2.0x)')
-    ax4.axhline(y=2.5, color='red', linestyle='--', alpha=0.5, label='High (2.5x)')
-    ax4.set_xlabel('Epoch', fontsize=12)
-    ax4.set_ylabel('Overfitting Ratio', fontsize=12, color='purple')
-    ax4.tick_params(axis='y', labelcolor='purple')
-    
-    # KL weight
-    line2 = ax4_twin.plot(df['epoch'], df['kl_weight'], 'green', 
-                          label='KL Weight', linewidth=2, linestyle='-.')
-    ax4_twin.set_ylabel('KL Weight', fontsize=12, color='green')
-    ax4_twin.tick_params(axis='y', labelcolor='green')
-    
-    ax4.set_title('Overfitting Monitor + KL Weight Schedule', fontsize=14, fontweight='bold')
-    
-    # Combine legends
-    lines = line1 + line2
-    labels = [l.get_label() for l in lines] + ['Warning (2.0x)', 'High (2.5x)']
-    ax4.legend(lines + [ax4.lines[1], ax4.lines[2]], labels, loc='upper left', fontsize=10)
-    ax4.grid(True, alpha=0.3)
-    
-    # Add stage annotations
-    stages = df['stage'].unique()
-    for stage in stages:
-        stage_df = df[df['stage'] == stage]
-        if len(stage_df) > 0:
-            mid_epoch = stage_df['epoch'].iloc[len(stage_df)//2]
-            ax4.text(mid_epoch, ax4.get_ylim()[1] * 0.95, 
-                    f'Stage {stage}', 
-                    ha='center', va='top', fontsize=10, 
-                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.tight_layout()
     
     # Save plot
-    plot_path = os.path.join(save_dir, 'training_curves.png')
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
-    print(f"[PLOTTING] ✅ Saved training curves to {plot_path}")
-    
-    # Also save as PDF for papers
-    pdf_path = os.path.join(save_dir, 'training_curves.pdf')
-    plt.savefig(pdf_path, format='pdf', bbox_inches='tight')
-    print(f"[PLOTTING] ✅ Saved PDF version to {pdf_path}")
-    
+    plot_path = os.path.join(output_dir, 'training_curves.png')
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"  📊 Saved training curves to: {plot_path}")
     plt.close()
-    
-    # Print summary statistics
-    print("\n" + "="*80)
-    print("TRAINING SUMMARY")
-    print("="*80)
-    print(f"Total epochs: {len(df)}")
-    print(f"Best val answer loss: {df['val_answer'].min():.4f} (Epoch {df.loc[df['val_answer'].idxmin(), 'epoch']})")
-    print(f"Best val total loss: {df['val_total'].min():.4f} (Epoch {df.loc[df['val_total'].idxmin(), 'epoch']})")
-    print(f"Final overfitting ratio: {df['overfitting_ratio'].iloc[-1]:.2f}x")
-    if 'train_kl_raw' in df.columns:
-        print(f"Final KL raw: {df['train_kl_raw'].iloc[-1]:.4f}")
-    print(f"Final KL after: {df['train_kl'].iloc[-1]:.4f}")
-    print("="*80 + "\n")
 
+
+def save_metrics_csv(history, output_dir):
+    """
+    Save training metrics to CSV
+    
+    Args:
+        history: List of dicts with metrics per epoch
+        output_dir: Directory to save CSV
+    """
+    if not history:
+        return
+    
+    csv_path = os.path.join(output_dir, 'training_metrics.csv')
+    
+    # Get all possible keys
+    all_keys = set()
+    for h in history:
+        all_keys.update(h.keys())
+    all_keys = sorted(all_keys)
+    
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=all_keys)
+        writer.writeheader()
+        writer.writerows(history)
+    
+    print(f"  📊 Saved metrics CSV to: {csv_path}")
+
+
+
+# ============================================================================
+# TRAINING UTILITIES
+# ============================================================================
+
+def run_one_epoch_deterministic(
+    model, dataloader, optimizer, scaler, device,
+    is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
+    answer_weights=None, use_type_loss=False
+):
+    """
+    Run one epoch for deterministic model (no KL diagnostics needed!)
+    
+    Args:
+        gradient_accumulation_steps: Accumulate gradients over multiple batches
+                                     for effective larger batch size
+        answer_weights: Tensor of token-level weights for balanced loss
+        use_type_loss: Whether to apply type-conditional loss weighting
+    
+    Returns:
+        dict with metrics: loss, answer_loss, type_loss
+    """
+    model.train() if is_training else model.eval()
+    
+    total_loss = 0.0
+    total_answer_loss = 0.0
+    total_type_loss = 0.0  # 🔥 NEW: Track type loss
+    num_batches = 0
+    
+    with torch.set_grad_enabled(is_training):
+        pbar = tqdm(dataloader, desc=f"{'Train' if is_training else 'Val'} Stage {stage}")
+        
+        for batch_idx, batch in enumerate(pbar):
+            pixel_values = batch['pixel_values'].to(device)
+            # 🚀 SPEED OPTIMIZATION: Convert to channels_last for faster conv ops
+            pixel_values = pixel_values.to(memory_format=torch.channels_last)
+            
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+            
+            # 🔥 Extract question types if using type-conditional loss
+            question_types = None
+            if use_type_loss and 'question_type' in batch:
+                question_types = batch['question_type'].to(device)
+            
+            # 🔥🔥🔥 Extract teacher inputs for distillation
+            images_384 = None
+            raw_questions = None
+            if 'images_384' in batch:
+                images_384 = batch['images_384'].to(device)
+                # 🚀 Convert teacher images to channels_last too
+                images_384 = images_384.to(memory_format=torch.channels_last)
+            if 'raw_question' in batch:
+                raw_questions = batch['raw_question']  # List[str], keep on CPU
+            
+            # Forward pass with mixed precision
+            with autocast(enabled=(scaler is not None)):
+                outputs = model(
+                    pixel_values=pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                    stage=stage,
+                    answer_weights=answer_weights,  # 🔥 Pass answer weights
+                    question_types=question_types,  # 🔥 Pass question types
+                    images_384=images_384,  # 🔥🔥🔥 Teacher vision input
+                    raw_questions=raw_questions  # 🔥🔥🔥 Teacher text input
+                )
+                
+                loss = outputs.total_loss
+                
+                # Scale loss for gradient accumulation
+                if is_training and gradient_accumulation_steps > 1:
+                    loss = loss / gradient_accumulation_steps
+            
+            if is_training and loss is not None:
+                if scaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+                
+                # Update weights after accumulating gradients
+                if (batch_idx + 1) % gradient_accumulation_steps == 0:
+                    if scaler is not None:
+                        scaler.unscale_(optimizer)
+                        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                        optimizer.step()
+                    
+                    optimizer.zero_grad()
+            
+            # Accumulate metrics (use original loss, not scaled)
+            if loss is not None:
+                actual_loss = loss.item() * gradient_accumulation_steps if gradient_accumulation_steps > 1 else loss.item()
+                total_loss += actual_loss
+                total_answer_loss += outputs.answer_loss.item()
+                
+                # 🔥 NEW: Track type loss if available
+                if outputs.type_loss is not None:
+                    total_type_loss += outputs.type_loss.item()
+                
+                # 🔥🔥🔥 NEW: Track distillation losses
+                total_vision_kd_loss = 0
+                total_text_kd_loss = 0
+                if outputs.vision_kd_loss is not None:
+                    total_vision_kd_loss += outputs.vision_kd_loss.item()
+                if outputs.text_kd_loss is not None:
+                    total_text_kd_loss += outputs.text_kd_loss.item()
+                
+                num_batches += 1
+                
+                # 🔥 Extract gate statistics + type loss for progress bar
+                postfix = {
+                    'loss': f"{actual_loss:.3f}",
+                    'ans': f"{outputs.answer_loss.item():.3f}"
+                }
+                
+                # Add type loss to display if available
+                if outputs.type_loss is not None:
+                    postfix['type'] = f"{outputs.type_loss.item():.3f}"
+                
+                # 🔥🔥🔥 Add distillation losses
+                if outputs.vision_kd_loss is not None:
+                    postfix['vkd'] = f"{outputs.vision_kd_loss.item():.3f}"
+                if outputs.text_kd_loss is not None:
+                    postfix['tkd'] = f"{outputs.text_kd_loss.item():.3f}"
+                
+                if outputs.gate_stats is not None:
+                    stats = outputs.gate_stats
+                    postfix.update({
+                        'α_mean': f"{stats['mean']:.2f}",
+                        'α_std': f"{stats['std']:.2f}"
+                    })
+                
+                pbar.set_postfix(postfix)
+    
+    if num_batches == 0:
+        return {
+            'loss': 0.0,
+            'answer_loss': 0.0,
+            'type_loss': 0.0
+        }
+    
+    return {
+        'loss': total_loss / num_batches,
+        'answer_loss': total_answer_loss / num_batches,
+        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0  # 🔥 NEW
+    }
+
+
+def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, compute_metrics=True):
+    """
+    Sample predictions for qualitative evaluation with metrics
+    
+    Returns:
+        samples: List of dicts with predictions
+        metrics: Dict with EM, F1, ROUGE-1, ROUGE-L scores (if compute_metrics=True)
+    """
+    model.eval()
+    samples = []
+    
+    exact_matches = []
+    f1_scores = []
+    rouge1_scores = []
+    rougeL_scores = []
+    
+    with torch.no_grad():
+        for i, batch in enumerate(dataloader):
+            if i >= num_samples:
+                break
+            
+            pixel_values = batch['pixel_values'].to(device)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+            
+            # Generate predictions (now with REAL beam search!)
+            predictions = model.generate(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=20,
+                num_beams=3  # Use beam search!
+            )
+            
+            # Decode labels
+            label_texts = []
+            for label in labels:
+                label_tokens = label[label != -100].cpu().tolist()
+                label_text = tokenizer.decode(label_tokens, skip_special_tokens=True)
+                label_texts.append(label_text)
+            
+            # Decode questions
+            question_texts = []
+            for inp in input_ids:
+                question_text = tokenizer.decode(inp, skip_special_tokens=True)
+                question_texts.append(question_text)
+            
+            # Compute metrics
+            for q, pred, gt in zip(question_texts, predictions, label_texts):
+                # Exact match
+                em = 1.0 if pred.strip().lower() == gt.strip().lower() else 0.0
+                exact_matches.append(em)
+                
+                # F1 score
+                f1 = compute_f1_score(pred, gt)
+                f1_scores.append(f1)
+                
+                # ROUGE scores
+                rouge_scores = compute_rouge_scores(pred, gt)
+                rouge1_scores.append(rouge_scores['rouge1'])
+                rougeL_scores.append(rouge_scores['rougeL'])
+                
+                samples.append({
+                    'question': q,
+                    'prediction': pred,
+                    'ground_truth': gt,
+                    'exact_match': em,
+                    'f1_score': f1,
+                    'rouge1': rouge_scores['rouge1'],
+                    'rougeL': rouge_scores['rougeL']
+                })
+    
+    metrics = None
+    if compute_metrics and exact_matches:
+        metrics = {
+            'exact_match': sum(exact_matches) / len(exact_matches) * 100,
+            'f1_score': sum(f1_scores) / len(f1_scores) * 100,
+            'rouge1': sum(rouge1_scores) / len(rouge1_scores) * 100,
+            'rougeL': sum(rougeL_scores) / len(rougeL_scores) * 100
+        }
+    
+    return samples, metrics
+
+
+# ============================================================================
+# MAIN TRAINING
+# ============================================================================
 
 def main():
-    import argparse
+    # ========================================================================
+    # ARGUMENT PARSER
+    # ========================================================================
     
-    parser = argparse.ArgumentParser(description="Run full 3-stage training in one session")
-    parser.add_argument("--csv_path", type=str, required=True)
-    parser.add_argument("--image_folder", type=str, required=True)
-    parser.add_argument("--batch_size", type=int, default=2)
-    parser.add_argument("--teacher_type", type=str, default="rule_based", 
-                       choices=["rule_based", "vlm"],
-                       help="🚨 VLM teacher needs ~8GB VRAM! Use rule_based if OOM")
-    parser.add_argument("--stage1_epochs", type=int, default=0)  # 🚨 SKIP Stage 1 - too restrictive
-    parser.add_argument("--stage2_epochs", type=int, default=6,
-                       help="🔥 CRITICAL: 10→6 based on empirical finding! Epoch 5-6 is sweet spot, 7+ over-regularizes!")
-    parser.add_argument("--stage3_epochs", type=int, default=25,
-                       help="🔥 INCREASED: 20→25 (Compensate Stage 2 reduction, more time for teacher)")
-    parser.add_argument("--num_reasoning_samples", type=int, default=3)
-    parser.add_argument("--max_kl_weight", type=float, default=0.05,
-                       help="🔥 FINAL FIX: 0.08→0.05! KL_raw naturally high (0.7-0.9), don't need strong weight. Target: KL_after=0.10-0.20")
-    parser.add_argument("--early_stopping_patience", type=int, default=3,
-                       help="🔥 REDUCED: 5→3 (Stop faster when plateau, avoid overfit)")
+    parser = argparse.ArgumentParser(description='Train Deterministic VQA (No Latent)')
+    
+    # Data
+    parser.add_argument('--data_dir', type=str, default='./data', help='Data directory')
+    parser.add_argument('--train_csv', type=str, default=None, help='Path to train CSV file (if not using data_dir/split structure)')
+    parser.add_argument('--val_csv', type=str, default=None, help='Path to val CSV file (if not using data_dir/split structure)')
+    parser.add_argument('--image_dir', type=str, default=None, help='Path to image directory (if not using data_dir/split structure)')
+    parser.add_argument('--val_split', type=float, default=0.1, help='Validation split ratio if val_csv not provided (default: 0.1 = 10%%)')
+    parser.add_argument('--batch_size', type=int, default=12, help='Batch size')
+    parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
+    
+    # Model
+    parser.add_argument('--vision_model', type=str, default='google/siglip-base-patch16-224', 
+                       help='Vision encoder model (default: SigLIP-base)')
+    parser.add_argument('--bartpho_model', type=str, default='vinai/bartpho-syllable', help='BARTpho model')
+    parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
+    parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate')
+    parser.add_argument('--label_smoothing', type=float, default=0.1, 
+                       help='Label smoothing factor for answer generation (0.0-0.2, default=0.1)')
+    
+    # Training
+    parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
+    parser.add_argument('--lr', type=float, default=5e-5, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
+    parser.add_argument('--max_norm', type=float, default=1.0, help='Gradient clipping max norm')
+    parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1, 
+                       help='Number of gradient accumulation steps (for effective larger batch size)')
+    
+    # LR scheduler & early stopping
+    parser.add_argument('--scheduler', type=str, default='plateau', choices=['none', 'plateau', 'cosine'],
+                       help='LR scheduler type')
+    parser.add_argument('--scheduler_patience', type=int, default=3, help='Patience for ReduceLROnPlateau')
+    parser.add_argument('--scheduler_factor', type=float, default=0.5, help='Factor for ReduceLROnPlateau')
+    parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
+    parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
+    
+    # Freezing
+    parser.add_argument('--unfreeze_encoder_layers', type=int, default=3, help='Number of text encoder layers to unfreeze')
+    parser.add_argument('--freeze_decoder', action='store_true', help='Freeze decoder (default: unfrozen)')
+    
+    # 🔥 Vision Adaptation (LoRA recommended for low-resource)
+    parser.add_argument('--use_vision_lora', action='store_true',
+                       help='Use LoRA for vision encoder adaptation (RECOMMENDED for ~10K samples)')
+    parser.add_argument('--vision_lora_r', type=int, default=8,
+                       help='LoRA rank for vision encoder (default: 8, safe for low-resource)')
+    parser.add_argument('--vision_lora_alpha', type=int, default=16,
+                       help='LoRA alpha scaling (default: 16)')
+    parser.add_argument('--vision_lora_dropout', type=float, default=0.1,
+                       help='LoRA dropout rate (default: 0.1)')
+    
+    # 🔥 Text Encoder Adaptation (LoRA vs unfreeze layers)
+    parser.add_argument('--use_text_lora', action='store_true',
+                       help='Use LoRA for text encoder (BETTER than unfreezing layers for ~10K samples)')
+    parser.add_argument('--text_lora_r', type=int, default=16,
+                       help='LoRA rank for text encoder (default: 16, higher than vision)')
+    parser.add_argument('--text_lora_alpha', type=int, default=32,
+                       help='LoRA alpha scaling for text (default: 32)')
+    parser.add_argument('--text_lora_dropout', type=float, default=0.1,
+                       help='LoRA dropout for text encoder (default: 0.1)')
+
+    # 🔥 Vision Dependency (combat text shortcut)
+    parser.add_argument('--use_vision_gate', action='store_true',
+                       help='Enable learnable vision gating (boost vision importance)')
+    parser.add_argument('--vision_gate_init', type=float, default=1.5,
+                       help='Initial vision gate value (>1.0 = prefer vision, default=1.5)')
+    
+    # 🔥 Type-Conditioned Vision Adapter (NEW!)
+    parser.add_argument('--use_type_adapter', action='store_true',
+                       help='Enable type-conditioned vision adapter (4 expert networks)')
+    parser.add_argument('--type_adapter_rank', type=int, default=64,
+                       help='Low-rank bottleneck for adapter experts (default: 64)')
+    parser.add_argument('--type_adapter_bias', type=float, default=2.0,
+                       help='Type supervision bias strength (default: 2.0)')
+    
+    # 🔥 Answer-aware & Type-conditional Loss
+    parser.add_argument('--answer_weights', type=str, default=None,
+                       help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
+    parser.add_argument('--use_type_loss', action='store_true',
+                       help='Enable type-conditional loss (1.5x counting, 1.4x location, 1.3x color)')
+    
+    # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
+    parser.add_argument('--use_distillation', action='store_true',
+                       help='Enable online knowledge distillation from large teachers')
+    parser.add_argument('--vision_teacher', type=str, default='google/siglip-so400m-patch14-384',
+                       help='Vision teacher model (default: SigLIP-SO400M at 384px)')
+    parser.add_argument('--text_teacher', type=str, default='vinai/phobert-large',
+                       help='Text teacher model (default: PhoBERT-large)')
+    parser.add_argument('--distill_alpha', type=float, default=0.5,
+                       help='Distillation weight: (1-α)*CE + α*KD (default: 0.5 = balanced)')
+    
+    # Checkpointing
+    parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
+    parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
+    parser.add_argument('--save_every', type=int, default=1, help='Save checkpoint every N epochs')
+    parser.add_argument('--sample_every', type=int, default=3, help='Sample predictions every N epochs')
+    
+    # Misc
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--no_gradient_checkpointing', action='store_true', help='Disable gradient checkpointing')
+    parser.add_argument('--analyze_dataset', action='store_true', help='Analyze dataset before training')
+    
+    # Weights & Biases (optional)
+    parser.add_argument('--use_wandb', action='store_true', help='Use Weights & Biases for experiment tracking')
+    parser.add_argument('--wandb_project', type=str, default='vietnamese-vqa-deterministic', 
+                       help='W&B project name')
+    parser.add_argument('--wandb_name', type=str, default=None, help='W&B run name (auto-generated if None)')
     
     args = parser.parse_args()
     
-    # Configuration
-    cfg = FixedTrainConfig()
-    cfg.csv_path = args.csv_path
-    cfg.image_folder = args.image_folder
-    cfg.batch_size = args.batch_size
-    cfg.teacher_type = args.teacher_type
-    cfg.num_reasoning_samples = args.num_reasoning_samples
-    cfg.use_teacher = True  # 🚨 FIX: Enable teacher for Stage 3!
+    # Validate data arguments
+    if args.train_csv or args.image_dir:
+        if not (args.train_csv and args.image_dir):
+            raise ValueError("If using CSV structure, must provide both: --train_csv and --image_dir")
+        # val_csv is optional - will auto-split if not provided
     
-    # Add missing attributes
-    cfg.learning_rate = cfg.base_lr  # Add learning_rate alias
+    # ========================================================================
+    # Random seed (basic setup like 7/2)
+    # ========================================================================
+    # Set all random seeds for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
     
-    # Total epochs
-    total_epochs = args.stage1_epochs + args.stage2_epochs + args.stage3_epochs
-    stage1_end = args.stage1_epochs
-    stage2_end = args.stage1_epochs + args.stage2_epochs
+    # ========================================================================
+    # CONFIG (from args)
+    # ========================================================================
     
-    print("="*80)
-    print("CONTINUOUS 3-STAGE TRAINING")
-    print("="*80)
-    print(f"\nStage boundaries:")
-    print(f"  Stage 1 (Baseline): Epochs 0-{stage1_end-1}")
-    print(f"  Stage 2 (Warmup):   Epochs {stage1_end}-{stage2_end-1}")
-    print(f"  Stage 3 (Full):     Epochs {stage2_end}-{total_epochs-1}")
-    print(f"  TOTAL: {total_epochs} epochs")
-    print(f"\nKL weight config:")
-    print(f"  Max KL weight: {args.max_kl_weight} (effective = {args.max_kl_weight * 0.01:.3f} due to 0.01 factor in loss)")
-    print(f"  Stage 1: KL weight = 0.0")
-    print(f"  Stage 2: KL weight = 0.0 → {args.max_kl_weight} (linear warmup)")
-    print(f"  Stage 3: KL weight = {args.max_kl_weight}")
-    print("="*80 + "\n")
-    
-    # Setup
-    set_seed(42)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Data
+    data_dir = args.data_dir
+    batch_size = args.batch_size
+    num_workers = args.num_workers
     
     # Model
-    print("[1/6] Loading model...")
-    model = FixedLatentReasoningVQA(
-        num_reasoning_tokens=cfg.num_reasoning_tokens,
-        latent_dim=cfg.latent_dim,
-        num_reasoning_layers=cfg.num_reasoning_layers,
-        num_fusion_layers=cfg.num_fusion_layers,
-        free_bits=cfg.free_bits,
-        ortho_weight=cfg.ortho_weight,
-        token_dropout_prob=cfg.token_dropout_prob,
-        gradient_checkpointing=True
-    )
+    vision_model = args.vision_model
+    bartpho_model = args.bartpho_model
+    num_fusion_layers = args.num_fusion_layers
     
-    # Freeze with decoder unfrozen (will handle per-stage later)
-    model.freeze_pretrained(unfreeze_encoder_layers=3, unfreeze_decoder=True)
-    model = model.to(device)
+    # Training (Stage 3 ONLY)
+    stage3_epochs = args.epochs
+    learning_rate = args.lr
+    weight_decay = args.weight_decay
+    max_norm = args.max_norm
+    use_amp = not args.no_amp
     
-    # Dataset
-    print("\n[2/6] Loading dataset...")
-    vision_processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
-    full_dataset = VQAGenDataset(
-        csv_path=cfg.csv_path,
-        image_folder=cfg.image_folder,
-        vision_processor=vision_processor,
-        tokenizer_name='vinai/bartpho-syllable',  # Pass name, not object
-        max_q_len=32,  # Same as train.py
-        max_a_len=32   # Same as train.py
-    )
+    # Freezing strategy
+    unfreeze_encoder_layers = args.unfreeze_encoder_layers
+    unfreeze_decoder = not args.freeze_decoder
     
-    train_size = int(0.9 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(
-        full_dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(42)
-    )
+    # Checkpointing
+    output_dir = args.output_dir
+    os.makedirs(output_dir, exist_ok=True)
     
-    # 🚨 FIXED: Add generator for seeded shuffle
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=cfg.batch_size, 
-        shuffle=True,
-        generator=torch.Generator().manual_seed(42)  # Reproducible shuffle
-    )
-    val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False)
-    
-    print(f"Train: {len(train_dataset)}, Val: {len(val_dataset)}")
-    
-    # Teacher (initialize once, use in Stage 3)
-    teacher_evaluator = None
-    if args.teacher_type:
-        print(f"\n[3/6] Setting up {args.teacher_type} teacher...")
-        teacher_evaluator = TeacherEvaluator(
-            teacher_type=args.teacher_type,
-            device=device,
-            tokenizer=model.tokenizer  # Use model's tokenizer
-        )
-    else:
-        print("\n[3/6] No teacher (teacher_type not specified)")
-    
-    # Optimizer & Scheduler - ✅ GROUPED LR (critical!)
-    print("\n[4/6] Setting up optimizer with grouped LR...")
-    
-    # ✅ Group parameters by component
-    fusion_params = []
-    decoder_params = []
-    other_params = []
-    
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
-            continue
-        if 'flamingo_fusion' in name:
-            fusion_params.append(param)
-        elif 'decoder' in name or 'lm_head' in name:
-            decoder_params.append(param)
-        else:
-            other_params.append(param)
-    
-    param_groups = [
-        {'params': fusion_params, 'lr': cfg.fusion_lr, 'name': 'fusion'},
-        {'params': decoder_params, 'lr': cfg.decoder_lr, 'name': 'decoder'},
-        {'params': other_params, 'lr': cfg.base_lr, 'name': 'other'}
-    ]
-    
-    print(f"  Fusion params: {len(fusion_params)} (LR={cfg.fusion_lr:.2e})")
-    print(f"  Decoder params: {len(decoder_params)} (LR={cfg.decoder_lr:.2e})")
-    print(f"  Other params: {len(other_params)} (LR={cfg.base_lr:.2e})")
-    
-    optimizer = AdamW(param_groups, weight_decay=cfg.weight_decay)
-    
-    scheduler = CosineAnnealingLR(
-        optimizer, 
-        T_max=total_epochs,
-        eta_min=1e-6  # 🔥 FIX: Add minimum LR to prevent oscillation at high overfit
-    )
-    scaler = GradScaler(enabled=cfg.use_amp)
-    
-    # 🚨 CRITICAL FIX: Curriculum với epoch-based KL warmup (không phải batch-based!)
-    curriculum = TrainingCurriculum(
-        total_steps_per_stage=args.stage2_epochs,  # ✅ FIXED: Số EPOCHS (không phải batches!)
-        max_kl_weight=args.max_kl_weight  # Tunable KL weight
-    )
-    
-    # Training loop
-    print("\n[5/6] Starting continuous training...")
-    print("="*80 + "\n")
-    
-    best_val_loss = float('inf')
-    patience_counter = 0  # 🚨 FIX: Early stopping để tránh overfitting
-    best_val_answer_loss = float('inf')  # 🚨 NEW: Track answer-only loss (more reliable than total)
-    
-    # 🚨 NEW: CSV logging for training curves
-    csv_log_path = os.path.join(cfg.save_dir, 'training_log.csv')
-    # Ensure save directory exists before opening the log file
-    os.makedirs(cfg.save_dir, exist_ok=True)
-    try:
-        csv_file = open(csv_log_path, 'w', newline='')
-    except Exception as e:
-        raise RuntimeError(f"Failed to open CSV log file at {csv_log_path}: {e}")
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow([
-        'epoch', 'stage', 
-        'train_total', 'train_answer', 'train_kl', 'train_kl_raw', 'train_ortho', 'train_teacher',
-        'val_total', 'val_answer', 'val_kl', 'val_kl_raw', 'val_ortho',
-        'learning_rate', 'kl_weight', 'effective_kl_weight',
-        'overfitting_ratio', 'answer_gap',
-        'best_val_answer', 'patience',
-        'text_gate'  # 🚀 NEW: Track text gate value
-    ])
-    print(f"[LOGGING] Training log will be saved to: {csv_log_path}")
-    print(f"[LOGGING] Training curves will be plotted after each epoch\n")
-    
-    for epoch in range(total_epochs):
-        # Determine current stage
-        current_stage = get_current_stage(epoch, args.stage1_epochs, args.stage2_epochs)
-        
-        # 🚨 CRITICAL: Adjust learning rates based on stage (not hard freeze!)
-        # Stage 1: LR=0 for decoder (no update but gradient flows)
-        # Stage 2+: Normal LR for decoder
-        if current_stage == 1:
-            # Set decoder LR to 0 (no weight update but allows gradient flow)
-            for param_group in optimizer.param_groups:
-                if param_group['name'] == 'decoder':
-                    param_group['lr'] = 0.0
-        else:
-            # Restore decoder LR for Stage 2+
-            for param_group in optimizer.param_groups:
-                if param_group['name'] == 'decoder':
-                    param_group['lr'] = cfg.decoder_lr * scheduler.get_last_lr()[0] / cfg.base_lr
-        
-        # Stage transition announcements
-        if epoch == 0:
-            if current_stage == 1:
-                print("\n" + "="*80)
-                print("⚠️  STAGE 1: BASELINE (DEPRECATED)")
-                print("⚠️  WARNING: Stage 1 is deprecated! Direct Stage 2 start recommended.")
-                print("    Reason: Decoder frozen (LR=0) is too restrictive, no benefit")
-                print("    Better: Skip to Stage 2 with freeze vision strategy")
-                print("🔒 Decoder LR=0 (gradient flows, no update)")
-                print("="*80 + "\n")
-            else:
-                # Direct to Stage 2
-                print("\n" + "="*80)
-                print("🟡 STAGE 2: WARMUP (Reasoning KL Warmup)")
-                print("🎯 Strategy: Keep vision encoder FROZEN (DINOv2 + small dataset)")
-                print("="*80 + "\n")
-                curriculum.warmup_epochs = 0
-        elif epoch == stage1_end and stage1_end > 0:
-            print("\n" + "="*80)
-            print("🟡 STAGE 2: WARMUP (Reasoning KL Warmup)")
-            print("🎯 Strategy: Keep vision encoder FROZEN (DINOv2 + small dataset)")
-            print("="*80 + "\n")
-            curriculum.warmup_epochs = 0  # Track warmup progress
-        # ❌ REMOVED: Vision unfreezing (causes gradient explosion with DINOv2)
-        # elif epoch == stage1_end + 3:
-        #     for param in model.vision_encoder.parameters():
-        #         param.requires_grad = True
-        # 👉 Vision stays FROZEN throughout training (correct for 11-15K samples)
-        elif epoch == stage2_end:
-            print("\n" + "="*80)
-            print("🟢 STAGE 3: FULL (Complete + Teacher)")
-            print("="*80 + "\n")
-        
-        # 🚨 FIXED: Epoch-based KL warmup (Stage 2)
-        # Note: curriculum.current_step not needed - pass epoch_progress directly!
-        if current_stage == 2:
-            epoch_in_stage2 = epoch - stage1_end
-            epoch_progress = epoch_in_stage2 / args.stage2_epochs
-            curriculum.warmup_epochs = epoch_in_stage2
-        else:
-            epoch_progress = 1.0  # Stage 1 or 3: no warmup
-        
-        # Determine if teacher should be used
-        use_teacher_this_epoch = (current_stage == 3)
-        
-        print(f"EPOCH {epoch+1}/{total_epochs} (Stage {current_stage})")
-        print("="*80)
-        
-        # Train
-        train_losses = run_one_epoch(
-            model, train_loader, optimizer, scaler, device, cfg,
-            curriculum, current_stage, epoch_progress,
-            teacher_evaluator=teacher_evaluator if use_teacher_this_epoch else None,
-            scheduler=scheduler,
-            train=True
-        )
-        
-        # Validation
-        with torch.no_grad():
-            val_losses = run_one_epoch(
-                model, val_loader, optimizer, scaler, device, cfg,
-                curriculum, current_stage, epoch_progress,
-                teacher_evaluator=None,
-                train=False
-            )
-        
-        # Logging
-        current_lr = scheduler.get_last_lr()[0]
-        kl_weight = curriculum.get_kl_weight(current_stage, epoch_progress=epoch_progress)
-        
-        # 🚨 FIX: Hiển thị effective KL weight (×0.2, không phải ×0.03!)
-        effective_kl = kl_weight * 0.2  # Match model.py loss calculation
-        
-        # 🚨 NEW: Monitor answer-only loss (without KL regularization)
-        val_answer_only = val_losses['answer']
-        train_answer_only = train_losses['answer']
-        
-        print(f"\nEpoch {epoch+1} Summary:")
-        print(f"  Train - Total: {train_losses['total']:.4f}, Answer: {train_losses['answer']:.4f}, "
-              f"KL: {train_losses['kl']:.4f}, Teacher: {train_losses['teacher']:.4f}")
-        print(f"  Val   - Total: {val_losses['total']:.4f}, Answer: {val_losses['answer']:.4f}, "
-              f"KL: {val_losses['kl']:.4f}")
-        
-        # 🚀 NEW: Show text gate value
-        text_gate_value = getattr(model, 'last_text_gate', 0.0)
-        print(f"  LR: {current_lr:.6f}, KL weight: {effective_kl:.4f} (raw={kl_weight:.1f}), Stage: {current_stage}, Text Gate: {text_gate_value:.4f}")
-        
-        # 🚨 FIXED: Monitor overfitting với edge case handling
-        # If train loss too small → ratio explodes (misleading!)
-        if train_losses['total'] < 1e-4:
-            overfitting_ratio = 1.0  # Too small to compare reliably
-            print(f"  ⚠️ Train loss too small ({train_losses['total']:.6f}) - skipping overfitting check")
-        else:
-            overfitting_ratio = val_losses['total'] / train_losses['total']
-        
-        answer_gap = val_answer_only / train_answer_only if train_answer_only > 1e-4 else 1.0
-        print(f"  📊 Overfitting: {overfitting_ratio:.2f}x total, {answer_gap:.2f}x answer-only", end="")
-        
-        # 🔥 NEW: Adaptive LR reduction on high overfitting
-        if answer_gap > 2.5 and current_stage == 3:
-            # Halve LR when answer overfitting is severe
-            for param_group in optimizer.param_groups:
-                old_lr = param_group['lr']
-                param_group['lr'] *= 0.5
-            new_lr = optimizer.param_groups[0]['lr']
-            print(f" ⚠️  HIGH! 🔥 LR reduced: {old_lr:.2e} → {new_lr:.2e}")
-        elif overfitting_ratio > 2.5:
-            print(" ⚠️  HIGH!")
-        elif overfitting_ratio > 2.0:
-            print(" 🟡 MODERATE")
-        else:
-            print(" ✅ OK")
-        
-        # 🚨 NEW: Log to CSV
-        text_gate_value = getattr(model, 'last_text_gate', 0.0)
-        csv_writer.writerow([
-            epoch + 1,
-            current_stage,
-            train_losses['total'],
-            train_losses['answer'],
-            train_losses['kl'],
-            train_losses.get('kl_raw', train_losses['kl']),
-            train_losses['ortho'],
-            train_losses['teacher'],
-            val_losses['total'],
-            val_losses['answer'],
-            val_losses['kl'],
-            val_losses.get('kl_raw', val_losses['kl']),
-            val_losses['ortho'],
-            current_lr,
-            kl_weight,
-            effective_kl,
-            overfitting_ratio,
-            answer_gap,
-            best_val_answer_loss,
-            patience_counter,
-            text_gate_value  # 🚀 NEW: Text gate value
-        ])
-        csv_file.flush()  # Write immediately
-        
-        # Stage 2 warmup progress
-        if current_stage == 2:
-            warmup_pct = (curriculum.warmup_epochs / args.stage2_epochs) * 100
-            print(f"  📈 Stage 2 Warmup: {curriculum.warmup_epochs}/{args.stage2_epochs} epochs ({warmup_pct:.1f}%)")
-        
-        # 🚨 FIXED: KL diagnostics using kl_raw from return dict
-        if current_stage >= 2:
-            kl_raw = train_losses.get('kl_raw', train_losses['kl'])  # Fallback if not available
-            kl_after = train_losses['kl']
-            penalty_reduction = ((kl_raw - kl_after) / kl_raw * 100) if kl_raw > 1e-6 else 0
-            
-            print(f"  🔍 KL Diagnostics: raw={kl_raw:.4f}, after_free_bits={kl_after:.4f}, penalty_reduction={penalty_reduction:.1f}%")
-            
-            # 🚨 UPDATED for free_bits=0.42, max_kl_weight=0.05 (EMPIRICAL FINDINGS!)
-            # CRITICAL: Epoch 5 (KL_after=0.10) had BETTER semantics than Epoch 10 (KL_after=0.43)
-            # Target: KL_after = 0.08-0.20 (VQA sweet spot, NOT 0.30-0.40!)
-            # Expected penalty_reduction = 75-85% with free_bits=0.42
-            if kl_raw < 0.10:
-                print(f"     🚨 CAPACITY TOO SMALL! KL_raw={kl_raw:.3f} < 0.10")
-                print(f"     → Model not learning (compression trivial)!")
-                print(f"     → ACTION REQUIRED: Increase latent_dim to 384 or num_tokens to 4!")
-            elif kl_after == 0 and kl_raw > 0.42:
-                print(f"     ⚠️  FREE BITS TOO HIGH! All KL becomes free (kl_raw={kl_raw:.3f}). Reduce from 0.42!")
-            elif kl_after > 0.25:
-                print(f"     🚨 SEMANTIC DEGRADATION! after={kl_after:.3f} > 0.25. Model losing specificity (mode collapse risk)!")
-                print(f"     → Expected: counting errors, color→number, object→number")
-                print(f"     → ACTION: STOP Stage 2 NOW or increase free_bits to 0.48!")
-            elif kl_after < 0.01:
-                print(f"     ⚠️  KL COLLAPSE! after < 0.01. Increase KL weight!")
-            elif penalty_reduction < 70:
-                print(f"     🟡 Penalty reduction low (<{penalty_reduction:.0f}%). Consider increasing free_bits slightly.")
-            elif penalty_reduction > 90:
-                print(f"     ⚠️  Free bits TOO strong (>{penalty_reduction:.0f}% reduction). Reduce free_bits to 0.36-0.38!")
-                print(f"     → Latent not participating enough. Target: 75-85% reduction.")
-            elif 0.08 <= kl_after <= 0.20 and 75 <= penalty_reduction <= 85:
-                print(f"     ✅ KL SWEET SPOT! after={kl_after:.3f} in target 0.08-0.20, reduction={penalty_reduction:.0f}%")
-                print(f"     → This is OPTIMAL for VQA semantic quality!")
-            else:
-                print(f"     ℹ️  KL status: after={kl_after:.3f} (raw={kl_raw:.3f}, -{penalty_reduction:.0f}%)")
-        
-        # 🚨 NEW: Teacher loss diagnostics (Stage 3 only)
-        if current_stage == 3 and train_losses['teacher'] > 0:
-            teacher_loss_val = train_losses['teacher']
-            # Analyze teacher contribution to total loss
-            teacher_contribution = (teacher_loss_val * cfg.teacher_weight) / train_losses['total'] * 100
-            
-            print(f"  🎓 Teacher Diagnostics: loss={teacher_loss_val:.4f}, weight={cfg.teacher_weight}, contribution={teacher_contribution:.1f}%")
-            
-            # Adaptive suggestions (NOT automatic - manual tuning recommended)
-            if teacher_loss_val < 0.05:
-                print(f"     🟡 Teacher loss weak (<0.05). Contribution only {teacher_contribution:.1f}%.")
-                print(f"        💡 Suggestion: Increase teacher_weight from {cfg.teacher_weight} to 0.5 for stronger signal.")
-            elif teacher_loss_val > 0.5:
-                print(f"     ⚠️  Teacher loss strong (>0.5). Contribution {teacher_contribution:.1f}% may dominate!")
-                print(f"        💡 Suggestion: Decrease teacher_weight from {cfg.teacher_weight} to 0.15 to avoid over-reliance.")
-            elif 0.05 <= teacher_loss_val <= 0.2 and 3 <= teacher_contribution <= 10:
-                print(f"     ✅ Teacher healthy! (loss: 0.05-0.2, contribution: 3-10%)")
-        
-        # Prepare checkpoint dict
-        os.makedirs(cfg.save_dir, exist_ok=True)
-        checkpoint = {
-            'epoch': epoch + 1,
-            'stage': current_stage,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'train_losses': train_losses,
-            'val_losses': val_losses,
-            'config': cfg.__dict__
-        }
-        
-        # Save best model (always check and update)
-        # 🚨 NEW: Use answer-only loss for best model (more stable than total)
-        current_val_answer = val_losses['answer']
-        
-        if current_val_answer < best_val_answer_loss:
-            best_val_answer_loss = current_val_answer
-            best_val_loss = val_losses['total']  # Also track total for logging
-            patience_counter = 0  # 🚨 FIX: Reset patience
-            best_path = os.path.join(cfg.save_dir, "best.pt")
-            torch.save(checkpoint, best_path)
-            print(f"  ✅ New best model saved! (val_answer: {best_val_answer_loss:.4f}, val_total: {best_val_loss:.4f})")
-        else:
-            patience_counter += 1
-            print(f"  ⏳ No improvement ({patience_counter}/{args.early_stopping_patience}) - best_answer: {best_val_answer_loss:.4f}")
-            
-            # Early stopping
-            if patience_counter >= args.early_stopping_patience:
-                print("\n" + "="*80)
-                print(f"🛑 EARLY STOPPING: Val answer loss hasn't improved for {args.early_stopping_patience} epochs")
-                print(f"   Best val answer loss: {best_val_answer_loss:.4f}")
-                print(f"   Current val answer loss: {current_val_answer:.4f}")
-                print("="*80)
-                break
-        
-        # Save last checkpoint (overwrite each epoch to save disk space)
-        last_path = os.path.join(cfg.save_dir, "last.pt")
-        torch.save(checkpoint, last_path)
-        
-        # Sample predictions every 5 epochs
-        if (epoch + 1) % 5 == 0:
-            print("\n" + "="*80)
-            print(f"📝 SAMPLE PREDICTIONS (Epoch {epoch+1}, Stage {current_stage})")
-            print("="*80)
-            model.eval()
-            with torch.no_grad():
-                # Get 3 random samples from validation set
-                import random
-                sample_indices = random.sample(range(len(val_loader.dataset)), min(3, len(val_loader.dataset)))
-                
-                for i, idx in enumerate(sample_indices):
-                    # Get sample from dataset
-                    sample = val_loader.dataset[idx]
-                    pixel_values = sample[0].unsqueeze(0).to(device)
-                    input_ids = sample[1].unsqueeze(0).to(device)
-                    attention_mask = sample[2].unsqueeze(0).to(device)
-                    labels = sample[3].unsqueeze(0)
-                    
-                    # Get ground truth
-                    gt_tokens = labels[0][labels[0] != -100]
-                    ground_truth = model.tokenizer.decode(gt_tokens, skip_special_tokens=True)
-                    
-                    # Get question
-                    question = model.tokenizer.decode(input_ids[0], skip_special_tokens=True)
-                    
-                    # Forward pass to get reasoning info
-                    outputs = model(
-                        pixel_values=pixel_values,
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        labels=None,
-                        deterministic_reasoning=True,
-                        kl_weight=0.0,
-                        stage=current_stage  # 🚨 CRITICAL: Pass stage for Stage 1 bypass
-                    )
-                    
-                    # Generate prediction from reasoning latents
-                    prediction = model.generate_from_reasoning(
-                        reasoning_latents=outputs.reasoning_latents,
-                        max_length=10,
-                        num_beams=1
-                    )[0]
-                    
-                    # Check match
-                    match = prediction.lower().strip() == ground_truth.lower().strip()
-                    partial_match = ground_truth.lower().strip() in prediction.lower().strip() or \
-                                   prediction.lower().strip() in ground_truth.lower().strip()
-                    
-                    print(f"\n📋 Sample {i+1}:")
-                    print(f"  ❓ Question: {question}")
-                    print(f"  ✓ Ground Truth: {ground_truth}")
-                    print(f"  🤖 Prediction: {prediction}")
-                    if outputs.kl_loss is not None:
-                        print(f"  📊 KL: {outputs.kl_loss.item():.4f}")
-                    if match:
-                        print(f"  ✅ EXACT MATCH")
-                    elif partial_match:
-                        print(f"  🟡 PARTIAL MATCH")
-                    else:
-                        print(f"  ❌ WRONG")
-            
-            print("="*80 + "\n")
-            model.train()
-        
-        scheduler.step()
-        curriculum.step()  
-        
-        # 🚨 NEW: Plot training curves every 5 epochs
-        if (epoch + 1) % 5 == 0 or epoch == total_epochs - 1:
-            try:
-                csv_file.flush()  # Ensure data is written
-                plot_training_curves(csv_log_path, cfg.save_dir)
-            except Exception as e:
-                print(f"  ⚠️  Failed to plot curves: {e}")
-        
-        print()
-    
-    # Close CSV file
-    csv_file.close()
+    # Device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"[Device] Using: {device}")
     
     print("\n" + "="*80)
-    print("✅ ALL 3 STAGES COMPLETED!")
+    print("TRAINING CONFIGURATION")
     print("="*80)
-    print(f"\nCheckpoints saved in: {cfg.save_dir}/")
-    print(f"  - best.pt (best validation model - use for inference)")
-    print(f"  - last.pt (last epoch checkpoint - use for resume)")
-    print(f"\nTraining log and curves:")
-    print(f"  - {csv_log_path} (CSV log)")
-    print(f"  - {os.path.join(cfg.save_dir, 'training_curves.png')} (PNG)")
-    print(f"  - {os.path.join(cfg.save_dir, 'training_curves.pdf')} (PDF for papers)")
+    print(f"  Data dir: {data_dir}")
+    print(f"  Batch size: {batch_size}")
+    print(f"  Epochs: {stage3_epochs}")
+    print(f"  Learning rate: {learning_rate}")
+    print(f"  Weight decay: {weight_decay}")
+    print(f"  Gradient clipping: {max_norm}")
+    print(f"  Mixed precision: {use_amp}")
+    print(f"  Fusion layers: {num_fusion_layers}")
+    print(f"  Unfreeze encoder layers: {unfreeze_encoder_layers}")
+    print(f"  Unfreeze decoder: {unfreeze_decoder}")
+    if args.use_vision_lora:
+        print(f"  🔥 Vision LoRA: r={args.vision_lora_r}, alpha={args.vision_lora_alpha}, dropout={args.vision_lora_dropout}")
+    if args.use_text_lora:
+        print(f"  🔥 Text LoRA: r={args.text_lora_r}, alpha={args.text_lora_alpha}, dropout={args.text_lora_dropout}")
+    if args.answer_weights:
+        print(f"  🔥 Answer-aware loss: {args.answer_weights}")
+    if args.use_type_loss:
+        print(f"  🔥 Type-conditional loss: 1.5x counting, 1.4x location, 1.3x color")
+    print(f"  Output dir: {output_dir}")
+    print(f"  Random seed: {args.seed}")
+    print("="*80 + "\n")
     
-    # Final plot
-    print(f"\n[FINAL PLOTTING] Generating final training curves...")
+    # 🔥 Load answer weights if provided
+    answer_weights_tensor = None
+    if args.answer_weights:
+        print(f"[Answer Weights] Loading from {args.answer_weights}...")
+        import json
+        with open(args.answer_weights, 'r', encoding='utf-8') as f:
+            weights_data = json.load(f)
+        
+        token_weights = weights_data['token_weights']
+        answer_weights_tensor = torch.tensor(token_weights, dtype=torch.float32, device=device)
+        
+        print(f"  Loaded {len(token_weights)} token weights")
+        print(f"  Weight range: [{min(token_weights):.2f}, {max(token_weights):.2f}]")
+        print(f"  Weighted tokens: {(answer_weights_tensor > 1.0).sum().item()}/{len(token_weights)}")
+    
+    # 🔥 Initialize Weights & Biases (optional)
+    if args.use_wandb:
+        if not WANDB_AVAILABLE:
+            print("⚠️  Warning: wandb not installed. Logging disabled.")
+            print("   Install with: pip install wandb")
+            args.use_wandb = False
+        else:
+            run_name = args.wandb_name or f"exp_{args.scheduler}_lr{args.lr}_bs{batch_size}"
+            wandb.init(
+                project=args.wandb_project,
+                name=run_name,
+                config=vars(args),
+                tags=['deterministic', 'no-latent', f'scheduler-{args.scheduler}']
+            )
+            print(f"[W&B] Initialized: {args.wandb_project}/{run_name}")
+            print(f"[W&B] View at: {wandb.run.url}\n")
+    
+    # ========================================================================
+    # DATASET
+    # ========================================================================
+    
+    print("\n[Data] Loading datasets...")
+    
+    # Check if using CSV/image_dir structure or data_dir/split structure
+    if args.train_csv and args.image_dir:
+        print("[Data] Using CSV + image directory structure")
+        # Need to check if VQAGenDataset exists in dataset.py
+        from dataset import VQAGenDataset
+        from transformers import AutoProcessor
+        from torch.utils.data import random_split
+        
+        vision_processor = AutoProcessor.from_pretrained(vision_model)
+        
+        # 🔥🔥🔥 Load teacher vision processor if distillation enabled
+        teacher_vision_processor = None
+        if args.use_distillation:
+            print(f"[Distillation] Loading teacher vision processor: {args.vision_teacher}")
+            teacher_vision_processor = AutoProcessor.from_pretrained(args.vision_teacher)
+        
+        # Load full training dataset
+        full_train_dataset = VQAGenDataset(
+            csv_path=args.train_csv,
+            image_folder=args.image_dir,
+            vision_processor=vision_processor,
+            tokenizer_name=bartpho_model,
+            include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
+            auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
+            use_distillation=args.use_distillation,  # 🔥🔥🔥
+            teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
+        )
+        
+        # Check if val_csv provided
+        if args.val_csv:
+            print(f"[Data] Using provided validation CSV: {args.val_csv}")
+            val_dataset = VQAGenDataset(
+                csv_path=args.val_csv,
+                image_folder=args.image_dir,
+                vision_processor=vision_processor,
+                tokenizer_name=bartpho_model,
+                include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
+                auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
+                use_distillation=args.use_distillation,  # 🔥🔥🔥
+                teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
+            )
+            train_dataset = full_train_dataset
+        else:
+            # Auto-split train into train/val
+            val_ratio = args.val_split
+            val_size = int(len(full_train_dataset) * val_ratio)
+            train_size = len(full_train_dataset) - val_size
+            
+            print(f"[Data] No val_csv provided. Auto-splitting with {val_ratio*100:.0f}% validation")
+            print(f"[Data] Split: {train_size} train + {val_size} val = {len(full_train_dataset)} total")
+            
+            # Set seed for reproducible split
+            generator = torch.Generator().manual_seed(args.seed)
+            train_dataset, val_dataset = random_split(
+                full_train_dataset, 
+                [train_size, val_size],
+                generator=generator
+            )
+    else:
+        print("[Data] Using data_dir + split structure")
+        train_dataset = VQAGenDataset(
+            data_dir=data_dir,
+            split='train',
+            bartpho_model_name=bartpho_model
+        )
+        
+        val_dataset = VQAGenDataset(
+            data_dir=data_dir,
+            split='val',
+            bartpho_model_name=bartpho_model
+        )
+    
+    # Create generator for reproducible shuffling
+    train_generator = torch.Generator().manual_seed(args.seed)
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True if num_workers > 0 else False,
+        prefetch_factor=2 if num_workers > 0 else None,
+        generator=train_generator  # ✅ FIX: Deterministic shuffle!
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True if num_workers > 0 else False,
+        prefetch_factor=2 if num_workers > 0 else None
+    )
+    
+    print(f"[Data] Train: {len(train_dataset)} samples")
+    print(f"[Data] Val: {len(val_dataset)} samples")
+    
+    # Dataset analysis (if requested)
+    if args.analyze_dataset:
+        # Get tokenizer from dataset
+        from torch.utils.data import Subset
+        actual_dataset = train_dataset.dataset if isinstance(train_dataset, Subset) else train_dataset
+        tokenizer = actual_dataset.tokenizer
+        
+        analyze_dataset(train_dataset, tokenizer, num_samples=1000)
+    
+    # ========================================================================
+    # MODEL
+    # ========================================================================
+    
+    print("\n[Model] Building Deterministic VQA...")
+    model = DeterministicVQA(
+        vision_model_name=vision_model,
+        bartpho_model_name=bartpho_model,
+        num_fusion_layers=num_fusion_layers,
+        num_heads=args.num_heads,
+        dropout=args.dropout,
+        gradient_checkpointing=not args.no_gradient_checkpointing,
+        use_vision_lora=args.use_vision_lora,  # 🔥 LoRA for vision encoder
+        vision_lora_r=args.vision_lora_r,
+        vision_lora_alpha=args.vision_lora_alpha,
+        vision_lora_dropout=args.vision_lora_dropout,
+        use_text_lora=args.use_text_lora,  # 🔥 NEW: LoRA for text encoder
+        text_lora_r=args.text_lora_r,  # 🔥 NEW
+        text_lora_alpha=args.text_lora_alpha,  # 🔥 NEW
+        text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
+        use_vision_gate=args.use_vision_gate,  # 🔥 NEW: Vision gating
+        vision_gate_init=args.vision_gate_init,  # 🔥 NEW
+        use_type_adapter=args.use_type_adapter,  # 🔥 NEW: Type-conditioned adapter
+        type_adapter_rank=args.type_adapter_rank,  # 🔥 NEW
+        type_adapter_bias=args.type_adapter_bias,  # 🔥 NEW
+        use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
+        vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
+        text_teacher_name=args.text_teacher,  # 🔥🔥🔥
+        distill_alpha=args.distill_alpha  # 🔥🔥🔥
+    ).to(device)
+    
+    model.freeze_pretrained(
+        unfreeze_encoder_layers=unfreeze_encoder_layers,
+        unfreeze_decoder=unfreeze_decoder
+    )
+    
+    # 🚀 SPEED OPTIMIZATION: channels_last memory format for conv layers (+10-20% speed)
     try:
-        plot_training_curves(csv_log_path, cfg.save_dir)
+        model = model.to(memory_format=torch.channels_last)
+        print("🚀 [Optimization] Enabled channels_last memory format (+10-20% speed)")
     except Exception as e:
-        print(f"  ❌ Failed to generate final plot: {e}")
+        print(f"   ⚠️  Could not enable channels_last: {e}")
     
-    print()
+    total_params = sum(p.numel() for p in model.parameters()) / 1e6
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6
+    print(f"[Model] Total params: {total_params:.1f}M")
+    print(f"[Model] Trainable params: {trainable_params:.1f}M ({trainable_params/total_params*100:.1f}%)")
+    
+    # ========================================================================
+    # OPTIMIZER
+    # ========================================================================
+    
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=learning_rate,
+        weight_decay=weight_decay,
+        eps=1e-10  # Better than default 1e-8: keeps Adam adaptive in flat loss regions
+    )
+    
+    # Mixed precision scaler (use new API to avoid deprecation warning)
+    if use_amp:
+        try:
+            from torch.amp import GradScaler as NewGradScaler
+            scaler = NewGradScaler('cuda')
+        except (ImportError, AttributeError):
+            # Fallback to old API for older PyTorch versions
+            scaler = GradScaler()
+    else:
+        scaler = None
+    
+    # 🔥 LR Scheduler
+    scheduler = None
+    if args.scheduler == 'plateau':
+        scheduler = ReduceLROnPlateau(
+            optimizer,
+            mode='min',
+            factor=args.scheduler_factor,
+            patience=args.scheduler_patience,
+            min_lr=1e-7
+        )
+        print(f"[Scheduler] ReduceLROnPlateau (patience={args.scheduler_patience}, factor={args.scheduler_factor})")
+    elif args.scheduler == 'cosine':
+        from torch.optim.lr_scheduler import CosineAnnealingLR
+        scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+        print(f"[Scheduler] CosineAnnealingLR (T_max={args.epochs})")
+    else:
+        print(f"[Scheduler] None (fixed LR)")
+    
+    # 🔥 Early Stopping
+    early_stopping = None
+    if args.early_stopping:
+        early_stopping = EarlyStopping(
+            patience=args.early_stopping_patience,
+            min_delta=0.001,
+            verbose=True
+        )
+        print(f"[Early Stopping] Enabled (patience={args.early_stopping_patience})")
+    
+    # Resume from checkpoint if specified
+    start_epoch = 1
+    best_val_loss = float('inf')
+    
+    if args.resume:
+        print(f"\n[Resume] Loading checkpoint: {args.resume}")
+        checkpoint = torch.load(args.resume, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+        if scaler and 'scaler_state_dict' in checkpoint:
+            scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        if scheduler and 'scheduler_state_dict' in checkpoint:
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        print(f"[Resume] Resuming from epoch {start_epoch}, best val loss: {best_val_loss:.4f}")
+    
+    # ========================================================================
+    # STAGE 3: END-TO-END TRAINING (NO STAGES 1/2!)
+    # ========================================================================
+    
+    print("\n" + "="*80)
+    print("STAGE 3: END-TO-END TRAINING (No Latent/KL Warmup)")
+    print("="*80)
+    print(f"  • Epochs: {stage3_epochs} (starting from {start_epoch})")
+    print(f"  • Learning rate: {learning_rate}")
+    print(f"  • Focus: Direct optimization for accuracy")
+    print("="*80)
+    
+    print("\n" + "🚀"*40)
+    print("SPEED OPTIMIZATIONS ENABLED:")
+    print("  ✅ DataLoader: 4 workers + persistent_workers + prefetch_factor=2")
+    print("  ✅ channels_last: Memory format optimization for conv layers")
+    print("  📈 Expected speedup: ~40% faster training!")
+    print("🚀"*40 + "\n")
+    
+    stage = 3
+    
+    # Training history for plots and CSV
+    training_history = []
+    
+    for epoch in range(start_epoch, stage3_epochs + 1):
+        print(f"\n[Stage 3 | Epoch {epoch}/{stage3_epochs}]")
+        
+        # Training
+        train_metrics = run_one_epoch_deterministic(
+            model=model,
+            dataloader=train_loader,
+            optimizer=optimizer,
+            scaler=scaler,
+            device=device,
+            is_training=True,
+            max_norm=max_norm,
+            stage=stage,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+        )
+        
+        print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
+        
+        # Validation
+        val_metrics = run_one_epoch_deterministic(
+            model=model,
+            dataloader=val_loader,
+            optimizer=None,
+            scaler=None,
+            device=device,
+            is_training=False,
+            stage=stage,
+            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
+            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+        )
+        
+        print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
+        
+        # Track metrics in history
+        epoch_metrics = {
+            'epoch': epoch,
+            'train_loss': train_metrics['loss'],
+            'train_answer_loss': train_metrics['answer_loss'],
+            'val_loss': val_metrics['loss'],
+            'val_answer_loss': val_metrics['answer_loss'],
+            'learning_rate': optimizer.param_groups[0]['lr']
+        }
+        
+        # 🔥 Add gate penalty to metrics if available
+        if 'gate_penalty' in train_metrics:
+            epoch_metrics['train_gate_penalty'] = train_metrics['gate_penalty']
+        
+        # 🔥 Log to W&B
+        if args.use_wandb:
+            wandb_log = {
+                'epoch': epoch,
+                'train/loss': train_metrics['loss'],
+                'train/answer_loss': train_metrics['answer_loss'],
+                'val/loss': val_metrics['loss'],
+                'val/answer_loss': val_metrics['answer_loss'],
+                'learning_rate': optimizer.param_groups[0]['lr']
+            }
+            
+            # 🔥 Add gate penalty to W&B if available
+            if 'gate_penalty' in train_metrics:
+                wandb_log['train/gate_penalty'] = train_metrics['gate_penalty']
+
+        # 🔥 LR Scheduler step
+        if scheduler is not None:
+            if isinstance(scheduler, ReduceLROnPlateau):
+                scheduler.step(val_metrics['loss'])
+            else:
+                scheduler.step()
+            
+            # Print current LR
+            current_lr = optimizer.param_groups[0]['lr']
+            print(f"  📊 Learning Rate: {current_lr:.2e}")
+        
+        # Sample predictions every N epochs
+        if epoch % args.sample_every == 0:
+            print("\n  [Sample Predictions with Metrics]")
+            samples, sample_metrics = sample_predictions(
+                model, val_loader, model.tokenizer, device, num_samples=5, compute_metrics=True
+            )
+            
+            if sample_metrics:
+                print(f"    📊 Metrics: EM={sample_metrics['exact_match']:.1f}% | F1={sample_metrics['f1_score']:.1f}%", end="")
+                if ROUGE_AVAILABLE:
+                    print(f" | ROUGE-1={sample_metrics['rouge1']:.1f}% | ROUGE-L={sample_metrics['rougeL']:.1f}%")
+                else:
+                    print()
+                
+                # Add to epoch metrics
+                epoch_metrics['exact_match'] = sample_metrics['exact_match']
+                epoch_metrics['f1_score'] = sample_metrics['f1_score']
+                if ROUGE_AVAILABLE:
+                    epoch_metrics['rouge1'] = sample_metrics['rouge1']
+                    epoch_metrics['rougeL'] = sample_metrics['rougeL']
+                
+                # 🔥 Log sample metrics to W&B
+                if args.use_wandb:
+                    wandb_log.update({
+                        'val/exact_match': sample_metrics['exact_match'],
+                        'val/f1_score': sample_metrics['f1_score']
+                    })
+                    if ROUGE_AVAILABLE:
+                        wandb_log.update({
+                            'val/rouge1': sample_metrics['rouge1'],
+                            'val/rougeL': sample_metrics['rougeL']
+                        })
+            
+            for i, s in enumerate(samples, 1):
+                em_symbol = "✓" if s['exact_match'] == 1.0 else "✗"
+                rouge_str = f" | R1={s['rouge1']:.2f} | RL={s['rougeL']:.2f}" if ROUGE_AVAILABLE else ""
+                print(f"    {i}. {em_symbol} Q: {s['question']}")
+                print(f"       Pred: {s['prediction']} | GT: {s['ground_truth']}")
+                print(f"       Metrics: F1={s['f1_score']:.2f}{rouge_str}")
+        
+        # 🔥 Send W&B log
+        if args.use_wandb:
+            wandb.log(wandb_log)
+        
+        # Add to training history
+        training_history.append(epoch_metrics)
+        
+        # 🔥 Early stopping check
+        if early_stopping is not None:
+            if early_stopping(val_metrics['loss']):
+                print(f"\n🛑 Early stopping at epoch {epoch}!")
+                break
+        
+        # Save best model checkpoint
+        is_best = val_metrics['loss'] < best_val_loss
+        if is_best:
+            best_val_loss = val_metrics['loss']
+            print(f"  ✅ NEW BEST! Saving checkpoint...")
+            
+            checkpoint = {
+                'epoch': epoch,
+                'stage': stage,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_metrics['loss'],
+                'val_loss': val_metrics['loss'],
+                'best_val_loss': best_val_loss,
+                'args': vars(args)
+            }
+            
+            if scaler is not None:
+                checkpoint['scaler_state_dict'] = scaler.state_dict()
+            
+            if scheduler is not None:
+                checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+            
+            best_path = os.path.join(output_dir, 'best_model.pt')
+            torch.save(checkpoint, best_path)
+            print(f"  💾 Saved to: {best_path}")
+        
+        # 🔥 ALWAYS save last model (for resume)
+        last_checkpoint = {
+            'epoch': epoch,
+            'stage': stage,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'train_loss': train_metrics['loss'],
+            'val_loss': val_metrics['loss'],
+            'best_val_loss': best_val_loss,
+            'training_history': training_history,  # Include history for resume
+            'args': vars(args)
+        }
+        
+        if scaler is not None:
+            last_checkpoint['scaler_state_dict'] = scaler.state_dict()
+        
+        if scheduler is not None:
+            last_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+        
+        last_path = os.path.join(output_dir, 'last_model.pt')
+        try:
+            torch.save(last_checkpoint, last_path)
+            print(f"  💾 Saved last model to: {last_path} (for resume)")
+        except OSError as e:
+            print(f"  ⚠️  Failed to save last model: {e}")
+        
+        # 🔥 Save training curves and CSV after each epoch
+        try:
+            plot_training_curves(training_history, output_dir)
+            save_metrics_csv(training_history, output_dir)
+        except Exception as e:
+            print(f"  ⚠️  Failed to save plots/CSV: {e}")
+    
+    print("\n" + "="*80)
+    print("TRAINING COMPLETE!")
+    print("="*80)
+    print(f"  Best validation loss: {best_val_loss:.4f}")
+    print(f"  Checkpoints saved to: {output_dir}")
+    print("="*80)
+    
+    # 🔥 Finish W&B run
+    if args.use_wandb:
+        wandb.finish()
+        print("\n[W&B] Run finished and synced!")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

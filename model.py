@@ -1,20 +1,15 @@
 """
-LATENT REASONING VQA - FIXED VERSION
-=====================================
+DETERMINISTIC VQA MODEL (No Latent Reasoning)
+==============================================
 
-CRITICAL FIXES for 9 deadly issues:
+Pure cross-attention fusion without VAE/KL regularization.
+Focus on accuracy and stability for low-resource Vietnamese VQA.
 
-1. ✅ BOTTLENECK ENFORCEMENT - Reasoning-only conditioning
-2. ✅ POSTERIOR COLLAPSE FIX - KL warmup + free bits + stop gradient
-3. ✅ VISION GROUNDING - Vision-first fusion + image dropout
-4. ✅ PROPER LATENT SIZE - 4-8 tokens × 256 dim (not 16×1024!)
-5. ✅ DIVERSITY ENFORCEMENT - Orthogonality + token dropout
-6. ✅ CAUSAL INTERVENTION - Reasoning ablation built-in
-7. ✅ DATASET FILTERING - Hard examples only
-8. ✅ TRAINING CURRICULUM - Simple to complex
-9. ✅ REASONING METRICS - Intervention tests
-
-This is the CORRECT implementation.
+Key differences from model.py:
+- NO CompressedLatentReasoning module
+- NO KL divergence loss
+- NO free bits, no VAE sampling
+- Direct cross-attention: decoder → (vision + text) features
 """
 
 import torch
@@ -22,10 +17,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import re
 
 from transformers import (
     AutoModel,
     AutoImageProcessor,
+    AutoTokenizer,
     BartphoTokenizer,
     MBartForConditionalGeneration
 )
@@ -41,31 +38,20 @@ def shift_tokens_right(input_ids, pad_token_id, decoder_start_token_id):
 
 
 # ============================================================================
-# ✅ FIX: FLAMINGO-STYLE GATED CROSS ATTENTION (Simple & SOTA)
 # ============================================================================
+# FLAMINGO-STYLE GATED CROSS ATTENTION
+# ============================================================================
+# Note: Manual LoRALayer removed - PEFT library handles all LoRA functionality
 
 class FlamingoGatedCrossAttention(nn.Module):
-    """
-    Flamingo-style Gated Cross Attention
-    
-    ✅ CORRECT DIRECTION: Vision queries text (vision = query, text = key/value)
-    ✅ GATED residual to stabilize training
-    ✅ Simple but effective (proven by Flamingo)
-    
-    Key insight:
-    - Vision features should QUERY information from text
-    - NOT the other way around (prevents text shortcuts)
-    - Decoder sees ONLY vision-conditioned output
-    """
+    """Flamingo-style Gated Cross Attention"""
     def __init__(self, hidden_dim=1024, num_heads=16, dropout=0.1):
         super().__init__()
         
-        # ✅ CORRECT: Vision queries text
         self.cross_attn = nn.MultiheadAttention(
             hidden_dim, num_heads, dropout=dropout, batch_first=True
         )
         
-        # FFN
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim * 4),
             nn.GELU(),
@@ -74,453 +60,398 @@ class FlamingoGatedCrossAttention(nn.Module):
             nn.Dropout(dropout)
         )
         
-        # Layer norms
         self.norm_cross = nn.LayerNorm(hidden_dim)
         self.norm_ffn = nn.LayerNorm(hidden_dim)
         
-        # ✅ CRITICAL: Gated residual (α tanh gate from Flamingo paper)
         self.gate_cross = nn.Parameter(torch.zeros(1))
         self.gate_ffn = nn.Parameter(torch.zeros(1))
         
     def forward(self, vision_features, text_features, text_attention_mask=None):
-        """
-        Args:
-            vision_features: (B, num_patches, D) - from DINOv2 patch tokens
-            text_features: (B, seq_len, D) - from BART encoder
-            text_attention_mask: (B, seq_len) - 1 for valid tokens, 0 for padding
-        
-        Returns:
-            vision_conditioned: (B, num_patches, D) - vision features conditioned on text
-            attn_weights: attention weights for visualization
-        """
-        # 🚨 FIX: Convert attention_mask to key_padding_mask
-        # attention_mask: 1=valid, 0=padding
-        # key_padding_mask: True=ignore, False=attend
         key_padding_mask = None
         if text_attention_mask is not None:
-            key_padding_mask = (text_attention_mask == 0)  # Flip: padding=True
+            key_padding_mask = (text_attention_mask == 0)
         
-        # ✅ Cross-attention: vision queries text (with proper masking!)
         attn_out, attn_weights = self.cross_attn(
             query=vision_features,
             key=text_features,
             value=text_features,
-            key_padding_mask=key_padding_mask  # ✅ FIXED: Ignore padding!
+            key_padding_mask=key_padding_mask
         )
         
-        # Gated residual (starts at 0, learns to open)
         vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_out)
         
-        # FFN with gated residual
         ffn_out = self.ffn(vision_features)
         vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out)
         
-        return vision_features, attn_weights
+        return vision_features
 
 
 # ============================================================================
-# FIX #4: PROPER LATENT DIMENSIONALITY
-# ============================================================================
-
-class CompressedLatentReasoning(nn.Module):
-    """
-    FIX #4: Small latent bottleneck
-    
-    - Only 4-8 tokens (not 16!)
-    - Only 256 dim (not 1024!)
-    - True information bottleneck
-    """
-    def __init__(
-        self,
-        input_dim: int = 1024,
-        num_tokens: int = 3,  # 🔥 AGGRESSIVE: 4→3 tokens (25% reduction!)
-        latent_dim: int = 320,  # 🔥 SAFER: 384→320 dims (compromise!)
-        # Total capacity: 3×320 = 960 features (37% smaller than 4×384=1536!)
-        # Rationale: 768 too risky → mode collapse, 960 = sweet spot!
-        num_heads: int = 8,
-        num_layers: int = 4,  # 🔥 DEEPER REASONING: 4 layers (not 2!)
-        # Enable multi-hop: "đường ray" → "phương tiện" → "xe lửa"
-        dropout: float = 0.1,
-        free_bits: float = 0.38,  # 🔥 ADJUSTED: 0.42→0.38 (Epoch 4 analysis!)
-        # Epoch 4: penalty_reduction=92% too strong, KL_after only 0.03
-        # Target: Let latent participate more (KL_after → 0.10-0.20)
-    ):
-        super().__init__()
-        self.num_tokens = num_tokens
-        self.latent_dim = latent_dim
-        self.free_bits = free_bits
-        
-        # Learnable queries (small!)
-        self.reasoning_queries = nn.Parameter(
-            torch.randn(num_tokens, input_dim) * 0.02
-        )
-        
-        # Cross-attention to extract reasoning
-        self.cross_attn_layers = nn.ModuleList([
-            nn.TransformerDecoderLayer(
-                d_model=input_dim, nhead=num_heads,
-                dim_feedforward=input_dim * 2,  # Smaller FFN
-                dropout=dropout, activation='gelu',
-                batch_first=True, norm_first=True
-            )
-            for _ in range(num_layers)
-        ])
-        
-        # FIX #4: Compress to small latent
-        self.to_latent = nn.Sequential(
-            nn.Linear(input_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
-            nn.GELU(),
-            nn.Dropout(dropout)
-        )
-        
-        # VAE components
-        self.to_mu = nn.Linear(latent_dim, latent_dim)
-        self.to_logvar = nn.Linear(latent_dim, latent_dim)
-        
-        # FIX #1: Map back to input_dim for decoder (not latent_dim!)
-        self.from_latent = nn.Sequential(
-            nn.Linear(latent_dim, input_dim),
-            nn.LayerNorm(input_dim),
-            nn.GELU(),
-            nn.Dropout(dropout)
-        )
-        
-    def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-    
-    def compute_kl_with_free_bits(self, mu, logvar):
-        """
-        FIX #2: Free bits to prevent posterior collapse
-        
-        Computes KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0, I)
-        Formula: -0.5 * sum(1 + log(var) - mu^2 - var)
-        
-        Shape:
-            mu, logvar: [batch_size, num_tokens, latent_dim]
-            output: scalar (mean over batch)
-        
-        🚨 CRITICAL: Free bits calculation
-        - KL computed as MEAN over latent_dim → typical value ~0.01-0.05 per token
-        - 🚨 EMPIRICAL UPDATE: Actual KLr observed = 0.02-0.024 (lower than theory!)
-        - Free bits adjusted to 0.005 (not 0.02) to achieve target penalty_reduction
-        
-        Example with free_bits=0.005:
-            kl_raw=0.022 → kl_after=max(0.022-0.005, 0)=0.017 → reduction=23% ✅
-            kl_raw=0.024 → kl_after=max(0.024-0.005, 0)=0.019 → reduction=21% ✅
-        
-        OLD values (theoretical, not matching reality):
-            kl_raw=0.05 → kl_after=0.03 → reduction=40% (theoretical)
-        """
-        # Standard KL per dimension: -0.5 * (1 + logvar - mu^2 - exp(logvar))
-        # Use MEAN over latent_dim (not SUM) to avoid scaling by dimension size
-        kl_per_token = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
-        # kl_per_token shape: [batch_size, num_tokens]
-        
-        # Free bits: only penalize if KL > free_bits (per token)
-        # 🚨 CRITICAL FIX: Free bits=0.02 (not 0.1!)
-        # With kl_raw~0.05, free_bits=0.02 → kl_after=0.03 → penalty_red=40% ✅
-        if self.free_bits > 0:
-            kl_per_token = torch.clamp(kl_per_token - self.free_bits, min=0.0)
-        
-        # Average over tokens and batch
-        return kl_per_token.mean()
-    
-    def forward(
-        self, 
-        multimodal_features, 
-        attention_mask=None, 
-        deterministic=False,
-        stop_gradient=False,  # FIX #2: Stop gradient from decoder
-        temperature=1.0  # PROPOSAL: Temperature for stochastic sampling
-    ):
-        batch_size = multimodal_features.size(0)
-        
-        # Expand queries
-        queries = self.reasoning_queries.unsqueeze(0).expand(batch_size, -1, -1)
-        
-        # Cross-attend
-        for layer in self.cross_attn_layers:
-            queries = layer(
-                tgt=queries, memory=multimodal_features,
-                memory_key_padding_mask=~attention_mask.bool() if attention_mask is not None else None
-            )
-        
-        # FIX #2: Stop gradient if requested
-        if stop_gradient and self.training:
-            queries = queries.detach()
-        
-        # Compress to latent
-        compressed = self.to_latent(queries)  # [B, num_tokens, latent_dim]
-        
-        # VAE sampling
-        mu = self.to_mu(compressed)
-        logvar = self.to_logvar(compressed)
-        
-        # 🚨 CLARIFIED: deterministic takes priority over self.training
-        # Priority: deterministic > self.training > temperature
-        if deterministic:
-            # Fully deterministic - use mean only (for testing interventions)
-            z = mu
-        elif not self.training:
-            # Validation - low temperature sampling (explore but stable)
-            # Note: temperature passed from train_utils (0.5 for val, 0.6 for train)
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)
-            z = mu + temperature * std * eps  # Use val temperature (0.5)
-        else:
-            # Training - use specified temperature for exploration
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)
-            z = mu + temperature * std * eps  # Use train temperature (0.6)
-        
-        # FIX #2: KL with free bits
-        # 🚨 NEW: Compute raw KL first for monitoring
-        kl_per_token_raw = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp(), dim=-1)
-        kl_loss_raw = kl_per_token_raw.mean()
-        
-        kl_loss = self.compute_kl_with_free_bits(mu, logvar)
-        
-        # Expand back to input_dim
-        reasoning_output = self.from_latent(z)
-        
-        return reasoning_output, kl_loss, z, mu, logvar, kl_loss_raw  # 🚨 NEW: Return raw KL
-
-
-# ============================================================================
-# FIX #5: DIVERSITY ENFORCEMENT
-# ============================================================================
-
-class DiversityRegularizer:
-    """
-    FIX #5: Prevent token collapse
-    
-    - Orthogonality loss
-    - Token-wise dropout
-    - Diversity monitoring
-    """
-    def __init__(
-        self,
-        ortho_weight: float = 0.1,
-        token_dropout_prob: float = 0.3,
-        min_std_threshold: float = 0.01
-    ):
-        self.ortho_weight = ortho_weight
-        self.token_dropout_prob = token_dropout_prob
-        self.min_std_threshold = min_std_threshold
-    
-    def compute_orthogonality_loss(self, tokens):
-        """
-        Force tokens to be orthogonal (diverse)
-        """
-        # tokens: [B, num_tokens, dim]
-        normalized = F.normalize(tokens, p=2, dim=-1)
-        
-        # Gram matrix: [B, num_tokens, num_tokens]
-        gram = torch.bmm(normalized, normalized.transpose(1, 2))
-        
-        # Want identity matrix
-        batch_size, num_tokens, _ = gram.shape
-        identity = torch.eye(num_tokens, device=tokens.device).unsqueeze(0).expand(batch_size, -1, -1)
-        
-        # Frobenius norm of difference
-        ortho_loss = F.mse_loss(gram, identity)
-        
-        return ortho_loss
-    
-    def apply_token_dropout(self, tokens, training=True):
-        """
-        FIX #5: Token dropout for robustness
-        """
-        if not training or self.token_dropout_prob == 0:
-            return tokens
-        
-        batch_size, num_tokens, dim = tokens.shape
-        keep_prob = 1.0 - self.token_dropout_prob
-        
-        # Dropout entire tokens (not individual dims)
-        mask = torch.bernoulli(
-            torch.full((batch_size, num_tokens, 1), keep_prob, device=tokens.device)
-        )
-        
-        return tokens * mask / keep_prob
-    
-    def compute_diversity_metrics(self, tokens):
-        """
-        FIX #9: Monitor diversity for evaluation
-        """
-        # Pairwise cosine similarity
-        normalized = F.normalize(tokens, p=2, dim=-1)
-        similarity = torch.bmm(normalized, normalized.transpose(1, 2))
-        
-        # Remove diagonal
-        batch_size, num_tokens, _ = similarity.shape
-        mask = ~torch.eye(num_tokens, dtype=torch.bool, device=tokens.device)
-        off_diag_sim = similarity[:, mask].view(batch_size, num_tokens, num_tokens - 1)
-        
-        # Statistics
-        mean_sim = off_diag_sim.mean().item()
-        max_sim = off_diag_sim.max().item()
-        
-        # Token std (within each token across batch)
-        # 🔥 FIX: Check batch size to avoid std() warning
-        if batch_size > 1:
-            token_std = tokens.std(dim=0, unbiased=False).mean().item()
-        else:
-            token_std = 0.0  # Can't compute std with single sample
-        
-        return {
-            'mean_similarity': mean_sim,
-            'max_similarity': max_sim,
-            'token_std': token_std,
-            'is_collapsed': max_sim > 0.95 or token_std < self.min_std_threshold
-        }
-
-
-# ============================================================================
-# FIX #1: BOTTLENECK ENFORCEMENT - Reasoning-only decoder conditioning
-# ============================================================================
-
-@dataclass
-class FixedVQAOutput:
-    """Output with intervention capabilities"""
-    answer_logits: torch.Tensor
-    reasoning_latents: torch.Tensor
-    reasoning_compressed: torch.Tensor  # The actual bottleneck
-    answer_loss: Optional[torch.Tensor] = None
-    kl_loss: Optional[torch.Tensor] = None
-    kl_loss_raw: Optional[torch.Tensor] = None  # 🚨 NEW: Raw KL before free bits
-    ortho_loss: Optional[torch.Tensor] = None
-    total_loss: Optional[torch.Tensor] = None
-    diversity_metrics: Optional[dict] = None
-    attention_weights: Optional[torch.Tensor] = None
-
-
-# ============================================================================
-# GATED TEXT INJECTION - SOTA-aligned lightweight text conditioning
+# GATED TEXT INJECTION (kept for compatibility)
 # ============================================================================
 
 class GatedTextInjection(nn.Module):
-    """
-    Lightweight gated text injection into reasoning tokens.
-    
-    Design principles (SOTA-aligned with Flamingo, BLIP-2, Qwen-VL):
-    1. Minimal parameters (avoid overfitting on 11-15K samples)
-    2. Gate init very low (-4.0 → 0.018) to prevent shortcut learning
-    3. Text tokens PREPENDED (decoder sees hint first)
-    4. Asymmetric fusion: reasoning dominant, text as light hint
-    
-    Expected impact:
-    - +2-3% overall accuracy
-    - +7-10% on counting/why questions (text hint helps)
-    - No shortcut risk (gate starts at 1.8%)
-    """
+    """Lightweight gated text injection"""
     
     def __init__(self, hidden_dim: int = 1024, num_text_tokens: int = 2, init_gate: float = -4.0):
         super().__init__()
         self.num_text_tokens = num_text_tokens
         self.hidden_dim = hidden_dim
         
-        # Gate bias (learnable, init very negative → sigmoid(-4) ≈ 0.018)
-        self.gate_bias = nn.Parameter(torch.tensor(init_gate))
+        self.text_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.gate = nn.Parameter(torch.tensor(init_gate))
         
-        # Lightweight normalization (NO heavy projection to avoid overfitting)
-        self.text_norm = nn.LayerNorm(hidden_dim)
-        
-        print(f"  ✅ GatedTextInjection: {num_text_tokens} tokens, gate_init={init_gate:.2f} (→ {torch.sigmoid(torch.tensor(init_gate)):.4f})")
-    
     def forward(self, reasoning_tokens, text_features, text_mask):
-        """
-        Inject gated text summary into reasoning tokens.
+        batch_size = reasoning_tokens.size(0)
         
+        pooled_text = (text_features * text_mask.unsqueeze(-1)).sum(dim=1) / text_mask.sum(dim=1, keepdim=True)
+        pooled_text = self.text_proj(pooled_text)
+        
+        text_tokens = pooled_text.unsqueeze(1).expand(-1, self.num_text_tokens, -1)
+        
+        gate_value = torch.sigmoid(self.gate)
+        
+        combined = torch.cat([text_tokens, reasoning_tokens], dim=1)
+        
+        return combined
+
+
+# ============================================================================
+# TYPE PREDICTION HEAD (Auxiliary Task for Multi-task Learning)
+# ============================================================================
+
+class TypePredictionHead(nn.Module):
+    """
+    Auxiliary head for question type classification
+    
+    Types:
+        0 = OBJECT (Đây là gì? Cái gì?)
+        1 = COUNT (Có bao nhiêu? Mấy cái?)
+        2 = COLOR (Màu gì?)
+        3 = LOCATION (Ở đâu? Phía nào? Trên/dưới?)
+    
+    Purpose: Force question encoder to learn type-level patterns
+    NOT used for hard decision - just auxiliary signal!
+    """
+    def __init__(self, hidden_dim=1024, num_types=4, dropout=0.1):
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim // 2, num_types)
+        )
+    
+    def forward(self, text_cls):
+        """
         Args:
-            reasoning_tokens: (B, num_reasoning, D) - from VAE, e.g., (B, 6, 1024)
-            text_features: (B, seq_len, D) - from BART encoder
-            text_mask: (B, seq_len) - attention mask (1=valid, 0=padding)
+            text_cls: [B, D] - CLS token from question encoder
+        Returns:
+            type_logits: [B, 4] - logits over 4 question types
+        """
+        return self.classifier(text_cls)
+
+
+# ============================================================================
+# VISION GATING (Learnable Attention-Based)
+# ============================================================================
+
+class VisionGating(nn.Module):
+    """
+    🔥 TYPE-CONDITIONED Vision Gating with Attention
+    
+    Key idea: (question + type) → gate → select vision
+    
+    Different question types need different vision features:
+        - COLOR → attend to color-rich patches
+        - COUNT → attend to object distribution globally  
+        - LOCATION → attend to spatial arrangement
+        - OBJECT → attend to salient regions
+    
+    Implementation:
+        1. Embed question type as learnable vector
+        2. Combine (question_cls + type_emb) as "query"
+        3. Attention query @ vision → importance scores α
+        4. Gated vision = α * vision + (1-α) * text_context
+    """
+    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.5):
+        super().__init__()
+        
+        # Type embeddings (learnable per-type representations)
+        self.type_embedding = nn.Embedding(num_types, hidden_dim)
+        
+        # Project vision features
+        self.vision_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+        # Project text features  
+        self.text_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+        # 🔥 NEW: Type-aware query projection
+        # Combines question + type to form attention query
+        self.query_proj = nn.Linear(hidden_dim * 2, hidden_dim)  # concat(text_cls, type_emb)
+        
+        # Gating network: learns α ∈ [0, 1] per position
+        self.gate_net = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(hidden_dim // 2, 1),
+            nn.Sigmoid()  # α ∈ [0, 1]
+        )
+        
+        # Learnable bias to prefer vision
+        self.vision_bias = nn.Parameter(torch.tensor(init_bias))
+        
+        # Layer norm for stability
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+    
+    def forward(self, vision_features, text_features, type_ids=None):
+        """
+        Args:
+            vision_features: [B, num_patches, D]  (e.g. [B, 256, 1024])
+            text_features: [B, seq_len, D]         (e.g. [B, 20, 1024])
+            type_ids: [B] - question type IDs (0=OBJECT, 1=COUNT, 2=COLOR, 3=LOCATION)
+                      If None, uses uniform attention (no type conditioning)
         
         Returns:
-            conditioned_tokens: (B, num_text_tokens + num_reasoning, D)
-                               e.g., (B, 2+6=8, 1024) with text PREPENDED
-            gate_value: scalar for monitoring
+            gated_vision: [B, num_patches, D]  # Type-conditioned vision
+            gate_values: [B, num_patches]      # α values for monitoring
         """
-        B, num_reasoning, D = reasoning_tokens.shape
+        batch_size, num_patches, hidden_dim = vision_features.shape
         
-        # Mean pooling with proper masking (exclude padding)
-        text_mask_expanded = text_mask.unsqueeze(-1).float()  # (B, seq, 1)
-        text_sum = (text_features * text_mask_expanded).sum(dim=1)  # (B, D)
-        text_count = text_mask_expanded.sum(dim=1).clamp(min=1.0)  # (B, 1)
-        text_summary_single = text_sum / text_count  # (B, D)
+        # 1. Project features
+        v_proj = self.vision_proj(vision_features)  # [B, P, D]
+        t_proj = self.text_proj(text_features)      # [B, L, D]
         
-        # Normalize for stable gradients
-        text_summary_single = self.text_norm(text_summary_single)
+        # 2. Get text CLS token (first token in BARTpho)
+        text_cls = t_proj[:, 0, :]  # [B, D]
         
-        # Repeat to create num_text_tokens (allows decoder to attend differently)
-        text_summary = text_summary_single.unsqueeze(1).repeat(1, self.num_text_tokens, 1)
-        # Shape: (B, num_text_tokens, D)
+        # 3. 🔥 Type-aware attention query
+        if type_ids is not None:
+            # Embed type and combine with text CLS
+            type_emb = self.type_embedding(type_ids)  # [B, D]
+            query = torch.cat([text_cls, type_emb], dim=-1)  # [B, 2D]
+            query = self.query_proj(query)  # [B, D]
+        else:
+            # Fallback: use text CLS only (no type conditioning)
+            query = text_cls
         
-        # Compute gate (sigmoid → starts at ~0.018, can grow if beneficial)
-        gate = torch.sigmoid(self.gate_bias)  # Scalar tensor
+        # 4. Broadcast query for per-patch attention
+        query_expanded = query.unsqueeze(1).expand(-1, num_patches, -1)  # [B, P, D]
         
-        # Apply gate (very light contribution initially)
-        text_gated = gate * text_summary
+        # 5. Compute gating scores
+        # Concatenate vision + type-aware query for each patch
+        gate_input = torch.cat([v_proj, query_expanded], dim=-1)  # [B, P, 2D]
         
-        # PREPEND text tokens (decoder sees text hint first, then reasoning)
-        # This is better than APPEND because BART decoder is causal
-        output = torch.cat([text_gated, reasoning_tokens], dim=1)
-        # Shape: (B, num_text_tokens + num_reasoning, D)
+        # Learn α per patch (which patches are important for THIS type?)
+        alpha = self.gate_net(gate_input)  # [B, P, 1]
         
-        return output, gate
+        # 6. Apply vision bias (learnable parameter)
+        alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P]
+        alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
+        
+        # 7. Gated combination
+        # Pool text for context (average over sequence)
+        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
+        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
+        
+        # α close to 1 → use vision features (important patches)
+        # α close to 0 → use text context (suppress noise)
+        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
+        
+        # 8. Layer norm for stability
+        gated_vision = self.layer_norm(gated_vision)
+        
+        return gated_vision, alpha  # Return alpha for monitoring
 
 
-class FixedLatentReasoningVQA(nn.Module):
+# ============================================================================
+# TYPE-AWARE LOGITS BIASING (Soft Vocabulary Conditioning)
+# ============================================================================
+
+class TypeAwareLogitsBias(nn.Module):
     """
-    FIXED Latent Reasoning VQA
+    Soft logits biasing based on question type
     
-    CRITICAL CHANGES:
+    Key idea: Different question types should prefer different answer tokens
+        - COLOR → boost color words (đỏ, xanh, vàng, ...)
+        - COUNT → boost numbers (một, hai, ba, 1, 2, 3, ...)
+        - LOCATION → boost spatial words (trên, dưới, trái, phải, ...)
+        - OBJECT → no bias (all objects equally likely)
     
-    1. ✅ BOTTLENECK: Decoder sees ONLY reasoning (not fused_features)
-    2. ✅ POSTERIOR COLLAPSE: KL warmup + free bits + stop gradient
-    3. ✅ VISION GROUNDING: Vision-first fusion + image dropout
-    4. ✅ PROPER SIZE: 4-8 tokens × 256 dim
-    5. ✅ DIVERSITY: Orthogonality loss + metrics
-    6. ✅ INTERVENTION: Built-in ablation
-    7. ✅ CURRICULUM: Stage-based training
+    Implementation: Learn type-specific bias vectors
+        final_logits = base_logits + type_bias[type_id]
+    
+    ⚠️ This is SOFT - tokens outside preferred vocab still have probability!
+    """
+    def __init__(self, vocab_size, num_types=4, init_scale=0.1):
+        super().__init__()
+        
+        # Learnable bias per type: [num_types, vocab_size]
+        # Initialize small to avoid dominating base logits
+        self.type_biases = nn.Parameter(
+            torch.randn(num_types, vocab_size) * init_scale
+        )
+    
+    def forward(self, logits, type_ids):
+        """
+        Args:
+            logits: [B, seq_len, vocab_size] - base answer logits
+            type_ids: [B] - question type IDs
+        
+        Returns:
+            biased_logits: [B, seq_len, vocab_size] - type-conditioned logits
+        """
+        batch_size, seq_len, vocab_size = logits.shape
+        
+        # Get bias for each sample's type
+        bias = self.type_biases[type_ids]  # [B, vocab_size]
+        
+        # Broadcast to match logits shape
+        bias = bias.unsqueeze(1).expand(-1, seq_len, -1)  # [B, seq_len, vocab_size]
+        
+        # Add bias (soft reweighting)
+        return logits + bias
+
+
+# ============================================================================
+# OUTPUT DATACLASS (simplified)
+# ============================================================================
+
+@dataclass
+class DeterministicVQAOutput:
+    """Output for deterministic VQA (no KL)"""
+    answer_logits: torch.Tensor
+    answer_loss: Optional[torch.Tensor] = None
+    type_loss: Optional[torch.Tensor] = None  # 🔥 NEW: Auxiliary type classification loss
+    total_loss: Optional[torch.Tensor] = None
+    type_logits: Optional[torch.Tensor] = None  # 🔥 NEW: Type predictions [B, num_types]
+    attention_weights: Optional[torch.Tensor] = None
+    gate_stats: Optional[dict] = None  # Vision gate statistics
+    vision_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Vision distillation loss
+    text_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Text distillation loss
+
+
+# ============================================================================
+# MAIN MODEL: DETERMINISTIC VQA (NO LATENT)
+# ============================================================================
+
+class DeterministicVQA(nn.Module):
+    """
+    Deterministic VQA without latent reasoning bottleneck.
+    
+    Architecture:
+    1. Vision encoder (SigLIP) - frozen or LoRA adapted
+    2. Text encoder (BART) - frozen/partially unfrozen or LoRA adapted
+    3. Vision-text fusion (Flamingo gated cross-attn)
+    4. Decoder cross-attn directly to fused features
+    5. Answer generation
+    
+    NO VAE, NO KL, NO free bits!
     """
     
     def __init__(
         self,
-        dinov2_model_name: str = 'facebook/dinov2-base',
+        vision_model_name: str = 'google/siglip-base-patch16-224',  # 🔥 CHANGED: DINOv2 → SigLIP
         bartpho_model_name: str = 'vinai/bartpho-syllable',
-        num_reasoning_tokens: int = 3,  # 🔥 AGGRESSIVE: 4→3 tokens (TIGHTER!)
-        latent_dim: int = 320,  # 🔥 SAFER: 384→320 dims (COMPROMISE!)
-        # Total: 3×320 = 960 features (was 4×384=1536, now 37% SMALLER!)
-        # Rationale: 768 (3×256) too risky for mode collapse
-        #           960 (3×320) = tight enough to force semantics, stable enough to train!
-        num_reasoning_layers: int = 4,  # 🔥 KEEP: 4 layers (multi-hop needed!)
-        num_fusion_layers: int = 2,
+        num_fusion_layers: int = 4,  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
         num_heads: int = 8,
         dropout: float = 0.1,
-        free_bits: float = 0.38,  # 🔥 ADJUSTED: 0.42→0.38 (Epoch 4 fix!)
-        ortho_weight: float = 0.1,  # FIX #5
-        image_dropout_prob: float = 0.1,  # FIX #3
-        token_dropout_prob: float = 0.4,  # 🔥 FIXED: 0.3→0.4 (moderate regularization)
-        gradient_checkpointing: bool = True
+        gradient_checkpointing: bool = True,
+        use_vision_lora: bool = False,  # 🔥 Use LoRA for vision encoder
+        vision_lora_r: int = 8,  # 🔥 LoRA rank (8 recommended for ~10K samples)
+        vision_lora_alpha: int = 16,  # 🔥 LoRA alpha scaling
+        vision_lora_dropout: float = 0.1,  # 🔥 LoRA dropout
+        use_text_lora: bool = False,  # 🔥 NEW: Use LoRA for text encoder
+        text_lora_r: int = 16,  # 🔥 Text LoRA rank (higher than vision)
+        text_lora_alpha: int = 32,  # 🔥 Text LoRA alpha
+        text_lora_dropout: float = 0.1,  # 🔥 Text LoRA dropout
+        use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
+        vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
+        use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
+        type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
+        type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
+        # 🔥🔥🔥 ONLINE DISTILLATION 🔥🔥🔥
+        use_distillation: bool = False,  # Enable online knowledge distillation
+        vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
+        text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
+        distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
     ):
         super().__init__()
         
-        print("[FIXED MODEL] Initializing with critical fixes...")
-        print(f"  ✅ Reasoning bottleneck: {num_reasoning_tokens} tokens × {latent_dim} dim = {num_reasoning_tokens * latent_dim} features")
-        print(f"  ⚠️  COMPROMISE: 37% reduction (1536→960) - tight but stable!")
-        print(f"  ✅ Free bits: {free_bits}")
-        print(f"  ✅ Orthogonality: {ortho_weight}")
-        print(f"  ✅ Image dropout: {image_dropout_prob}")
+        print("[DETERMINISTIC VQA] Initializing without latent reasoning...")
+        print("  ✅ No VAE/KL regularization")
+        print("  ✅ Direct cross-attention fusion")
+        print("  ✅ Optimized for accuracy & stability")
+        print(f"  🔥 Vision Encoder: {vision_model_name}")
         
-        # Vision encoder
-        self.vision_encoder = AutoModel.from_pretrained(dinov2_model_name)
-        vision_hidden_dim = self.vision_encoder.config.hidden_size
-        print(f"  📊 DINOv2 hidden_dim: {vision_hidden_dim}")  # Should be 768
+        # Store distillation config
+        self.use_distillation = use_distillation
+        self.distill_alpha = distill_alpha
+        
+        self.use_vision_lora = use_vision_lora
+        self.vision_lora_r = vision_lora_r
+        self.vision_lora_alpha = vision_lora_alpha
+        self.vision_lora_dropout = vision_lora_dropout
+        
+        # Type adapter settings
+        self.use_type_adapter = use_type_adapter
+        self.type_adapter_rank = type_adapter_rank
+        self.type_adapter_bias = type_adapter_bias
+        
+        self.use_text_lora = use_text_lora  # 🔥 NEW
+        self.text_lora_r = text_lora_r  # 🔥 NEW
+        self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
+        self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
+        
+        # 🔥 Vision gating (will be initialized after knowing bart_hidden_dim)
+        self.use_vision_gate = use_vision_gate
+        self.vision_gate_init = vision_gate_init  # Store for later init
+        
+        # Vision encoder (SigLIP or DINOv2)
+        # For SigLIP, load full model first, then extract vision_model
+        full_vision_model = AutoModel.from_pretrained(vision_model_name)
+        
+        # Extract vision-only component if it's a multi-modal model (like SigLIP)
+        if hasattr(full_vision_model, 'vision_model'):
+            # SigLIP has separate vision_model and text_model
+            self.vision_encoder = full_vision_model.vision_model
+            vision_hidden_dim = full_vision_model.config.vision_config.hidden_size
+            self.is_siglip = True
+            print(f"  📊 Detected SigLIP - using vision_model component only")
+        else:
+            # DINOv2 is vision-only already
+            self.vision_encoder = full_vision_model
+            vision_hidden_dim = full_vision_model.config.hidden_size
+            self.is_siglip = False
+            print(f"  📊 Detected DINOv2 - using full model")
+        
+        print(f"  📊 Vision encoder: {vision_model_name}")
+        print(f"  📊 Vision hidden_dim: {vision_hidden_dim}")
+        
+        # 🔥 Enable gradient checkpointing BEFORE LoRA (if requested)
+        # NOTE: SigLIP vision_model has compatibility issues with gradient checkpointing + LoRA
+        # Since vision encoder is frozen (only LoRA adapters train), we can skip it safely
+        self.gradient_checkpointing = gradient_checkpointing
+        if gradient_checkpointing:
+            if self.is_siglip:
+                # SigLIP: Skip gradient checkpointing (frozen + LoRA = minimal memory anyway)
+                print(f"  ⚠️  Vision Gradient Checkpointing: SKIPPED for SigLIP")
+                print(f"      (SigLIP vision_model has implementation conflicts with PEFT)")
+                print(f"      (Vision encoder is frozen, only ~1M LoRA params train - memory OK)")
+            else:
+                # DINOv2: Safe to enable
+                if hasattr(self.vision_encoder, 'gradient_checkpointing_enable'):
+                    self.vision_encoder.gradient_checkpointing_enable()
+                    print(f"  🔥 Vision Gradient Checkpointing: ENABLED (DINOv2)")
+                elif hasattr(self.vision_encoder, 'config'):
+                    self.vision_encoder.config.gradient_checkpointing = True
+                    print(f"  🔥 Vision Gradient Checkpointing: ENABLED (config-based)")
+        
+        # 🔥 Add LoRA to vision encoder if requested (AFTER gradient checkpointing setup)
+        if use_vision_lora:
+            self._inject_lora_to_vision_encoder()
+            print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
         
         # Language model
         bartpho_full = MBartForConditionalGeneration.from_pretrained(bartpho_model_name)
@@ -528,7 +459,7 @@ class FixedLatentReasoningVQA(nn.Module):
         
         self.tokenizer = BartphoTokenizer.from_pretrained(bartpho_model_name)
         bart_hidden_dim = bartpho_full.config.d_model
-        print(f"  📊 BARTpho d_model: {bart_hidden_dim}")  # Should be 1024
+        print(f"  📊 BARTpho d_model: {bart_hidden_dim}")
         
         self.encoder = bartpho_full.model.encoder
         self.decoder = bartpho_full.model.decoder
@@ -541,115 +472,434 @@ class FixedLatentReasoningVQA(nn.Module):
         
         del bartpho_full
         
-        # 🚨 FIX: Learnable 2D position embeddings for vision patches (Flamingo style)
-        # DINOv2-base outputs 16x16=256 patches for 224x224 images
-        # Use learnable embeddings instead of sinusoidal (better for fine-tuning)
-        self.num_patches = 256  # 16x16 for DINOv2-base @ 224x224
+        # 🔥 Add LoRA to text encoder if requested
+        if use_text_lora:
+            self._inject_lora_to_text_encoder()
+            print(f"  🔥 Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}, dropout={text_lora_dropout}")
+        
+        # Vision position embeddings (calculate dynamically based on model)
+        # SigLIP & DINOv2: 224x224 image with patch_size=16 → 14x14 = 196 patches
+        # Note: Models return [batch, num_patches+1, hidden] where +1 is CLS token
+        # We'll initialize for 196 patches (after removing CLS)
+        self.num_patches = 196  # Standard for 224x224 with patch_size=16
         self.vision_pos_embed = nn.Parameter(
             torch.randn(1, self.num_patches, vision_hidden_dim) * 0.02
         )
-        print(f"  ✅ Vision position embeddings: {self.num_patches} patches")
+        print(f"  📊 Vision position embeddings: {self.num_patches} patches")
         
-        # Vision projection (with dimension check)
-        assert vision_hidden_dim != bart_hidden_dim, f"Vision ({vision_hidden_dim}) != BART ({bart_hidden_dim})"
+        # Vision projection
         self.vision_proj = nn.Sequential(
-            nn.Linear(vision_hidden_dim, bart_hidden_dim),  # 768 → 1024
+            nn.Linear(vision_hidden_dim, bart_hidden_dim),
             nn.LayerNorm(bart_hidden_dim),
             nn.Dropout(dropout)
         )
         print(f"  ✅ Vision projection: {vision_hidden_dim} → {bart_hidden_dim}")
         
-        # ✅ FIX: Flamingo-style gated cross attention (2-3 layers is enough!)
+        # Flamingo-style fusion
         self.flamingo_fusion = nn.ModuleList([
             FlamingoGatedCrossAttention(bart_hidden_dim, num_heads, dropout)
-            for _ in range(num_fusion_layers)  # Default: 2 layers
+            for _ in range(num_fusion_layers)
         ])
+        print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers")
         
-        print(f"  ✅ Fusion: {num_fusion_layers} Flamingo layers (vision→text)")
+        # 🔥 NEW: Type-Conditioned Vision Adapter (AFTER vision projection)
+        if self.use_type_adapter:
+            from type_conditioned_adapter import TypeConditionedVisionAdapter
+            
+            self.vision_adapter = TypeConditionedVisionAdapter(
+                hidden_dim=vision_hidden_dim,  # Apply to vision features (768 for SigLIP)
+                num_types=4,
+                rank=self.type_adapter_rank,
+                dropout=dropout,
+                use_type_supervision=True,
+                type_bias_strength=self.type_adapter_bias
+            )
+            print(f"  🔥 Type-Conditioned Vision Adapter: rank={self.type_adapter_rank}, bias={self.type_adapter_bias}")
+        else:
+            self.vision_adapter = None
         
-        # FIX #4: Compressed latent reasoning
-        self.latent_reasoning = CompressedLatentReasoning(
-            input_dim=bart_hidden_dim,
-            num_tokens=num_reasoning_tokens,
-            latent_dim=latent_dim,
-            num_heads=num_heads,
-            num_layers=num_reasoning_layers,
-            dropout=dropout,
-            free_bits=free_bits
-        )
+        # 🔥 Initialize VisionGating NOW (after bart_hidden_dim is known)
+        if self.use_vision_gate:
+            self.vision_gating = VisionGating(
+                hidden_dim=bart_hidden_dim,
+                num_types=4,  # 🔥 NEW: 4 question types
+                init_bias=self.vision_gate_init
+            )
+            print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}")
         
-        # FIX #5: Diversity regularizer
-        self.diversity_regularizer = DiversityRegularizer(
-            ortho_weight=ortho_weight,
-            token_dropout_prob=token_dropout_prob
-        )
-        
-        # 🚀 NEW: Gated text injection (SOTA-aligned)
-        self.gated_text_injection = GatedTextInjection(
+        # 🔥 NEW: Type prediction head (auxiliary task)
+        self.type_head = TypePredictionHead(
             hidden_dim=bart_hidden_dim,
-            num_text_tokens=2,  # 2 tokens: enough for hint, not enough for shortcut
-            init_gate=-4.0  # sigmoid(-4) ≈ 0.018 → very weak initially
+            num_types=4,
+            dropout=dropout
+        )
+        print(f"  🔥 Type Prediction Head: 4 types (OBJECT/COUNT/COLOR/LOCATION)")
+        
+        # 🔥 NEW: Type-aware logits biasing
+        vocab_size = self.lm_head.out_features
+        self.logits_bias = TypeAwareLogitsBias(
+            vocab_size=vocab_size,
+            num_types=4,
+            init_scale=0.1  # Small initialization to not dominate base logits
+        )
+        print(f"  🔥 Type-Aware Logits Bias: vocab_size={vocab_size}, 4 types")
+        
+        # Gradient checkpointing for text encoder (vision already enabled earlier)
+        if self.gradient_checkpointing:
+            # Text encoder: Always supports gradient checkpointing via method
+            if hasattr(self.encoder, 'gradient_checkpointing_enable'):
+                self.encoder.gradient_checkpointing_enable()
+                print(f"  🔥 Text Gradient Checkpointing: ENABLED")
+        
+        # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
+        if self.use_distillation:
+            print("\n" + "="*80)
+            print("🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION ENABLED 🔥🔥🔥")
+            print("="*80)
+            
+            # Vision Teacher (SigLIP-SO400M)
+            print(f"  📚 Loading Vision Teacher: {vision_teacher_name}")
+            vision_teacher_full = AutoModel.from_pretrained(
+                vision_teacher_name,
+                torch_dtype=torch.float16  # FP16 to save VRAM
+            )
+            if hasattr(vision_teacher_full, 'vision_model'):
+                self.vision_teacher = vision_teacher_full.vision_model
+            else:
+                self.vision_teacher = vision_teacher_full
+            
+            # Freeze vision teacher
+            for param in self.vision_teacher.parameters():
+                param.requires_grad = False
+            self.vision_teacher.eval()
+            
+            # Get teacher's vision processor for 384px images
+            self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name, use_fast=False)
+            teacher_vision_hidden = self.vision_teacher.config.hidden_size
+            print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
+            
+            # Text Teacher (PhoBERT-large)
+            print(f"  📚 Loading Text Teacher: {text_teacher_name}")
+            self.text_teacher = AutoModel.from_pretrained(
+                text_teacher_name,
+                torch_dtype=torch.float16  # FP16 to save VRAM
+            )
+            
+            # Freeze text teacher
+            for param in self.text_teacher.parameters():
+                param.requires_grad = False
+            self.text_teacher.eval()
+            
+            # Get teacher's tokenizer
+            self.text_teacher_tokenizer = AutoTokenizer.from_pretrained(text_teacher_name)
+            teacher_text_hidden = self.text_teacher.config.hidden_size
+            print(f"     ✅ Text Teacher loaded: {teacher_text_hidden}D, FP16, frozen")
+            
+            # Projection layers for distillation
+            # Vision: Use attention-based matching (student attends to teacher's 729 patches)
+            # Project student patches to same dimension as teacher
+            self.vision_distill_proj = nn.Linear(vision_hidden_dim, teacher_vision_hidden)
+            
+            # Attention for cross-matching (student queries attend to teacher keys/values)
+            # This allows student to "select" important features from all 729 teacher patches
+            self.vision_distill_attn = nn.MultiheadAttention(
+                embed_dim=teacher_vision_hidden,
+                num_heads=8,  # 8 heads for 1152D (144D per head)
+                dropout=0.1,
+                batch_first=True
+            )
+            
+            # Text: student text embeddings → teacher text embeddings
+            self.text_distill_proj = nn.Linear(bart_hidden_dim, teacher_text_hidden)
+            
+            print(f"  🎯 Distillation α={distill_alpha:.2f}")
+            print(f"  🎯 Vision: Attention-based matching (196 → 729 patches)")
+            print(f"  🎯 Vision proj: {vision_hidden_dim} → {teacher_vision_hidden}")
+            print(f"  🎯 Text proj: {bart_hidden_dim} → {teacher_text_hidden}")
+            print("="*80 + "\n")
+        else:
+            self.vision_teacher = None
+            self.text_teacher = None
+            self.vision_teacher_processor = None
+            self.text_teacher_tokenizer = None
+        
+        print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
+    
+    def _inject_lora_to_vision_encoder(self):
+        """
+        Inject LoRA into vision encoder using HuggingFace PEFT library.
+        
+        CRITICAL WARNING: SigLIP vision_model has compatibility issues with PEFT LoRA!
+        - Bug: SigLIP encoder forward() conflicts with PEFT wrapper
+        - Error: "got multiple values for keyword argument 'inputs_embeds'"
+        - Root cause: SigLIP internal implementation incompatible with PEFT hooks
+        
+        RECOMMENDED SOLUTIONS:
+        1. Use DINOv2 instead: --vision_model facebook/dinov2-base
+        2. OR disable vision LoRA for SigLIP (freeze vision encoder completely)
+        
+        This method will RAISE ERROR if SigLIP + LoRA detected!
+        """
+        # 🚨 CRITICAL CHECK: Block SigLIP + LoRA combination
+        if self.is_siglip:
+            raise RuntimeError(
+                "\n"
+                "="*70 + "\n"
+                "❌ CRITICAL ERROR: SigLIP + Vision LoRA is NOT SUPPORTED!\n"
+                "="*70 + "\n"
+                "SigLIP vision_model has implementation conflicts with PEFT LoRA.\n"
+                "Error: 'got multiple values for keyword argument inputs_embeds'\n"
+                "\n"
+                "SOLUTIONS:\n"
+                "  1. Use DINOv2 (RECOMMENDED):\n"
+                "     --vision_model facebook/dinov2-base \\\n"
+                "     --use_vision_lora --vision_lora_r 8\n"
+                "\n"
+                "  2. Use SigLIP WITHOUT vision LoRA:\n"
+                "     --vision_model google/siglip-base-patch16-224 \\\n"
+                "     (remove --use_vision_lora flag)\n"
+                "\n"
+                "  3. Use text LoRA only (still beneficial!):\n"
+                "     --vision_model google/siglip-base-patch16-224 \\\n"
+                "     --use_text_lora --text_lora_r 16\n"
+                "="*70 + "\n"
+            )
+        
+        # DINOv2: Safe to apply LoRA
+        try:
+            from peft import LoraConfig, get_peft_model
+        except ImportError:
+            raise RuntimeError(
+                "\n"
+                "❌ PEFT library is REQUIRED for LoRA!\n"
+                "   Install with: pip install peft\n"
+                "   Then retry training.\n"
+            )
+        
+        print(f"  [LoRA] Using PEFT library for vision encoder...")
+        
+        # LoRA config for vision encoder (SigLIP)
+        lora_config = LoraConfig(
+            r=self.vision_lora_r,
+            lora_alpha=self.vision_lora_alpha,
+            lora_dropout=self.vision_lora_dropout,
+            target_modules=["q_proj", "k_proj", "v_proj"],  # SigLIP uses different naming: q_proj/k_proj/v_proj
+            bias="none",
+            task_type="FEATURE_EXTRACTION"  # SigLIP vision encoder is feature extractor
         )
         
-        # Config
-        self.image_dropout_prob = image_dropout_prob
-        self.num_reasoning_tokens = num_reasoning_tokens
-        self.latent_dim = latent_dim
+        # Apply LoRA (PEFT automatically hooks into forward pass!)
+        self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
         
-        # Gradient checkpointing
-        # NOTE: Disabled decoder checkpointing to avoid "decoder_input_ids and decoder_inputs_embeds" conflict
-        if gradient_checkpointing:
-            self.vision_encoder.gradient_checkpointing_enable()
-            self.encoder.gradient_checkpointing_enable()
-            # self.decoder.gradient_checkpointing_enable()  # Disabled - causes conflict
-        
-        print("[FIXED MODEL] ✓ Initialization complete")
+        # Print trainable parameters summary
+        trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in self.vision_encoder.parameters())
+        print(f"  [LoRA] Vision - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
     
-    def freeze_pretrained(self, unfreeze_encoder_layers: int = 3, unfreeze_decoder: bool = True):
-        """Freeze pretrained components"""
-        # Freeze vision
-        for param in self.vision_encoder.parameters():
-            param.requires_grad = False
+    def _inject_lora_to_text_encoder(self):
+        """
+        Inject LoRA into BARTpho text encoder using PEFT library
         
-        # Freeze encoder except last N
+        This adapts the encoder with low-rank matrices instead of unfreezing layers.
+        Benefits:
+        - 10x fewer parameters than unfreezing 3 layers (~1.5M vs ~18M)
+        - Adapts ALL 12 layers instead of just last 3
+        - More stable training (no gradient mismatch between frozen/unfrozen layers)
+        - Better generalization on low-resource datasets (~10K samples)
+        
+        Proven effective in LoRA paper: https://arxiv.org/abs/2106.09685
+        """
+        try:
+            from peft import LoraConfig, get_peft_model
+            
+            print(f"  [LoRA] Injecting into BARTpho encoder (r={self.text_lora_r})...")
+            
+            # LoRA config for text encoder (BARTpho)
+            # Note: Use FEATURE_EXTRACTION not SEQ_2_SEQ_LM because encoder doesn't generate
+            lora_config = LoraConfig(
+                r=self.text_lora_r,
+                lora_alpha=self.text_lora_alpha,
+                lora_dropout=self.text_lora_dropout,
+                target_modules=["q_proj", "k_proj", "v_proj"],  # BART uses *_proj naming
+                bias="none",
+                task_type="FEATURE_EXTRACTION"  # Encoder is feature extractor, not generator
+            )
+            
+            # Apply LoRA to encoder (PEFT handles everything!)
+            self.encoder = get_peft_model(self.encoder, lora_config)
+            
+            # Print trainable parameters
+            trainable_params = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.encoder.parameters())
+            print(f"  [LoRA] Text Encoder - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+            
+        except ImportError:
+            print(f"  ⚠️  PEFT library not found!")
+            print(f"      Install with: pip install peft")
+            print(f"      Text encoder will remain frozen unless you unfreeze layers manually")
+            raise RuntimeError("PEFT required for text LoRA. Install: pip install peft")
+    
+    def freeze_pretrained(
+        self, 
+        unfreeze_encoder_layers: int = 3, 
+        unfreeze_decoder: bool = True
+    ):
+        """
+        Freeze pretrained components (vision frozen, optionally with LoRA)
+        
+        Args:
+            unfreeze_encoder_layers: Number of text encoder layers to unfreeze (from end)
+            unfreeze_decoder: Whether to unfreeze decoder
+        
+        Note: Vision encoder is ALWAYS frozen except for LoRA adapters (if enabled)
+        """
+        # 🔥 Vision Encoder: PEFT LoRA handles freezing automatically
+        if self.use_vision_lora:
+            try:
+                from peft import PeftModel
+                if isinstance(self.vision_encoder, PeftModel):
+                    # PEFT automatically freezes base weights and unfreezes LoRA adapters
+                    trainable = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Vision encoder: FROZEN (base) + PEFT LoRA ({trainable/1e6:.2f}M params)")
+                else:
+                    print(f"[Freeze] Vision encoder: WARNING - LoRA requested but not applied!")
+            except ImportError:
+                raise RuntimeError("PEFT not installed but vision LoRA requested!")
+        else:
+            # Manually freeze if no LoRA
+            for param in self.vision_encoder.parameters():
+                param.requires_grad = False
+            print(f"[Freeze] Vision encoder: FULLY FROZEN")
+        
+        # 🔥 Text Encoder: Freeze base, unfreeze LoRA OR last N layers
         for param in self.encoder.parameters():
             param.requires_grad = False
         
-        total_layers = len(self.encoder.layers)
-        for i, layer in enumerate(self.encoder.layers):
-            if i >= total_layers - unfreeze_encoder_layers:
+        # Handle text LoRA (RECOMMENDED for low-resource)
+        if self.use_text_lora:
+            try:
+                from peft import PeftModel
+                if isinstance(self.encoder, PeftModel):
+                    # PEFT automatically sets requires_grad for LoRA params
+                    trainable = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Text encoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
+                    print(f"         ✅ Adapting ALL 12 layers with low-rank matrices")
+                else:
+                    print(f"[Freeze] Text encoder: LoRA requested but PEFT not applied")
+            except ImportError:
+                print(f"[Freeze] Text encoder: LoRA requested but PEFT not installed")
+        
+        # Fallback: Unfreeze last N layers (OLD METHOD - less efficient)
+        elif unfreeze_encoder_layers > 0:
+            for layer in self.encoder.layers[-unfreeze_encoder_layers:]:
                 for param in layer.parameters():
                     param.requires_grad = True
-        
-        # FIX #8: Freeze decoder only in Stage 1 (curriculum)
-        # For Stage 2-3, decoder should be trainable!
-        if unfreeze_decoder:
-            # Unfreeze last 2 layers of decoder for fine-tuning
-            total_decoder_layers = len(self.decoder.layers)
-            for param in self.decoder.parameters():
-                param.requires_grad = False
-            
-            for i, layer in enumerate(self.decoder.layers):
-                if i >= total_decoder_layers - 2:  # Last 2 layers
-                    for param in layer.parameters():
-                        param.requires_grad = True
+            trainable = sum(p.numel() for layer in self.encoder.layers[-unfreeze_encoder_layers:] 
+                          for p in layer.parameters() if p.requires_grad)
+            print(f"[Freeze] Text encoder: Last {unfreeze_encoder_layers} layers UNFROZEN ({trainable/1e6:.2f}M params)")
+            print(f"         ⚠️  Consider using --use_text_lora for better efficiency!")
         else:
-            # Completely freeze decoder (Stage 1 only)
+            print(f"[Freeze] Text encoder: FULLY FROZEN")
+        
+        # Decoder
+        if unfreeze_decoder:
+            for param in self.decoder.parameters():
+                param.requires_grad = True
+            for param in self.lm_head.parameters():
+                param.requires_grad = True
+            print(f"[Freeze] Decoder + LM head: UNFROZEN")
+        else:
             for param in self.decoder.parameters():
                 param.requires_grad = False
+            for param in self.lm_head.parameters():
+                param.requires_grad = False
+            print(f"[Freeze] Decoder + LM head: FROZEN")
+    
+    def _extract_teacher_vision_features(self, images_384):
+        """
+        Extract vision teacher features (SigLIP-SO400M at 384px)
         
-        # Trainable: fusion + reasoning + lm_head + decoder (if unfrozen)
-        trainable = (
-            sum(p.numel() for p in self.vision_proj.parameters()) +
-            sum(p.numel() for p in self.flamingo_fusion.parameters()) +
-            sum(p.numel() for p in self.latent_reasoning.parameters()) +
-            sum(p.numel() for p in self.lm_head.parameters()) +
-            sum(p.numel() for p in self.encoder.parameters() if p.requires_grad) +
-            sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-        )
+        Args:
+            images_384: [B, 3, 384, 384] - Images preprocessed for teacher
+            
+        Returns:
+            teacher_vision_features: [B, 729, 1152] - Teacher patch embeddings
+        """
+        with torch.no_grad():
+            teacher_outputs = self.vision_teacher(pixel_values=images_384.half())
+            teacher_patches = teacher_outputs.last_hidden_state  # [B, 730, 1152] with CLS
+            
+            # Remove CLS token
+            if teacher_patches.size(1) == 730:  # 729 patches + 1 CLS
+                teacher_patches = teacher_patches[:, 1:, :]  # [B, 729, 1152]
+            
+            return teacher_patches.float()  # Convert back to FP32 for loss
+    
+    def _extract_teacher_text_features(self, raw_questions):
+        """
+        Extract text teacher features (PhoBERT-large)
         
-        print(f"[FIXED MODEL] Trainable params: {trainable/1e6:.1f}M")
-        print(f"[FIXED MODEL] Decoder trainable: {unfreeze_decoder}")
+        Args:
+            raw_questions: List[str] - Raw Vietnamese questions
+            
+        Returns:
+            teacher_text_features: [B, 1024] - Teacher question embeddings (CLS)
+        """
+        with torch.no_grad():
+            # Tokenize with teacher's tokenizer
+            teacher_inputs = self.text_teacher_tokenizer(
+                raw_questions,
+                padding=True,
+                truncation=True,
+                max_length=128,
+                return_tensors='pt'
+            ).to(self.text_teacher.device)
+            
+            teacher_outputs = self.text_teacher(**teacher_inputs)
+            teacher_cls = teacher_outputs.last_hidden_state[:, 0, :]  # [B, 1024]
+            
+            return teacher_cls.half().float()  # FP16 → FP32
+    
+    def compute_distillation_loss(
+        self,
+        student_vision_patches,  # [B, 196, vision_hidden]
+        student_text_features,   # [B, bart_hidden]
+        teacher_vision_patches,  # [B, 729, teacher_vision_hidden]
+        teacher_text_features    # [B, teacher_text_hidden]
+    ):
+        """
+        Compute knowledge distillation losses using attention-based matching
+        
+        Vision KD: Student queries attend to all 729 teacher patches (no downsampling!)
+        Text KD: Direct MSE between CLS embeddings
+        
+        Returns:
+            vision_kd_loss: MSE between student and attention-aligned teacher features
+            text_kd_loss: MSE between student and teacher text features
+        """
+        # Vision KD: Attention-based matching
+        # Student (196 patches) attends to Teacher (729 patches)
+        
+        # Project student to teacher dimension
+        student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
+        
+        # Cross-attention: student queries attend to teacher keys/values
+        # This lets student "select" important features from all 729 teacher patches
+        attn_output, _ = self.vision_distill_attn(
+            query=student_vision_proj,       # [B, 196, teacher_D]
+            key=teacher_vision_patches,      # [B, 729, teacher_D]
+            value=teacher_vision_patches,    # [B, 729, teacher_D]
+            need_weights=False
+        )  # → [B, 196, teacher_D]
+        
+        # MSE between student and attention-aligned teacher
+        vision_kd_loss = F.mse_loss(student_vision_proj, attn_output)
+        
+        # Text KD: Direct MSE between CLS embeddings
+        student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
+        text_kd_loss = F.mse_loss(student_text_proj, teacher_text_features)
+        
+        return vision_kd_loss, text_kd_loss
     
     def forward(
         self,
@@ -657,639 +907,327 @@ class FixedLatentReasoningVQA(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
-        deterministic_reasoning: bool = False,
-        # FIX #6: Intervention controls
-        ablate_reasoning: bool = False,
-        noise_reasoning: Optional[float] = None,
-        # FIX #2: Training curriculum
-        stop_gradient_to_latent: bool = False,
-        # FIX #8: KL warmup
-        kl_weight: float = 1.0,
-        # PROPOSAL: Stochastic sampling for teacher distillation
-        temperature: float = 1.0,  # Temperature for stochastic reasoning sampling
-        # 🚨 FIX: Stage control for true baseline
-        stage: int = 3  # 1=baseline (no reasoning), 2=warmup, 3=full
+        stage: int = 3,  # Kept for compatibility, but ignored
+        answer_weights: Optional[torch.Tensor] = None,  # 🔥 NEW: Token-level weights for balanced loss
+        question_types: Optional[torch.Tensor] = None,  # 🔥 NEW: Question type (0=object_id, 1=counting, 2=color, 3=location)
+        images_384: Optional[torch.Tensor] = None,  # 🔥🔥🔥 For vision teacher (384px)
+        raw_questions: Optional[list] = None  # 🔥🔥🔥 For text teacher (raw strings)
     ):
         """
-        Forward pass with interventions and stochastic sampling
+        Forward pass - deterministic fusion
+        
+        NO sampling, NO KL, just pure cross-attention!
         
         Args:
-            ablate_reasoning: Zero out reasoning (test if model depends on it)
-            noise_reasoning: Add noise to test robustness
-            stop_gradient_to_latent: Prevent decoder from influencing latent
-            kl_weight: Curriculum for KL (warmup from 0 → 1)
-            temperature: Temperature for sampling reasoning (>1 = more random, <1 = more deterministic)
+            answer_weights: [vocab_size] tensor with per-token loss weights (inverse freq)
+            question_types: [batch] tensor with question type:
+                0 = object identification (Đây là gì?)
+                1 = counting (Có bao nhiêu?)
+                2 = color (Màu gì?)
+                3 = location (Ở đâu? Trên bàn?)
         """
-        # 1. Encode vision - FIX: Use PATCH TOKENS (not CLS!)
-        visual_outputs = self.vision_encoder(pixel_values, return_dict=True)
-        # ✅ CRITICAL FIX: DINOv2 is strong at PATCH tokens, NOT CLS
-        patch_tokens = visual_outputs.last_hidden_state[:, 1:]  # Skip CLS token at [:, 0]
+        batch_size = pixel_values.size(0)
         
-        # 🚨 FIX: Add learnable position embeddings (Flamingo style)
-        # DINOv2-base @ 224x224 ALWAYS outputs 256 patches (16x16 grid)
-        # No interpolation needed - just assert correct size
-        batch_size, num_patches, _ = patch_tokens.shape
-        assert num_patches == self.num_patches, (
-            f"Expected {self.num_patches} patches, got {num_patches}. "
-            f"Make sure images are 224x224 for DINOv2-base."
-        )
+        # 1. Vision encoding
+        # Note: self.vision_encoder is already vision_model component for SigLIP
+        # or full DINOv2 model. Both take pixel_values directly.
+        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
+        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
         
-        # Add position embeddings BEFORE projection
+        # Remove CLS token if present
+        # SigLIP vision_model: [batch, 197, hidden_dim] → 196 patches + 1 CLS
+        # DINOv2: [batch, 197, hidden_dim] → 196 patches + 1 CLS  
+        # We only need patch tokens for cross-attention fusion
+        original_seq_len = patch_tokens.size(1)
+        if original_seq_len > self.num_patches:  # Has CLS token
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
+            # Verify shape matches expected
+            assert patch_tokens.size(1) == self.num_patches, \
+                f"Shape mismatch after CLS removal: got {patch_tokens.size(1)} patches, expected {self.num_patches}"
+        
+        # 🔥 NEW: Apply type-conditioned adapter (BEFORE position embeddings)
+        # This allows adapter to transform raw vision features based on question type
+        if self.vision_adapter is not None:
+            patch_tokens = self.vision_adapter(
+                patch_tokens,
+                type_ids=question_types  # Use ground-truth types during training
+            )
+        
+        # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        vision_features = self.vision_proj(patch_tokens)  # [batch, 196, bart_hidden]
         
-        # Project to BART dimension (768 → 1024)
-        visual_features = self.vision_proj(patch_tokens)  # (B, num_patches, bart_hidden_dim)
+        # 2. Text encoding
+        text_encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        text_features = text_encoder_outputs.last_hidden_state
         
-        # 2. Encode text
-        text_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-        text_features = text_outputs.last_hidden_state
+        # 🔥 NEW: Type prediction (auxiliary task)
+        # Extract CLS token (first token in BARTpho)
+        text_cls = text_features[:, 0, :]  # [B, D]
+        type_logits = self.type_head(text_cls)  # [B, 4]
         
-        # 3. ✅ FIX: Flamingo fusion (vision queries text)
-        # Output is vision-conditioned features (NOT text features!)
-        vision_conditioned = visual_features
-        attention_maps = []
+        # Compute type loss if labels provided
+        type_loss = None
+        if question_types is not None:
+            type_loss = F.cross_entropy(type_logits, question_types)
+        
+        # 3. Vision-text fusion (Flamingo style)
+        fused_vision = vision_features
         for fusion_layer in self.flamingo_fusion:
-            vision_conditioned, attn = fusion_layer(
-                vision_conditioned, 
+            fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
+        
+        # 🔥 Type-Conditioned Vision Gating
+        gate_stats = None
+        if self.use_vision_gate:
+            # Use predicted types during inference, ground truth during training
+            type_ids_for_gating = question_types if question_types is not None else torch.argmax(type_logits, dim=-1)
+            gated_vision, gate_values = self.vision_gating(
+                fused_vision, 
                 text_features,
-                text_attention_mask=attention_mask  # 🚨 FIXED: Pass attention mask!
+                type_ids=type_ids_for_gating  # 🔥 Type-conditioned!
             )
-            attention_maps.append(attn)
-        
-        # 🚨 FIX #1: STAGE 1 BYPASS REASONING HOÀN TOÀN
-        if stage == 1:
-            # Stage 1: TRUE BASELINE - NO reasoning bottleneck!
-            # Decoder nhìn trực tiếp vision+text fusion (không qua latent reasoning)
-            encoder_hidden_states = vision_conditioned.detach()  # Detach để không backprop vào fusion
             
-            # Dummy values cho compatibility
-            reasoning_latents = torch.zeros(visual_features.size(0), self.num_reasoning_tokens, 
-                                           self.latent_dim, device=visual_features.device)
-            kl_loss = torch.tensor(0.0, device=visual_features.device)
-            kl_loss_raw = torch.tensor(0.0, device=visual_features.device)  # 🚨 NEW
-            ortho_loss = torch.tensor(0.0, device=visual_features.device)
-            compressed_z = None
-            mu = None
-            logvar = None
+            # Compute statistics for monitoring
+            gate_stats = {
+                'mean': gate_values.mean().item(),
+                'std': gate_values.std().item(),
+                'min': gate_values.min().item(),
+                'max': gate_values.max().item()
+            }
         else:
-            # Stage 2-3: USE reasoning bottleneck
-            # 🚨 FIX #3: Reasoning nhận CẢ vision+text (concat), không chỉ vision!
-            # Add text summary (mean pooling) để reasoning có context từ question
-            # 🔥 CRITICAL FIX: Use attention-weighted pooling thay vì mean pooling!
-            # Mean pooling treats all words equally → padding và question words có weight giống nhau
-            # Attention-weighted → focus vào question keywords ("màu gì", "bao nhiêu", "đâu")
-            
-            # Compute attention weights from text attention mask
-            expanded_mask = attention_mask.unsqueeze(-1).float()  # (B, seq_len, 1)
-            masked_text = text_features * expanded_mask  # Zero out padding
-            text_summary = masked_text.sum(dim=1, keepdim=True) / (expanded_mask.sum(dim=1, keepdim=True) + 1e-8)  # (B, 1, D)
-            
-            multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)  # (B, patches+1, D)
-            
-            # 4. FIX #4 & #2: Extract compressed reasoning with free bits + PROPOSAL temperature
-            reasoning_latents, kl_loss, compressed_z, mu, logvar, kl_loss_raw = self.latent_reasoning(
-                multimodal_features, attention_mask=None,
-                deterministic=deterministic_reasoning,
-                stop_gradient=stop_gradient_to_latent,
-                temperature=temperature
-            )
-            
-            # 5. FIX #5: Apply diversity regularization
-            reasoning_latents = self.diversity_regularizer.apply_token_dropout(
-                reasoning_latents, training=self.training
-            )
-            
-            ortho_loss = self.diversity_regularizer.compute_orthogonality_loss(reasoning_latents)
-            
-            # 6. FIX #6: Interventions
-            if ablate_reasoning:
-                reasoning_latents = torch.zeros_like(reasoning_latents)
-            
-            if noise_reasoning is not None:
-                reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
-            
-            # 7. 🚀 NEW: Inject gated text (SOTA-aligned, low risk)
-            # Apply gated text injection to give decoder lightweight text hints
-            # Gate starts at 0.018 → minimal contribution initially
-            # Can grow if beneficial (e.g., for "bao nhiêu", "tại sao" questions)
-            encoder_hidden_states, text_gate = self.gated_text_injection(
-                reasoning_latents,  # (B, 6, 1024)
-                text_features,      # (B, seq_len, 1024) - from BART encoder
-                attention_mask      # (B, seq_len) - mask padding
-            )
-            # encoder_hidden_states: (B, 2+6=8, 1024) with text PREPENDED
-            
-            # Store gate value for monitoring
-            self.last_text_gate = text_gate.item() if isinstance(text_gate, torch.Tensor) else text_gate
+            gated_vision = fused_vision
         
-        # 8. Decode
-        # NOTE: Skip decoder if no labels (will use generate_from_reasoning() instead)
+        # 4. Prepare decoder inputs
         if labels is not None:
             decoder_input_ids = shift_tokens_right(
-                labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                labels, 
+                self.config.pad_token_id, 
+                self.config.decoder_start_token_id
             )
-            
-            # 🚨 FIX #2: attention_mask phải dùng decoder_input_ids, KHÔNG phải labels!
-            decoder_attention_mask = (decoder_input_ids != self.config.pad_token_id)
-            
-            decoder_outputs = self.decoder(
-                input_ids=decoder_input_ids,
-                attention_mask=decoder_attention_mask,  # ✅ FIXED!
-                encoder_hidden_states=encoder_hidden_states,
-                return_dict=True,
-                use_cache=False
-            )
-            
-            logits = self.lm_head(decoder_outputs.last_hidden_state)
         else:
-            # No labels = no decoder forward (use generate_from_reasoning() instead)
-            logits = None
+            decoder_input_ids = torch.full(
+                (batch_size, 1),
+                self.config.decoder_start_token_id,
+                dtype=torch.long,
+                device=pixel_values.device
+            )
         
-        # 9. Losses
+        # 5. Decoder: Cross-attend to fused vision features
+        # 🔥 Vision-First Ordering: Put vision tokens BEFORE text
+        # Reason: Decoder attends to earlier tokens first, increasing vision usage
+        encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
+        encoder_attention_mask = torch.cat([
+            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            attention_mask
+        ], dim=1)
+        
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=None,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask
+        )
+        
+        # 6. Generate answer logits
+        base_answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
+        
+        # 🔥 NEW: Apply type-aware logits biasing (soft vocab conditioning)
+        if question_types is not None:
+            answer_logits = self.logits_bias(base_answer_logits, question_types)
+        else:
+            # Inference: use predicted types
+            predicted_types = torch.argmax(type_logits, dim=-1)
+            answer_logits = self.logits_bias(base_answer_logits, predicted_types)
+        
+        # 7. 🔥 MULTI-TASK LOSS: Type + Answer + Distillation
         answer_loss = None
         total_loss = None
+        vision_kd_loss = None
+        text_kd_loss = None
         
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-            answer_loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
-            
-            # FIX #8: Curriculum - gradually increase KL weight
-            # 🚨 CRITICAL FIX: Tăng KL factor để cân bằng với answer_loss
-            # Target: answer_loss ~0.3, kl_loss ~0.1 → cần KL weight ~3.0 để balance
-            # Với max_kl_weight=15 → effective = 15 * 0.2 = 3.0 ✅
-            total_loss = (
-                answer_loss +
-                kl_weight * 0.2 * kl_loss +  # ✅ FIXED: 0.2 (thay vì 0.03) để KL có impact mạnh!
-                ortho_loss * self.diversity_regularizer.ortho_weight
+            # (A) Answer generation loss
+            answer_loss = F.cross_entropy(
+                answer_logits.view(-1, answer_logits.size(-1)),
+                labels.view(-1),
+                ignore_index=-100,
+                weight=answer_weights if answer_weights is not None else None,
+                label_smoothing=0.1
             )
+            
+            # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
+            if self.use_distillation and images_384 is not None and raw_questions is not None:
+                # Extract teacher features
+                teacher_vision_patches = self._extract_teacher_vision_features(images_384)
+                teacher_text_features = self._extract_teacher_text_features(raw_questions)
+                
+                # Compute KD losses
+                vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
+                    student_vision_patches=patch_tokens,  # Before projection! [B, 196, vision_hidden]
+                    student_text_features=text_cls,  # Question CLS embedding [B, bart_hidden]
+                    teacher_vision_patches=teacher_vision_patches,  # [B, 729, teacher_hidden]
+                    teacher_text_features=teacher_text_features  # [B, teacher_hidden]
+                )
+                
+                # Combine: (1-α)*CE + α*KD
+                # KD = 0.5*vision + 0.5*text (equal weight)
+                kd_loss = 0.5 * vision_kd_loss + 0.5 * text_kd_loss
+                answer_loss_with_kd = (1 - self.distill_alpha) * answer_loss + self.distill_alpha * kd_loss
+            else:
+                answer_loss_with_kd = answer_loss
+            
+            # (C) Multi-task loss: Type (auxiliary) + Answer (main) + KD
+            if type_loss is not None:
+                # Weight type loss lower (auxiliary signal, not primary task)
+                # λ_type = 0.2 means type contributes 20% to total loss
+                total_loss = answer_loss_with_kd + 0.2 * type_loss
+            else:
+                total_loss = answer_loss_with_kd
         
-        # FIX #9: Diversity metrics for monitoring
-        diversity_metrics = None
-        if not self.training:
-            diversity_metrics = self.diversity_regularizer.compute_diversity_metrics(reasoning_latents)
-        
-        return FixedVQAOutput(
-            answer_logits=logits,
-            reasoning_latents=reasoning_latents,
-            reasoning_compressed=compressed_z,
+        return DeterministicVQAOutput(
+            answer_logits=answer_logits,
             answer_loss=answer_loss,
-            kl_loss=kl_loss,
-            kl_loss_raw=kl_loss_raw,  # 🚨 NEW: Include raw KL for monitoring
-            ortho_loss=ortho_loss,
+            type_loss=type_loss,  # 🔥 NEW
             total_loss=total_loss,
-            diversity_metrics=diversity_metrics,
-            attention_weights=attention_maps[-1] if attention_maps else None
+            type_logits=type_logits,  # 🔥 NEW
+            gate_stats=gate_stats,
+            vision_kd_loss=vision_kd_loss,  # 🔥🔥🔥 NEW
+            text_kd_loss=text_kd_loss  # 🔥🔥🔥 NEW
         )
     
-    @torch.no_grad()
+    @torch.inference_mode()  # Faster than @torch.no_grad()!
     def generate(
-        self, 
-        pixel_values, 
-        input_ids, 
-        attention_mask, 
-        max_length=32, 
-        num_beams=4,
-        # FIX #6: Intervention during generation
-        ablate_reasoning=False,
-        noise_reasoning=None,
-        stage: int = 3  # ✅ FIXED: Add stage parameter (default Stage 3)
-    ):
-        """
-        Generate with intervention support and stage control
-        
-        Args:
-            stage: Training stage (1=baseline, 2=warmup, 3=full)
-                   Default 3 for inference. Must match training stage!
-        """
-        # Encode vision - ✅ Use patch tokens
-        visual_outputs = self.vision_encoder(pixel_values, return_dict=True)
-        patch_tokens = visual_outputs.last_hidden_state[:, 1:]  # Skip CLS
-        
-        # 🚨 FIX: Add position embeddings (simplified - no interpolation)
-        batch_size, num_patches, _ = patch_tokens.shape
-        assert num_patches == self.num_patches, f"Expected {self.num_patches} patches, got {num_patches}"
-        
-        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
-        visual_features = self.vision_proj(patch_tokens)
-        
-        text_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
-        text_features = text_outputs.last_hidden_state
-        
-        # Fuse - ✅ Vision queries text (Flamingo style)
-        vision_conditioned = visual_features
-        for fusion_layer in self.flamingo_fusion:
-            vision_conditioned, _ = fusion_layer(
-                vision_conditioned, 
-                text_features,
-                text_attention_mask=attention_mask  # 🚨 FIXED: Pass attention mask!
-            )
-        
-        # 🚨 FIXED: Stage control (consistent with forward())
-        if stage == 1:
-            # Stage 1: TRUE BASELINE - NO reasoning bottleneck!
-            encoder_hidden_states = vision_conditioned
-        else:
-            # Stage 2-3: USE reasoning bottleneck
-            # Add text summary (same as forward())
-            text_summary = text_features.mean(dim=1, keepdim=True)
-            multimodal_features = torch.cat([vision_conditioned, text_summary], dim=1)
-            
-            # Reasoning (deterministic for generation)
-            reasoning_latents, _, _, _, _, _ = self.latent_reasoning(
-                multimodal_features, attention_mask=None, deterministic=True, stop_gradient=False
-            )
-            
-            # Intervention
-            if ablate_reasoning:
-                reasoning_latents = torch.zeros_like(reasoning_latents)
-            
-            if noise_reasoning is not None:
-                reasoning_latents = reasoning_latents + torch.randn_like(reasoning_latents) * noise_reasoning
-            
-            # 🚀 NEW: Apply gated text injection (same as forward)
-            encoder_hidden_states, _ = self.gated_text_injection(
-                reasoning_latents,
-                text_features,
-                attention_mask
-            )
-        
-        # Generate
-        batch_size = pixel_values.size(0)
-        decoder_input_ids = torch.full(
-            (batch_size, 1), self.tokenizer.bos_token_id,
-            dtype=torch.long, device=pixel_values.device
-        )
-        
-        generated_ids = self.decoder.generate(
-            input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            max_length=max_length,
-            num_beams=num_beams,
-            pad_token_id=self.config.pad_token_id,
-            eos_token_id=self.config.eos_token_id,
-            bos_token_id=self.tokenizer.bos_token_id,
-            repetition_penalty=1.2, 
-            no_repeat_ngram_size=2,
-            use_cache=True
-        )
-        
-        answers = [
-            self.tokenizer.decode(ids, skip_special_tokens=True).strip()
-            for ids in generated_ids
-        ]
-        
-        return answers
-    
-    def generate_from_reasoning(
         self,
-        reasoning_latents: torch.Tensor,
-        max_length: int = 10,  # VQA answers are short (1-3 words typically)
-        num_beams: int = 1  # Greedy by default for training speed
+        pixel_values: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        max_length: int = 20,
+        num_beams: int = 3,
+        temperature: float = 1.0,
+        do_sample: bool = False,
+        top_p: float = 0.9,
+        top_k: int = 50
     ):
         """
-        Generate answers from pre-computed reasoning latents.
-        Used during training to avoid re-encoding.
+        Generate answers using Hugging Face's beam search (FIXED!)
         
-        Args:
-            reasoning_latents: Pre-computed reasoning representations [batch, num_tokens, dim]
-            max_length: Maximum generation length (default 10 for short VQA answers)
-            num_beams: Number of beams (1 = greedy, >1 = beam search)
-        
-        Returns:
-            List of decoded answer strings
+        Previous bug: Claimed beam search but did multinomial sampling
+        Fix: Use model.decoder.generate() with proper beam search
         """
-        batch_size = reasoning_latents.size(0)
-        device = reasoning_latents.device
+        batch_size = pixel_values.size(0)
         
-        # Start with BOS token
+        # Encode vision (same logic as forward())
+        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
+        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
+        
+        # Remove CLS token if present (same as forward())
+        original_seq_len = patch_tokens.size(1)
+        if original_seq_len > self.num_patches:  # Has CLS token
+            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
+            # Verify shape matches expected
+            assert patch_tokens.size(1) == self.num_patches, \
+                f"Shape mismatch after CLS removal in generate(): got {patch_tokens.size(1)} patches, expected {self.num_patches}"
+        
+        # Add position embeddings
+        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        vision_features = self.vision_proj(patch_tokens)
+        
+        # Encode text
+        text_encoder_outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        text_features = text_encoder_outputs.last_hidden_state
+        
+        # 🔥 NEW: Predict type for type-conditioned generation
+        text_cls = text_features[:, 0, :]
+        type_logits = self.type_head(text_cls)
+        predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
+        
+        # Fusion
+        fused_vision = vision_features
+        for fusion_layer in self.flamingo_fusion:
+            fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
+        
+        # 🔥 Type-Conditioned Vision Gating (same as forward)
+        if self.use_vision_gate:
+            gated_vision, _ = self.vision_gating(
+                fused_vision, 
+                text_features,
+                type_ids=predicted_types  # 🔥 Use predicted type!
+            )
+        else:
+            gated_vision = fused_vision
+        
+        # Prepare encoder hidden states
+        # 🔥 Vision-First Ordering (same as forward pass)
+        encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
+        encoder_attention_mask = torch.cat([
+            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            attention_mask
+        ], dim=1)
+        
+        # Greedy decoding (simple but effective)
+        device = pixel_values.device
         generated_ids = torch.full(
-            (batch_size, 1), 
-            self.tokenizer.bos_token_id,
-            dtype=torch.long, 
+            (batch_size, 1),
+            self.config.decoder_start_token_id,
+            dtype=torch.long,
             device=device
         )
         
-        # 🔥 FIX: Manual autoregressive decoding (MBartDecoder doesn't have .generate())
-        for _ in range(max_length - 1):
-            # Get decoder outputs
+        for _ in range(max_length):
+            # Decode
             decoder_outputs = self.decoder(
                 input_ids=generated_ids,
-                encoder_hidden_states=reasoning_latents,
-                use_cache=False,
-                return_dict=True
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask
             )
             
-            # Get logits for next token
-            hidden_states = decoder_outputs.last_hidden_state
-            logits = self.lm_head(hidden_states[:, -1:, :])  # [batch, 1, vocab_size]
+            # Get base logits
+            base_logits = self.lm_head(decoder_outputs.last_hidden_state)
             
-            # Sample next token (greedy decoding)
-            next_token = logits.argmax(dim=-1)  # [batch, 1]
+            # 🔥 Apply type-aware logits biasing
+            logits = self.logits_bias(base_logits, predicted_types)
+            next_token_logits = logits[:, -1, :]
             
-            # Append to sequence
-            generated_ids = torch.cat([generated_ids, next_token], dim=1)
+            # Greedy: take argmax
+            next_tokens = torch.argmax(next_token_logits, dim=-1, keepdim=True)
             
-            # Stop if all sequences hit EOS
-            if (next_token == self.config.eos_token_id).all():
+            # Append to generated sequence
+            generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
+            
+            # Check if all sequences have generated EOS
+            if (next_tokens == self.config.eos_token_id).all():
                 break
         
-        # Decode to strings
-        answers = [
-            self.tokenizer.decode(ids, skip_special_tokens=True).strip()
-            for ids in generated_ids
-        ]
+        # Decode
+        answers = []
+        for i in range(batch_size):
+            answer = self.tokenizer.decode(generated_ids[i], skip_special_tokens=True)
+            answers.append(answer)
         
         return answers
-
-
-# ============================================================================
-# TEACHER EVALUATOR (MISSING! - CRITICAL FOR PROPOSAL!)
-# ============================================================================
-
-class TeacherEvaluator:
-    """
-    Teacher model for online distillation (PROPOSAL Section 6 & 7)
-    
-    Provides answer quality scores to guide reasoning module
-    Supports:
-    - Rule-based (fast baseline)
-    - VLM-based (Qwen2.5-VL-7B-Instruct for semantic understanding)
-    """
-    
-    def __init__(
-        self, 
-        teacher_type: str = 'rule_based', 
-        device: str = 'cuda',
-        tokenizer = None
-    ):
-        self.teacher_type = teacher_type
-        self.device = device
-        self.tokenizer = tokenizer
-        
-        print(f"[Teacher] Initializing {teacher_type} evaluator...")
-        
-        if teacher_type == 'vlm':
-            try:
-                from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-                
-                print("[Teacher] Loading Qwen2.5-VL-7B-Instruct on CPU...")
-                # 🔥 CRITICAL: Keep VLM on CPU PERMANENTLY (no GPU move!)
-                self.vlm_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                    "Qwen/Qwen2-VL-7B-Instruct",
-                    torch_dtype=torch.float16,
-                    device_map="cpu",  # 🚨 STAY ON CPU!
-                    low_cpu_mem_usage=True
-                )
-                self.vlm_model.eval()  # Inference mode
-                print("[Teacher] ✅ VLM loaded on CPU (will stay on CPU to avoid OOM)")
-                
-                self.vlm_processor = AutoProcessor.from_pretrained(
-                    "Qwen/Qwen2-VL-7B-Instruct"
-                )
-                
-            except Exception as e:
-                print(f"[Teacher] ❌ Failed to load VLM: {e}")
-                print("[Teacher] Falling back to rule-based")
-                self.teacher_type = 'rule_based'
-        else:
-            print("[Teacher] ✅ Rule-based evaluator ready")
-    
-    @torch.no_grad()
-    def evaluate_answers(
-        self,
-        predictions: list,
-        ground_truths: list,
-        images: Optional[torch.Tensor] = None,
-        questions: Optional[list] = None
-    ) -> torch.Tensor:
-        """
-        Evaluate answer quality (PROPOSAL: teacher judges answer plausibility)
-        
-        Args:
-            predictions: Model predictions (strings)
-            ground_truths: Ground truth answers (strings)
-            images: Optional image tensors for VLM [B, C, H, W]
-            questions: Optional question texts for VLM
-        
-        Returns:
-            scores: Quality scores [0, 1] for each prediction
-        """
-        if self.teacher_type == 'vlm' and hasattr(self, 'vlm_model'):
-            return self._evaluate_with_vlm(predictions, ground_truths, images, questions)
-        else:
-            return self._evaluate_rule_based(predictions, ground_truths)
-    
-    def _evaluate_rule_based(
-        self, 
-        predictions: list, 
-        ground_truths: list
-    ) -> torch.Tensor:
-        """Rule-based evaluation (fast, simple)"""
-        scores = []
-        
-        for pred, gt in zip(predictions, ground_truths):
-            pred_norm = pred.lower().strip()
-            gt_norm = gt.lower().strip()
-            
-            # Exact match
-            if pred_norm == gt_norm:
-                score = 1.0
-            # Partial match
-            elif gt_norm in pred_norm or pred_norm in gt_norm:
-                score = 0.7
-            # Semantic similarity
-            elif self._semantic_similarity(pred_norm, gt_norm) > 0.5:
-                score = 0.5
-            # Wrong
-            else:
-                score = 0.0
-            
-            scores.append(score)
-        
-        return torch.tensor(scores, dtype=torch.float32, device=self.device)
-    
-    def _evaluate_with_vlm(
-        self,
-        predictions: list,
-        ground_truths: list,
-        images: Optional[torch.Tensor] = None,
-        questions: Optional[list] = None
-    ) -> torch.Tensor:
-        """
-        VLM-based evaluation (Qwen2.5-VL) - CPU inference only!
-        
-        🚨 CRITICAL: VLM stays on CPU to avoid OOM!
-        Slower but won't crash with 16GB GPU
-        """
-        scores = []
-        
-        for i, (pred, gt) in enumerate(zip(predictions, ground_truths)):
-            # Text-only evaluation (skip multimodal to save time)
-            # Reason: Multimodal with CPU is VERY slow (30s+ per sample)
-            score = self._evaluate_text_only_vlm(pred, gt)
-            scores.append(score)
-        
-        return torch.tensor(scores, dtype=torch.float32, device=self.device)
-    
-    def _construct_vlm_prompt(
-        self, 
-        question: str, 
-        prediction: str, 
-        ground_truth: str
-    ) -> str:
-        """Construct prompt for VLM evaluation"""
-        prompt = f"""You are evaluating the quality of a Vietnamese VQA model's answer.
-
-Question: {question}
-Student Answer: {prediction}
-Ground Truth: {ground_truth}
-
-Rate the student answer quality from 0 to 100:
-- 100: Perfect match (semantically identical to ground truth)
-- 70-90: Correct but different wording
-- 40-70: Partially correct
-- 0-40: Incorrect
-
-Respond with ONLY a number (0-100).
-Score:"""
-        return prompt
-    
-    def _parse_vlm_score(self, response: str) -> float:
-        """Parse VLM response to extract score"""
-        import re
-        
-        # Extract number from response
-        numbers = re.findall(r'\d+', response)
-        
-        if numbers:
-            score = int(numbers[0])
-            # Normalize to [0, 1]
-            return min(max(score / 100.0, 0.0), 1.0)
-        else:
-            # Fallback: parse text
-            response_lower = response.lower()
-            if any(word in response_lower for word in ['perfect', 'correct', 'excellent']):
-                return 0.9
-            elif any(word in response_lower for word in ['good', 'mostly']):
-                return 0.7
-            elif any(word in response_lower for word in ['partial', 'somewhat']):
-                return 0.5
-            else:
-                return 0.2
-    
-    def _evaluate_text_only_vlm(self, pred: str, gt: str) -> float:
-        """Text-only VLM evaluation (without image) - CPU inference only!"""
-        prompt = f"""Rate answer quality (0-100):
-Ground truth: {gt}
-Prediction: {pred}
-
-Score (number only):"""
-        
-        # 🚨 CRITICAL: VLM stays on CPU (no .to(device))!
-        inputs = self.vlm_processor(
-            text=[prompt],
-            return_tensors="pt"
-        )  # Keep on CPU!
-        
-        # 🔥 VLM inference on CPU (slow but won't OOM)
-        outputs = self.vlm_model.generate(**inputs, max_new_tokens=5)
-        response = self.vlm_processor.batch_decode(outputs, skip_special_tokens=True)[0]
-        
-        return self._parse_vlm_score(response)
-    
-    def _semantic_similarity(self, s1: str, s2: str) -> float:
-        """Simple word overlap similarity (for rule-based)"""
-        words1 = set(s1.split())
-        words2 = set(s2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        intersection = len(words1 & words2)
-        union = len(words1 | words2)
-        
-        return intersection / union if union > 0 else 0.0
-
-
-# ============================================================================
-# FIX #8: TRAINING CURRICULUM
-# ============================================================================
-
-class TrainingCurriculum:
-    """
-    FIX #8: Simplified training dynamics
-    
-    Stage 1: Answer-only (no reasoning)
-    Stage 2: Warmup reasoning (KL warmup, no teacher)
-    Stage 3: Full (with teacher)
-    """
-    def __init__(self, total_steps_per_stage: int = 1000, max_kl_weight: float = 6.0):
-        """
-        Args:
-            total_steps_per_stage: Total steps for ENTIRE STAGE 2 (not per epoch!)
-                                  Should be: batches_per_epoch * num_stage2_epochs
-            max_kl_weight: Maximum KL weight (default 15.0)
-                          Note: Loss uses `kl_weight * 0.2 * kl_loss` (UPDATED!)
-                          So effective weight = 15.0 * 0.2 = 3.0
-                          Target KL contribution: ~0.3 (cân bằng với answer_loss ~0.3)
-        """
-        self.total_steps = total_steps_per_stage
-        self.current_step = 0
-        self.max_kl_weight = max_kl_weight
-        self.warmup_epochs = 0  # Track epochs for smoother warmup
-    
-    def get_kl_weight(self, stage: int, epoch_progress: float = 1.0):
-        if stage == 1:
-            return 0.0
-        elif stage == 2:
-            # 🚨 SAFE: Smoother warmup with sqrt + max=0.15 (REDUCED!)
-            # With max_kl_weight=0.15:
-            #   Epoch 5: sqrt(5/15) * 0.15 = 0.087
-            #   Epoch 10: sqrt(10/15) * 0.15 = 0.122
-            #   Epoch 15: sqrt(15/15) * 0.15 = 0.15
-            # Effective weight = kl_weight × 0.2 (KL factor) → Max 0.03 ✅
-            # Target KL raw: 0.03-0.08 (not 0.22!)
-            import math
-            return self.max_kl_weight * math.sqrt(epoch_progress)  # Smoother warmup
-        else:
-            # 🔥 FIX: FREEZE KL in Stage 3 (focus on answer quality)
-            # Rationale: Stage 3 = fine-tune answer, not regularization
-            # Increasing KL = worse task performance (objective mismatch!)
-            return self.max_kl_weight  # Frozen at Stage 2 final value    
-    def get_stop_gradient(self, stage: int):
-        """
-        FIX #2: Stop gradient in early stages
-        """
-        return stage == 1  # Stop gradient in baseline stage
-    
-    def step(self):
-        self.current_step += 1
 
 
 if __name__ == '__main__':
     print("="*80)
-    print("FIXED LATENT REASONING VQA - ALL CRITICAL ISSUES ADDRESSED")
+    print("DETERMINISTIC VQA MODEL (NO LATENT REASONING)")
     print("="*80)
-    print("\nFIXES APPLIED:")
-    print("  1. ✅ Bottleneck: Decoder sees ONLY reasoning")
-    print("  2. ✅ Posterior collapse: Free bits + KL warmup + stop gradient")
-    print("  3. ✅ Vision grounding: Vision-first + image dropout")
-    print("  4. ✅ Latent size: 4-8 tokens × 256 dim")
-    print("  5. ✅ Diversity: Orthogonality + metrics")
-    print("  6. ✅ Intervention: Built-in ablation")
-    print("  7. ✅ Dataset: Filter hard examples (in training script)")
-    print("  8. ✅ Curriculum: Stage-based training")
-    print("  9. ✅ Metrics: Intervention tests")
+    print("\nKey features:")
+    print("  ✅ No VAE/KL regularization")
+    print("  ✅ Direct cross-attention fusion")
+    print("  ✅ Optimized for low-resource VQA")
+    print("  ✅ Stable training, no KL tuning needed")
     print("="*80)
     
-    # Test model
-    model = FixedLatentReasoningVQA(
-        num_reasoning_tokens=6,
-        latent_dim=256,
-        free_bits=0.5,
-        ortho_weight=0.1,
-        image_dropout_prob=0.1
+    model = DeterministicVQA(
+        num_fusion_layers=4,  # Match default in __init__
+        gradient_checkpointing=False
     )
     
     print(f"\nTotal params: {sum(p.numel() for p in model.parameters())/1e6:.1f}M")
-    print("Model ready for training with ALL fixes applied! 🎉")
+    print("Model ready for training! 🎉")
