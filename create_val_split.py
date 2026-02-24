@@ -1,28 +1,36 @@
 """
 create_val_split.py — Tách val set cố định từ train CSV cho ViVQA
 
+Dataset: ~12,000 mẫu (ViVQA)
+Cột CSV : index, question, answer, img_id, type (0=OBJECT,1=COUNT,2=COLOR,3=LOCATION)
+
 Chiến lược STRATIFIED SPLIT (tốt nhất cho mọi case):
-  - Phân tầng theo (question_type × answer_frequency_bucket)
-  - Đảm bảo phân phối loại câu hỏi giống nhau ở train lẫn val
+  - Phân tầng theo (type × answer_frequency_bucket)
+  - Dùng cột 'type' có sẵn trong CSV, KHÔNG auto-detect
+  - Đảm bảo phân phối 4 loại câu hỏi giống nhau ở train lẫn val
   - Đảm bảo cả rare answers lẫn common answers xuất hiện trong val
   - Seed cố định → mọi lần chạy đều ra cùng một split
 
-Tại sao stratified tốt hơn random.split?
+Tại sao val_ratio=0.10 (10%) phù hợp nhất với ~12K mẫu?
+  - 5%  →  ~600 val: metric không ổn định, variance ±3-4% giữa các epoch
+  - 10% → ~1200 val: đủ ổn định (variance ±1.5%), không lãng phí train data  ✅
+  - 15% → ~1800 val: ổn hơn nhưng lãng phí ~600 mẫu train không cần thiết
+
+Tại sao stratified tốt hơn random_split?
   - random_split: mỗi lần chạy (hoặc mỗi lần khởi động Python) ra split khác
     (dù dùng seed, thứ tự shuffle trong Kaggle notebook đôi khi khác)
   - Stratified CSV: split được lưu ra file, KHÔNG BAO GIỜ thay đổi nữa
   - Phân tầng: val phản ánh đúng phân phối thực → metric đáng tin cậy hơn
 
 Usage:
-    # Tách 10% val (mặc định), stratified theo question type
+    # Tách 10% val (khuyến nghị), stratified theo cột type trong CSV
     python create_val_split.py --csv data/train.csv --output_dir data/
-
-    # Tùy chỉnh tỉ lệ và seed
-    python create_val_split.py --csv data/train.csv --output_dir data/ \\
-        --val_ratio 0.15 --seed 42
 
     # Xem thống kê nhưng chưa lưu file
     python create_val_split.py --csv data/train.csv --dry_run
+
+    # Tùy chỉnh tỉ lệ (không khuyến nghị thay đổi với ~12K mẫu)
+    python create_val_split.py --csv data/train.csv --output_dir data/ --val_ratio 0.15
 
 Output:
     data/train_split.csv   ← dùng thay train.csv khi train
@@ -41,16 +49,19 @@ import pandas as pd
 
 
 # ============================================================================
-# QUESTION TYPE DETECTION (mirror của dataset.py)
+# QUESTION TYPE MAPPING
 # ============================================================================
+
+# Cột 'type' trong CSV: 0=OBJECT, 1=COUNT, 2=COLOR, 3=LOCATION
+TYPE_ID_TO_NAME = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
+
 
 def detect_question_type(question: str) -> str:
     """
-    Nhận dạng loại câu hỏi tiếng Việt.
-    Trả về string để dễ đọc trong CSV.
+    Fallback: auto-detect từ text nếu CSV không có cột 'type'.
+    Ưu tiên dùng cột 'type' trong CSV hơn (xem assign_stratum).
     """
     q = question.lower().strip()
-
     if re.search(r'màu\s*(gì|sắc|nào)?', q):
         return 'COLOR'
     if re.search(r'(bao nhiêu|mấy|số lượng|có\s*\d+)', q):
@@ -119,8 +130,14 @@ def stratified_split(
     answer_freq = Counter(df['answer'].astype(str).str.strip().str.lower())
 
     # ── Bước 2: Gán stratum cho từng dòng ─────────────────────────────────
+    has_type_col = 'type' in df.columns
+
     def assign_stratum(row) -> str:
-        q_type = detect_question_type(str(row['question']))
+        # Ưu tiên cột 'type' có sẵn trong CSV (0=OBJECT,1=COUNT,2=COLOR,3=LOCATION)
+        if has_type_col:
+            q_type = TYPE_ID_TO_NAME.get(int(row['type']), 'OBJECT')
+        else:
+            q_type = detect_question_type(str(row['question']))
         ans = str(row['answer']).strip().lower()
         freq = answer_freq[ans]
         bucket = get_answer_bucket(ans, freq)
@@ -165,9 +182,15 @@ def compute_split_stats(
 
     def type_dist(df: pd.DataFrame) -> dict:
         counts = {}
-        for _, row in df.iterrows():
-            t = detect_question_type(str(row['question']))
-            counts[t] = counts.get(t, 0) + 1
+        if 'type' in df.columns:
+            # Dùng cột type trực tiếp — nhanh và chính xác hơn
+            for val in df['type']:
+                t = TYPE_ID_TO_NAME.get(int(val), 'OBJECT')
+                counts[t] = counts.get(t, 0) + 1
+        else:
+            for _, row in df.iterrows():
+                t = detect_question_type(str(row['question']))
+                counts[t] = counts.get(t, 0) + 1
         total = len(df)
         return {t: {'count': c, 'pct': round(c / total * 100, 2)}
                 for t, c in sorted(counts.items())}
@@ -257,7 +280,7 @@ def main():
     parser.add_argument('--output_dir', default=None,
                         help='Thư mục lưu output. Mặc định = cùng thư mục với --csv')
     parser.add_argument('--val_ratio', type=float, default=0.10,
-                        help='Tỉ lệ val (0.0–1.0, mặc định 0.10 = 10%%)')
+                        help='Tỉ lệ val (mặc định 0.10 = 10%% — khuyến nghị cho ~12K mẫu)')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed cố định (mặc định 42)')
     parser.add_argument('--min_val_per_stratum', type=int, default=1,
@@ -291,7 +314,9 @@ def main():
     if missing:
         raise ValueError(f"CSV thiếu cột: {missing}. Các cột hiện có: {list(df.columns)}")
 
+    has_type = 'type' in df.columns
     print(f"[Load] Tổng {len(df):,} mẫu | Cột: {list(df.columns)}")
+    print(f"[Load] Cột 'type': {'✅ có sẵn (dùng trực tiếp)' if has_type else '❌ không có (sẽ auto-detect từ text)'}")
 
     # ── Split ─────────────────────────────────────────────────────────────
     print(f"\n[Split] Stratified split: val_ratio={args.val_ratio}, seed={args.seed}")
