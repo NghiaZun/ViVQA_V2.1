@@ -1266,8 +1266,10 @@ class DeterministicVQA(nn.Module):
         
         # Fusion
         fused_vision = vision_features
+        fused_text = text_features
         for fusion_layer in self.flamingo_fusion:
-            fused_vision = fusion_layer(fused_vision, text_features, attention_mask)
+            fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
+        text_features = fused_text
         
         # 🔥 Type-Conditioned Vision Gating (same as forward)
         if self.use_vision_gate:
