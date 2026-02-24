@@ -818,12 +818,13 @@ def main():
                 image_folder=args.image_dir,
                 vision_processor=vision_processor,
                 tokenizer_name=bartpho_model,
-                include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
-                auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
-                use_distillation=args.use_distillation,  # 🔥🔥🔥
-                teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
+                include_question_type=args.use_type_loss,
+                auto_detect_type=True,
+                use_distillation=args.use_distillation,
+                teacher_vision_processor=teacher_vision_processor
             )
-            train_dataset = full_train_dataset
+            train_dataset = full_train_dataset  # 10,800 mẫu (đã tách val ra rồi)
+            print(f"[Data] Train: {len(train_dataset):,} | Val: {len(val_dataset):,}")
         else:
             # Auto-split train into train/val
             val_ratio = args.val_split
