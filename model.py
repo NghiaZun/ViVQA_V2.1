@@ -1372,10 +1372,15 @@ class DeterministicVQA(nn.Module):
                         torch.arange(batch_size, device=device).unsqueeze(1) * num_beams
                         + beam_idx
                     ).reshape(-1)   # [B*beams]
-                    past_key_values = tuple(
-                        tuple(t.index_select(0, flat_beam_idx) if t is not None else None for t in layer)
-                        for layer in past_key_values
-                    )
+                    if hasattr(past_key_values, 'reorder_cache'):
+                        # New transformers Cache API (DynamicCache, etc.) — reorder in-place
+                        past_key_values.reorder_cache(flat_beam_idx)
+                    else:
+                        # Legacy tuple format
+                        past_key_values = tuple(
+                            tuple(t.index_select(0, flat_beam_idx) if t is not None else None for t in layer)
+                            for layer in past_key_values
+                        )
 
                 all_eos = (token_idx == self.config.eos_token_id).all(dim=-1)
                 done    = done | all_eos
