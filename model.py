@@ -1373,7 +1373,7 @@ class DeterministicVQA(nn.Module):
                         + beam_idx
                     ).reshape(-1)   # [B*beams]
                     past_key_values = tuple(
-                        tuple(t.index_select(0, flat_beam_idx) for t in layer)
+                        tuple(t.index_select(0, flat_beam_idx) if t is not None else None for t in layer)
                         for layer in past_key_values
                     )
 
