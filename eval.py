@@ -187,6 +187,9 @@ def main():
     parser.add_argument('--csv_path', type=str, required=True)
     parser.add_argument('--image_folder', type=str, required=True)
     parser.add_argument('--vision_model', type=str, default='google/siglip-base-patch16-224')
+    parser.add_argument('--fusion_type', type=str, default=None,
+                       choices=['text2vision', 'vision2text', 'bidirectional'],
+                       help='Fusion type (default: auto-detect from checkpoint args)')
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--output_csv', type=str, default=None)
     args = parser.parse_args()
@@ -240,9 +243,9 @@ def main():
                 fusion_layer_indices.add(int(parts[1]))
     num_fusion_layers = max(fusion_layer_indices) + 1 if fusion_layer_indices else 4
     
-    # 🔥 Detect fusion_type from saved args (fallback to 'text2vision')
+    # 🔥 Detect fusion_type: CLI arg > checkpoint['args'] > fallback 'text2vision'
     saved_args = checkpoint.get('args', {})
-    fusion_type = saved_args.get('fusion_type', 'text2vision')
+    fusion_type = args.fusion_type or saved_args.get('fusion_type', 'text2vision')
     
     # 🔥 Detect LoRA ranks from checkpoint weights
     text_lora_r = 16  # default
