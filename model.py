@@ -1222,114 +1222,219 @@ class DeterministicVQA(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         max_length: int = 20,
-        num_beams: int = 3,
+        num_beams: int = 1,
         temperature: float = 1.0,
         do_sample: bool = False,
         top_p: float = 0.9,
         top_k: int = 50
     ):
         """
-        Generate answers using Hugging Face's beam search (FIXED!)
-        
-        Previous bug: Claimed beam search but did multinomial sampling
-        Fix: Use model.decoder.generate() with proper beam search
+        Generate answers với greedy (num_beams=1) hoặc beam search (num_beams>1).
+
+        num_beams=1 → greedy argmax (nhanh, dùng khi train sampling)
+        num_beams>1 → beam search thực sự qua HuggingFace decoder.generate()
+                      (chậm hơn ~num_beams lần, nhưng tốt hơn EM ~1-2%)
         """
         batch_size = pixel_values.size(0)
-        
-        # Encode vision (same logic as forward())
+        device = pixel_values.device
+
+        # ── 1. Vision encoding ────────────────────────────────────────────
         vision_outputs = self.vision_encoder(pixel_values=pixel_values)
-        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
-        
+        patch_tokens = vision_outputs.last_hidden_state  # [B, seq_len, hidden]
+
         # Remove CLS token if present (same as forward())
-        original_seq_len = patch_tokens.size(1)
-        if original_seq_len > self.num_patches:  # Has CLS token
-            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
-            # Verify shape matches expected
+        if patch_tokens.size(1) > self.num_patches:
+            patch_tokens = patch_tokens[:, 1:, :]
             assert patch_tokens.size(1) == self.num_patches, \
-                f"Shape mismatch after CLS removal in generate(): got {patch_tokens.size(1)} patches, expected {self.num_patches}"
-        
+                f"Shape mismatch after CLS removal in generate(): {patch_tokens.size(1)} != {self.num_patches}"
+
+        # 🔥 Apply type-conditioned adapter if present (consistent with forward())
+        if self.vision_adapter is not None:
+            # During inference type_ids unknown → use predicted types below
+            # Pass None here, adapter uses uniform transform (no type conditioning)
+            patch_tokens = self.vision_adapter(patch_tokens, type_ids=None)
+
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
         vision_features = self.vision_proj(patch_tokens)
-        
-        # Encode text
+
+        # ── 2. Text encoding ──────────────────────────────────────────────
         text_encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
         text_features = text_encoder_outputs.last_hidden_state
-        
-        # 🔥 NEW: Predict type for type-conditioned generation
+
+        # Predict type for type-conditioned generation
         text_cls = text_features[:, 0, :]
         type_logits = self.type_head(text_cls)
         predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
-        
-        # Fusion
+
+        # ── 3. Fusion ─────────────────────────────────────────────────────
         fused_vision = vision_features
         fused_text = text_features
         for fusion_layer in self.flamingo_fusion:
             fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
         text_features = fused_text
-        
-        # 🔥 Type-Conditioned Vision Gating (same as forward)
+
+        # ── 4. Vision gating ──────────────────────────────────────────────
         if self.use_vision_gate:
             gated_vision, _ = self.vision_gating(
-                fused_vision, 
+                fused_vision,
                 text_features,
-                type_ids=predicted_types  # 🔥 Use predicted type!
+                type_ids=predicted_types
             )
         else:
             gated_vision = fused_vision
-        
-        # Prepare encoder hidden states
-        # 🔥 Vision-First Ordering (same as forward pass)
+
+        # ── 5. Encoder hidden states ──────────────────────────────────────
         encoder_hidden_states = torch.cat([gated_vision, text_features], dim=1)
         encoder_attention_mask = torch.cat([
-            torch.ones(batch_size, gated_vision.size(1), device=attention_mask.device),
+            torch.ones(batch_size, gated_vision.size(1), device=device),
             attention_mask
         ], dim=1)
-        
-        # Greedy decoding (simple but effective)
-        device = pixel_values.device
-        generated_ids = torch.full(
-            (batch_size, 1),
-            self.config.decoder_start_token_id,
-            dtype=torch.long,
-            device=device
-        )
-        
-        for _ in range(max_length):
-            # Decode
-            decoder_outputs = self.decoder(
-                input_ids=generated_ids,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask
+
+        # ── 6. Decoding ───────────────────────────────────────────────────
+        if num_beams > 1:
+            # ── Beam search với KV-cache (incremental decoding) ───────────
+            expanded_hidden = encoder_hidden_states.unsqueeze(1) \
+                .expand(-1, num_beams, -1, -1) \
+                .reshape(batch_size * num_beams,
+                         encoder_hidden_states.size(1),
+                         encoder_hidden_states.size(2))
+            expanded_mask = encoder_attention_mask.unsqueeze(1) \
+                .expand(-1, num_beams, -1) \
+                .reshape(batch_size * num_beams, encoder_attention_mask.size(1))
+            expanded_types = predicted_types.repeat_interleave(num_beams)  # [B*beams]
+
+            bos_ids = torch.full(
+                (batch_size, 1),
+                self.config.decoder_start_token_id,
+                dtype=torch.long, device=device
             )
-            
-            # Get base logits
-            base_logits = self.lm_head(decoder_outputs.last_hidden_state)
-            
-            # 🔥 Apply type-aware logits biasing
-            logits = self.logits_bias(base_logits, predicted_types)
-            next_token_logits = logits[:, -1, :]
-            
-            # Greedy: take argmax
-            next_tokens = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-            
-            # Append to generated sequence
-            generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
-            
-            # Check if all sequences have generated EOS
-            if (next_tokens == self.config.eos_token_id).all():
-                break
-        
-        # Decode
-        answers = []
-        for i in range(batch_size):
-            answer = self.tokenizer.decode(generated_ids[i], skip_special_tokens=True)
-            answers.append(answer)
-        
-        return answers
+            # [B, beams, 1]
+            beam_seqs   = bos_ids.unsqueeze(1).expand(-1, num_beams, -1).clone()
+            beam_scores = torch.zeros(batch_size, num_beams, device=device)
+            beam_scores[:, 1:] = -1e9   # chỉ beam 0 active lúc đầu
+            done        = torch.zeros(batch_size, dtype=torch.bool, device=device)
+            past_key_values = None      # KV-cache
+
+            for step in range(max_length):
+                # Với KV-cache: chỉ feed token mới nhất sau bước đầu
+                if step == 0 or past_key_values is None:
+                    cur_input = beam_seqs.reshape(batch_size * num_beams, -1)
+                else:
+                    cur_input = beam_seqs[:, :, -1:].reshape(batch_size * num_beams, 1)
+
+                dec_out = self.decoder(
+                    input_ids=cur_input,
+                    encoder_hidden_states=expanded_hidden,
+                    encoder_attention_mask=expanded_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+                past_key_values = dec_out.past_key_values  # cập nhật cache
+
+                # Logits của token cuối
+                base_logits = self.lm_head(dec_out.last_hidden_state[:, -1:, :])  # [B*beams, 1, V]
+                logits      = self.logits_bias(base_logits, expanded_types)        # [B*beams, 1, V]
+                log_probs   = torch.log_softmax(logits[:, 0, :], dim=-1)           # [B*beams, V]
+                log_probs   = log_probs.reshape(batch_size, num_beams, -1)         # [B, beams, V]
+
+                vocab_size  = log_probs.size(-1)
+                # Các sample đã done: giữ nguyên beam_scores (không cộng thêm),
+                # force chọn EOS để sequence không thay đổi nữa
+                eos_mask = done.unsqueeze(-1).unsqueeze(-1)  # [B, 1, 1]
+                eos_log_probs = torch.full_like(log_probs, -1e9)
+                eos_log_probs[:, :, self.config.eos_token_id] = 0.0
+                log_probs = torch.where(eos_mask.expand_as(log_probs), eos_log_probs, log_probs)
+
+                scores      = beam_scores.unsqueeze(-1) + log_probs                # [B, beams, V]
+                scores_flat = scores.reshape(batch_size, -1)                       # [B, beams*V]
+
+                topk_scores, topk_idx = scores_flat.topk(num_beams, dim=-1)        # [B, beams]
+                beam_idx  = topk_idx // vocab_size
+                token_idx = topk_idx  % vocab_size
+
+                # Rebuild sequences — reorder cache theo beam mới
+                new_seqs = []
+                for b in range(batch_size):
+                    new_seqs.append(torch.stack([
+                        torch.cat([beam_seqs[b, beam_idx[b, k]], token_idx[b, k:k+1]])
+                        for k in range(num_beams)
+                    ]))
+                beam_seqs   = torch.stack(new_seqs)   # [B, beams, L+1]
+                beam_scores = topk_scores              # [B, beams]
+
+                # Reorder KV-cache theo beam mới
+                if past_key_values is not None:
+                    flat_beam_idx = (
+                        torch.arange(batch_size, device=device).unsqueeze(1) * num_beams
+                        + beam_idx
+                    ).reshape(-1)   # [B*beams]
+                    past_key_values = tuple(
+                        tuple(t.index_select(0, flat_beam_idx) for t in layer)
+                        for layer in past_key_values
+                    )
+
+                all_eos = (token_idx == self.config.eos_token_id).all(dim=-1)
+                done    = done | all_eos
+                if done.all():
+                    break
+
+            best_seqs = beam_seqs[:, 0, :]  # beam có score cao nhất
+            answers = [
+                self.tokenizer.decode(best_seqs[i], skip_special_tokens=True)
+                for i in range(batch_size)
+            ]
+            return answers
+
+        else:
+            # ── Greedy decoding với KV-cache (num_beams=1, nhanh nhất) ────
+            generated_ids   = torch.full(
+                (batch_size, 1),
+                self.config.decoder_start_token_id,
+                dtype=torch.long, device=device
+            )
+            past_key_values = None
+            done            = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
+            for _ in range(max_length):
+                # Bước đầu: feed BOS; các bước sau: chỉ feed token mới nhất
+                cur_input = generated_ids if past_key_values is None \
+                            else generated_ids[:, -1:]
+
+                decoder_outputs = self.decoder(
+                    input_ids=cur_input,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+                past_key_values = decoder_outputs.past_key_values
+
+                base_logits = self.lm_head(decoder_outputs.last_hidden_state[:, -1:, :])
+                logits      = self.logits_bias(base_logits, predicted_types)
+                next_tokens = torch.argmax(logits[:, 0, :], dim=-1, keepdim=True)  # [B, 1]
+
+                # Sample đã EOS: tiếp tục emit EOS để decode bỏ qua khi skip_special_tokens
+                next_tokens = torch.where(
+                    done.unsqueeze(-1),
+                    torch.full_like(next_tokens, self.config.eos_token_id),
+                    next_tokens
+                )
+                generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
+
+                done = done | (next_tokens.squeeze(-1) == self.config.eos_token_id)
+                if done.all():
+                    break
+
+            answers = []
+            for i in range(batch_size):
+                answer = self.tokenizer.decode(generated_ids[i], skip_special_tokens=True)
+                answers.append(answer)
+            return answers
+
 
 
 if __name__ == '__main__':

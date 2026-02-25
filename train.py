@@ -21,6 +21,7 @@ import os
 import json
 import argparse
 import random
+import unicodedata
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -70,6 +71,15 @@ except ImportError:
 # UTILITIES
 # ============================================================================
 
+def _normalize_vn(text: str) -> str:
+    """
+    Chuẩn hóa text tiếng Việt trước khi so sánh.
+    NFC: đảm bảo cùng byte representation cho ký tự tổ hợp (ệ, ổ, ẫ, ...)
+    Tránh false negative khi tokenizer decode ra NFC nhưng CSV lưu NFD.
+    """
+    return unicodedata.normalize('NFC', text).strip().lower()
+
+
 class EarlyStopping:
     """Early stopping to prevent overfitting"""
     def __init__(self, patience=5, min_delta=0.001, verbose=True):
@@ -105,8 +115,8 @@ def compute_f1_score(prediction: str, ground_truth: str) -> float:
     
     F1 is better than exact match for VQA because it gives partial credit!
     """
-    pred_tokens = prediction.lower().split()
-    gt_tokens = ground_truth.lower().split()
+    pred_tokens = _normalize_vn(prediction).split()
+    gt_tokens   = _normalize_vn(ground_truth).split()
     
     # Edge case: both empty (should be 1.0, not 0.0)
     # If both model and ground truth produce nothing, it's technically correct
@@ -512,8 +522,8 @@ def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, com
             
             # Compute metrics
             for q, pred, gt in zip(question_texts, predictions, label_texts):
-                # Exact match
-                em = 1.0 if pred.strip().lower() == gt.strip().lower() else 0.0
+                # Exact match với NFC normalization cho tiếng Việt
+                em = 1.0 if _normalize_vn(pred) == _normalize_vn(gt) else 0.0
                 exact_matches.append(em)
                 
                 # F1 score
@@ -1005,6 +1015,13 @@ def main():
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
         if scheduler and 'scheduler_state_dict' in checkpoint:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        # 🔥 Restore early stopping state to avoid resetting counter/best_loss
+        if early_stopping is not None and 'early_stopping_state' in checkpoint:
+            es_state = checkpoint['early_stopping_state']
+            early_stopping.counter = es_state['counter']
+            early_stopping.best_loss = es_state['best_loss']
+            early_stopping.early_stop = es_state['early_stop']
+            print(f"[Resume] Early stopping restored: counter={early_stopping.counter}/{early_stopping.patience}, best_loss={early_stopping.best_loss:.4f}")
         print(f"[Resume] Resuming from epoch {start_epoch}, best val loss: {best_val_loss:.4f}")
     
     # ========================================================================
@@ -1153,13 +1170,7 @@ def main():
         # Add to training history
         training_history.append(epoch_metrics)
         
-        # 🔥 Early stopping check
-        if early_stopping is not None:
-            if early_stopping(val_metrics['loss']):
-                print(f"\n🛑 Early stopping at epoch {epoch}!")
-                break
-        
-        # Save best model checkpoint
+        # Save best model checkpoint (BEFORE early stopping check to avoid missing best on final epoch)
         is_best = val_metrics['loss'] < best_val_loss
         if is_best:
             best_val_loss = val_metrics['loss']
@@ -1199,6 +1210,14 @@ def main():
             'args': vars(args)
         }
         
+        # 🔥 Save early stopping state for correct resume
+        if early_stopping is not None:
+            last_checkpoint['early_stopping_state'] = {
+                'counter': early_stopping.counter,
+                'best_loss': early_stopping.best_loss,
+                'early_stop': early_stopping.early_stop,
+            }
+        
         if scaler is not None:
             last_checkpoint['scaler_state_dict'] = scaler.state_dict()
         
@@ -1218,6 +1237,12 @@ def main():
             save_metrics_csv(training_history, output_dir)
         except Exception as e:
             print(f"  ⚠️  Failed to save plots/CSV: {e}")
+        
+        # 🔥 Early stopping check (AFTER saving best/last model)
+        if early_stopping is not None:
+            if early_stopping(val_metrics['loss']):
+                print(f"\n🛑 Early stopping at epoch {epoch}!")
+                break
     
     print("\n" + "="*80)
     print("TRAINING COMPLETE!")

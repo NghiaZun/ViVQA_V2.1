@@ -2,6 +2,7 @@
 MINIMAL EVAL FOR SIGLIP - KAGGLE COMPATIBLE
 """
 import os
+import unicodedata
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -12,13 +13,18 @@ from dataset import VQAGenDataset
 from model import DeterministicVQA
 
 
+def _normalize_vn(text: str) -> str:
+    """NFC normalization cho tiếng Việt — tránh false negative do byte khác nhau."""
+    return unicodedata.normalize('NFC', text).strip().lower()
+
+
 def compute_exact_match(prediction: str, ground_truth: str) -> float:
-    return 1.0 if prediction.strip().lower() == ground_truth.strip().lower() else 0.0
+    return 1.0 if _normalize_vn(prediction) == _normalize_vn(ground_truth) else 0.0
 
 
 def compute_f1_score(prediction: str, ground_truth: str) -> float:
-    pred_tokens = prediction.lower().split()
-    gt_tokens = ground_truth.lower().split()
+    pred_tokens = _normalize_vn(prediction).split()
+    gt_tokens   = _normalize_vn(ground_truth).split()
     
     if len(pred_tokens) == 0 or len(gt_tokens) == 0:
         return 0.0
@@ -234,6 +240,10 @@ def main():
                 fusion_layer_indices.add(int(parts[1]))
     num_fusion_layers = max(fusion_layer_indices) + 1 if fusion_layer_indices else 4
     
+    # 🔥 Detect fusion_type from saved args (fallback to 'text2vision')
+    saved_args = checkpoint.get('args', {})
+    fusion_type = saved_args.get('fusion_type', 'text2vision')
+    
     # 🔥 Detect LoRA ranks from checkpoint weights
     text_lora_r = 16  # default
     vision_lora_r = 8  # default
@@ -264,6 +274,7 @@ def main():
     print(f"  Vision Gate: {has_vision_gate}")
     print(f"  Type Adapter: {has_type_adapter}")  # 🔥 NEW
     print(f"  Fusion Layers: {num_fusion_layers}")
+    print(f"  Fusion Type: {fusion_type}")
     
     # Build model
     print(f"\nBuilding model...")
@@ -271,6 +282,7 @@ def main():
         vision_model_name=args.vision_model,
         bartpho_model_name='vinai/bartpho-syllable',
         num_fusion_layers=num_fusion_layers,
+        fusion_type=fusion_type,
         num_heads=8,
         dropout=0.1,
         gradient_checkpointing=False,
