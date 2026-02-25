@@ -146,35 +146,37 @@ class FlamingoGatedCrossAttention(nn.Module):
             return vision_features, text_features
         
         elif self.fusion_type == 'bidirectional':
-            # Both directions
-            # 1. Vision attends to text
+            # Both directions — use ORIGINAL features as keys/values so the two
+            # cross-attentions are truly parallel (no circular dependency).
+            orig_vision = vision_features  # save before any update
+            orig_text   = text_features    # save before any update
+
+            # 1. Vision attends to ORIGINAL text
             attn_v2t, _ = self.cross_attn(
                 query=vision_features,
-                key=text_features,
-                value=text_features,
+                key=orig_text,
+                value=orig_text,
                 key_padding_mask=text_key_padding_mask
             )
-            
-            vision_features = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_v2t)
-            
-            # 2. Text attends to vision
+            vision_updated = vision_features + torch.tanh(self.gate_cross) * self.norm_cross(attn_v2t)
+
+            # 2. Text attends to ORIGINAL vision (not the one already enriched in step 1)
             attn_t2v, _ = self.cross_attn_reverse(
                 query=text_features,
-                key=vision_features,
-                value=vision_features,
+                key=orig_vision,
+                value=orig_vision,
                 key_padding_mask=None
             )
-            
-            text_features = text_features + torch.tanh(self.gate_cross_reverse) * self.norm_cross_reverse(attn_t2v)
-            
+            text_updated = text_features + torch.tanh(self.gate_cross_reverse) * self.norm_cross_reverse(attn_t2v)
+
             # 3. FFN for vision
-            ffn_out_v = self.ffn(vision_features)
-            vision_features = vision_features + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out_v)
-            
+            ffn_out_v = self.ffn(vision_updated)
+            vision_features = vision_updated + torch.tanh(self.gate_ffn) * self.norm_ffn(ffn_out_v)
+
             # 4. FFN for text
-            ffn_out_t = self.ffn_reverse(text_features)
-            text_features = text_features + torch.tanh(self.gate_ffn_reverse) * self.norm_ffn_reverse(ffn_out_t)
-            
+            ffn_out_t = self.ffn_reverse(text_updated)
+            text_features = text_updated + torch.tanh(self.gate_ffn_reverse) * self.norm_ffn_reverse(ffn_out_t)
+
             return vision_features, text_features
         
         else:
