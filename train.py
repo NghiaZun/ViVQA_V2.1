@@ -729,6 +729,8 @@ def main():
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
+    parser.add_argument('--reset_lr', action='store_true',
+                       help='When resuming, reset LR to --lr value and reinitialize scheduler (warm restart)')
     parser.add_argument('--save_every', type=int, default=1, help='Save checkpoint every N epochs')
     parser.add_argument('--sample_every', type=int, default=3, help='Sample predictions every N epochs')
     
@@ -1082,8 +1084,14 @@ def main():
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
         if scaler and 'scaler_state_dict' in checkpoint:
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
-        if scheduler and 'scheduler_state_dict' in checkpoint:
+        if scheduler and 'scheduler_state_dict' in checkpoint and not args.reset_lr:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+        # 🔥 reset_lr: override LR từ checkpoint về --lr mới, reset scheduler
+        if args.reset_lr:
+            for pg in optimizer.param_groups:
+                pg['lr'] = learning_rate
+            print(f"[Resume] LR reset to {learning_rate:.2e} (--reset_lr)")
+        
         # 🔥 Restore early stopping state to avoid resetting counter/best_loss
         if early_stopping is not None and 'early_stopping_state' in checkpoint:
             es_state = checkpoint['early_stopping_state']
