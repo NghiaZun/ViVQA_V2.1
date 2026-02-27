@@ -81,26 +81,33 @@ def _normalize_vn(text: str) -> str:
 
 
 class EarlyStopping:
-    """Early stopping to prevent overfitting"""
-    def __init__(self, patience=5, min_delta=0.001, verbose=True):
+    """Early stopping to prevent overfitting — supports both min (loss) and max (EM/F1) modes"""
+    def __init__(self, patience=5, min_delta=0.001, verbose=True, mode='max'):
         self.patience = patience
         self.min_delta = min_delta
         self.verbose = verbose
+        self.mode = mode  # 'min' for loss, 'max' for EM/F1
         self.counter = 0
-        self.best_loss = float('inf')
+        self.best_score = float('-inf') if mode == 'max' else float('inf')
+        self.best_loss = float('inf')   # kept for checkpoint compat
         self.early_stop = False
-    
-    def __call__(self, val_loss):
-        if val_loss < self.best_loss - self.min_delta:
+
+    def __call__(self, score):
+        improved = (
+            score > self.best_score + self.min_delta if self.mode == 'max'
+            else score < self.best_score - self.min_delta
+        )
+        if improved:
             if self.verbose:
-                print(f"  📉 Validation loss improved: {self.best_loss:.4f} → {val_loss:.4f}")
-            self.best_loss = val_loss
+                print(f"  📉 {'↑' if self.mode == 'max' else '↓'} Metric improved: {self.best_score:.4f} → {score:.4f}")
+            self.best_score = score
+            self.best_loss = score   # mirror for compat
             self.counter = 0
             return False
         else:
             self.counter += 1
             if self.verbose:
-                print(f"  ⚠️  No improvement for {self.counter}/{self.patience} epochs")
+                print(f"  ⚠️  No improvement for {self.counter}/{self.patience} epochs (best={self.best_score:.4f})")
             if self.counter >= self.patience:
                 if self.verbose:
                     print(f"  🛑 Early stopping triggered!")
@@ -472,6 +479,59 @@ def run_one_epoch_deterministic(
     }
 
 
+def evaluate_full_val(model, dataloader, tokenizer, device):
+    """
+    Tính EM và F1 trên TOÀN BỘ val set — gọi mỗi epoch để track best model.
+    Nhanh hơn sample_predictions vì chỉ generate, không in ví dụ.
+
+    Returns:
+        dict với 'exact_match' (%), 'f1_score' (%), 'rouge1' (%), 'rougeL' (%)
+    """
+    model.eval()
+    exact_matches = []
+    f1_scores = []
+    rouge1_scores = []
+    rougeL_scores = []
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc='Eval EM/F1', leave=False):
+            pixel_values = batch['pixel_values'].to(device)
+            input_ids    = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels       = batch['labels'].to(device)
+
+            predictions = model.generate(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=10,
+                num_beams=3
+            )
+
+            for pred, label in zip(predictions, labels):
+                label_tokens = label[label != -100].cpu().tolist()
+                gt = tokenizer.decode(label_tokens, skip_special_tokens=True)
+
+                em = 1.0 if _normalize_vn(pred) == _normalize_vn(gt) else 0.0
+                exact_matches.append(em)
+                f1_scores.append(compute_f1_score(pred, gt))
+
+                rouge = compute_rouge_scores(pred, gt)
+                rouge1_scores.append(rouge['rouge1'])
+                rougeL_scores.append(rouge['rougeL'])
+
+    n = len(exact_matches)
+    if n == 0:
+        return {'exact_match': 0.0, 'f1_score': 0.0, 'rouge1': 0.0, 'rougeL': 0.0}
+
+    return {
+        'exact_match': sum(exact_matches) / n * 100,
+        'f1_score':    sum(f1_scores)     / n * 100,
+        'rouge1':      sum(rouge1_scores) / n * 100,
+        'rougeL':      sum(rougeL_scores) / n * 100,
+    }
+
+
 def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, compute_metrics=True):
     """
     Sample predictions for qualitative evaluation with metrics
@@ -606,6 +666,9 @@ def main():
     parser.add_argument('--scheduler_factor', type=float, default=0.5, help='Factor for ReduceLROnPlateau')
     parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
+    parser.add_argument('--early_stopping_metric', type=str, default='em',
+                       choices=['loss', 'em', 'f1', 'rouge1', 'rougeL'],
+                       help='Metric to monitor for early stopping and best model (default: em)')
     
     # Freezing
     parser.add_argument('--unfreeze_encoder_layers', type=int, default=3, help='Number of text encoder layers to unfreeze')
@@ -997,12 +1060,14 @@ def main():
     # 🔥 Early Stopping
     early_stopping = None
     if args.early_stopping:
+        es_mode = 'min' if args.early_stopping_metric == 'loss' else 'max'
         early_stopping = EarlyStopping(
             patience=args.early_stopping_patience,
             min_delta=0.001,
-            verbose=True
+            verbose=True,
+            mode=es_mode
         )
-        print(f"[Early Stopping] Enabled (patience={args.early_stopping_patience})")
+        print(f"[Early Stopping] Enabled (patience={args.early_stopping_patience}, metric={args.early_stopping_metric}, mode={es_mode})")
     
     # Resume from checkpoint if specified
     start_epoch = 1
@@ -1086,7 +1151,11 @@ def main():
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
-        
+
+        # 🔥 Tính EM/F1 trên TOÀN BỘ val set mỗi epoch
+        full_val = evaluate_full_val(model, val_loader, model.tokenizer, device)
+        print(f"  VAL   -> EM={full_val['exact_match']:.2f}% | F1={full_val['f1_score']:.2f}% | ROUGE-1={full_val['rouge1']:.2f}% | ROUGE-L={full_val['rougeL']:.2f}%")
+
         # Track metrics in history
         epoch_metrics = {
             'epoch': epoch,
@@ -1094,6 +1163,10 @@ def main():
             'train_answer_loss': train_metrics['answer_loss'],
             'val_loss': val_metrics['loss'],
             'val_answer_loss': val_metrics['answer_loss'],
+            'exact_match': full_val['exact_match'],
+            'f1_score': full_val['f1_score'],
+            'rouge1': full_val['rouge1'],
+            'rougeL': full_val['rougeL'],
             'learning_rate': optimizer.param_groups[0]['lr']
         }
         
@@ -1116,6 +1189,14 @@ def main():
             if 'gate_penalty' in train_metrics:
                 wandb_log['train/gate_penalty'] = train_metrics['gate_penalty']
 
+            # 🔥 Log full val metrics to W&B
+            wandb_log.update({
+                'val/exact_match': full_val['exact_match'],
+                'val/f1_score':    full_val['f1_score'],
+                'val/rouge1':      full_val['rouge1'],
+                'val/rougeL':      full_val['rougeL'],
+            })
+
         # 🔥 LR Scheduler step
         if scheduler is not None:
             if isinstance(scheduler, ReduceLROnPlateau):
@@ -1127,45 +1208,16 @@ def main():
             current_lr = optimizer.param_groups[0]['lr']
             print(f"  📊 Learning Rate: {current_lr:.2e}")
         
-        # Sample predictions every N epochs
+        # Sample predictions every N epochs (chỉ để xem ví dụ, không dùng cho best/ES)
         if epoch % args.sample_every == 0:
-            print("\n  [Sample Predictions with Metrics]")
-            samples, sample_metrics = sample_predictions(
-                model, val_loader, model.tokenizer, device, num_samples=5, compute_metrics=True
+            print("\n  [Sample Predictions (qualitative)]")
+            samples, _ = sample_predictions(
+                model, val_loader, model.tokenizer, device, num_samples=5, compute_metrics=False
             )
-            
-            if sample_metrics:
-                print(f"    📊 Metrics: EM={sample_metrics['exact_match']:.1f}% | F1={sample_metrics['f1_score']:.1f}%", end="")
-                if ROUGE_AVAILABLE:
-                    print(f" | ROUGE-1={sample_metrics['rouge1']:.1f}% | ROUGE-L={sample_metrics['rougeL']:.1f}%")
-                else:
-                    print()
-                
-                # Add to epoch metrics
-                epoch_metrics['exact_match'] = sample_metrics['exact_match']
-                epoch_metrics['f1_score'] = sample_metrics['f1_score']
-                if ROUGE_AVAILABLE:
-                    epoch_metrics['rouge1'] = sample_metrics['rouge1']
-                    epoch_metrics['rougeL'] = sample_metrics['rougeL']
-                
-                # 🔥 Log sample metrics to W&B
-                if args.use_wandb:
-                    wandb_log.update({
-                        'val/exact_match': sample_metrics['exact_match'],
-                        'val/f1_score': sample_metrics['f1_score']
-                    })
-                    if ROUGE_AVAILABLE:
-                        wandb_log.update({
-                            'val/rouge1': sample_metrics['rouge1'],
-                            'val/rougeL': sample_metrics['rougeL']
-                        })
-            
             for i, s in enumerate(samples, 1):
-                em_symbol = "✓" if s['exact_match'] == 1.0 else "✗"
-                rouge_str = f" | R1={s['rouge1']:.2f} | RL={s['rougeL']:.2f}" if ROUGE_AVAILABLE else ""
+                em_symbol = "✓" if _normalize_vn(s['prediction']) == _normalize_vn(s['ground_truth']) else "✗"
                 print(f"    {i}. {em_symbol} Q: {s['question']}")
                 print(f"       Pred: {s['prediction']} | GT: {s['ground_truth']}")
-                print(f"       Metrics: F1={s['f1_score']:.2f}{rouge_str}")
         
         # 🔥 Send W&B log
         if args.use_wandb:
@@ -1173,13 +1225,29 @@ def main():
         
         # Add to training history
         training_history.append(epoch_metrics)
-        
-        # Save best model checkpoint (BEFORE early stopping check to avoid missing best on final epoch)
-        is_best = val_metrics['loss'] < best_val_loss
+
+        # ── Chọn giá trị để so sánh best / early stopping ────────────────
+        metric_key = args.early_stopping_metric   # 'loss', 'em', 'f1', 'rouge1', 'rougeL'
+        if metric_key == 'loss':
+            monitor_val  = val_metrics['loss']
+            is_better    = lambda v, best: v < best
+            best_monitor = best_val_loss
+        else:
+            key_map = {'em': 'exact_match', 'f1': 'f1_score',
+                       'rouge1': 'rouge1', 'rougeL': 'rougeL'}
+            monitor_val  = full_val[key_map[metric_key]]
+            is_better    = lambda v, best: v > best
+            best_monitor = getattr(args, '_best_monitor', 0.0)
+
+        # Save best model checkpoint (BEFORE early stopping check)
+        is_best = is_better(monitor_val, best_monitor)
         if is_best:
-            best_val_loss = val_metrics['loss']
-            print(f"  ✅ NEW BEST! Saving checkpoint...")
-            
+            if metric_key == 'loss':
+                best_val_loss = monitor_val
+            else:
+                args._best_monitor = monitor_val   # store on args for persistence
+            print(f"  ✅ NEW BEST ({metric_key}={monitor_val:.4f})! Saving checkpoint...")
+
             checkpoint = {
                 'epoch': epoch,
                 'stage': stage,
@@ -1244,8 +1312,8 @@ def main():
         
         # 🔥 Early stopping check (AFTER saving best/last model)
         if early_stopping is not None:
-            if early_stopping(val_metrics['loss']):
-                print(f"\n🛑 Early stopping at epoch {epoch}!")
+            if early_stopping(monitor_val):
+                print(f"\n🛑 Early stopping at epoch {epoch}! ({metric_key}={monitor_val:.4f})")
                 break
     
     print("\n" + "="*80)
