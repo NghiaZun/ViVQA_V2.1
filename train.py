@@ -503,7 +503,7 @@ def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, com
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_length=20,
+                max_length=5,
                 num_beams=3  # Use beam search!
             )
             

@@ -184,36 +184,6 @@ class FlamingoGatedCrossAttention(nn.Module):
 
 
 # ============================================================================
-# GATED TEXT INJECTION (kept for compatibility)
-# ============================================================================
-
-class GatedTextInjection(nn.Module):
-    """Lightweight gated text injection"""
-    
-    def __init__(self, hidden_dim: int = 1024, num_text_tokens: int = 2, init_gate: float = -4.0):
-        super().__init__()
-        self.num_text_tokens = num_text_tokens
-        self.hidden_dim = hidden_dim
-        
-        self.text_proj = nn.Linear(hidden_dim, hidden_dim)
-        self.gate = nn.Parameter(torch.tensor(init_gate))
-        
-    def forward(self, reasoning_tokens, text_features, text_mask):
-        batch_size = reasoning_tokens.size(0)
-        
-        pooled_text = (text_features * text_mask.unsqueeze(-1)).sum(dim=1) / text_mask.sum(dim=1, keepdim=True)
-        pooled_text = self.text_proj(pooled_text)
-        
-        text_tokens = pooled_text.unsqueeze(1).expand(-1, self.num_text_tokens, -1)
-        
-        gate_value = torch.sigmoid(self.gate)
-        
-        combined = torch.cat([text_tokens, reasoning_tokens], dim=1)
-        
-        return combined
-
-
-# ============================================================================
 # TYPE PREDICTION HEAD (Auxiliary Task for Multi-task Learning)
 # ============================================================================
 
@@ -287,13 +257,12 @@ class VisionGating(nn.Module):
         # Combines question + type to form attention query
         self.query_proj = nn.Linear(hidden_dim * 2, hidden_dim)  # concat(text_cls, type_emb)
         
-        # Gating network: learns α ∈ [0, 1] per position
+        # Gating network: outputs raw logit (sigmoid applied later with vision_bias)
         self.gate_net = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(hidden_dim // 2, 1),
-            nn.Sigmoid()  # α ∈ [0, 1]
+            nn.Linear(hidden_dim // 2, 1)
         )
         
         # Learnable bias to prefer vision
@@ -1223,7 +1192,7 @@ class DeterministicVQA(nn.Module):
         pixel_values: torch.Tensor,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        max_length: int = 20,
+        max_length: int = 5,
         num_beams: int = 1,
         temperature: float = 1.0,
         do_sample: bool = False,
