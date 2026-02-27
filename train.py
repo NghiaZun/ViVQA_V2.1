@@ -649,7 +649,9 @@ def main():
     parser.add_argument('--answer_weights', type=str, default=None,
                        help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
     parser.add_argument('--use_type_loss', action='store_true',
-                       help='Enable type-conditional loss (1.5x counting, 1.4x location, 1.3x color)')
+                       help='Enable type prediction head auxiliary loss (TypePredictionHead, safe)')
+    parser.add_argument('--use_logits_bias', action='store_true',
+                       help='Enable type-aware logits biasing (TypeAwareLogitsBias, risky - use separately)')
     
     # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
     parser.add_argument('--use_distillation', action='store_true',
@@ -922,6 +924,8 @@ def main():
         text_lora_r=args.text_lora_r,  # 🔥 NEW
         text_lora_alpha=args.text_lora_alpha,  # 🔥 NEW
         text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
+        use_type_task=args.use_type_loss,       # 🔥 type head auxiliary loss only
+        use_logits_bias=args.use_logits_bias,   # 🔥 type-aware logits bias (risky, separate flag)
         use_vision_gate=args.use_vision_gate,  # 🔥 NEW: Vision gating
         vision_gate_init=args.vision_gate_init,  # 🔥 NEW
         use_type_adapter=args.use_type_adapter,  # 🔥 NEW: Type-conditioned adapter

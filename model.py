@@ -433,6 +433,8 @@ class DeterministicVQA(nn.Module):
         text_lora_r: int = 16,  # 🔥 Text LoRA rank (higher than vision)
         text_lora_alpha: int = 32,  # 🔥 Text LoRA alpha
         text_lora_dropout: float = 0.1,  # 🔥 Text LoRA dropout
+        use_type_task: bool = False,  # 🔥 Enable type prediction head (auxiliary loss only)
+        use_logits_bias: bool = False,  # 🔥 Enable TypeAwareLogitsBias (risky - use separately)
         use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
         vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
         use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
@@ -456,6 +458,9 @@ class DeterministicVQA(nn.Module):
         # Store distillation config
         self.use_distillation = use_distillation
         self.distill_alpha = distill_alpha
+        
+        self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
+        self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
         
         self.use_vision_lora = use_vision_lora
         self.vision_lora_r = vision_lora_r
@@ -597,21 +602,29 @@ class DeterministicVQA(nn.Module):
             print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}")
         
         # 🔥 NEW: Type prediction head (auxiliary task)
-        self.type_head = TypePredictionHead(
-            hidden_dim=bart_hidden_dim,
-            num_types=4,
-            dropout=dropout
-        )
-        print(f"  🔥 Type Prediction Head: 4 types (OBJECT/COUNT/COLOR/LOCATION)")
-        
-        # 🔥 NEW: Type-aware logits biasing
-        vocab_size = self.lm_head.out_features
-        self.logits_bias = TypeAwareLogitsBias(
-            vocab_size=vocab_size,
-            num_types=4,
-            init_scale=0.1  # Small initialization to not dominate base logits
-        )
-        print(f"  🔥 Type-Aware Logits Bias: vocab_size={vocab_size}, 4 types")
+        if self.use_type_task:
+            self.type_head = TypePredictionHead(
+                hidden_dim=bart_hidden_dim,
+                num_types=4,
+                dropout=dropout
+            )
+            print(f"  🔥 Type Prediction Head: 4 types (OBJECT/COUNT/COLOR/LOCATION)")
+        else:
+            self.type_head = None
+            print(f"  ℹ️  Type Prediction Head: DISABLED")
+
+        # 🔥 NEW: Type-aware logits biasing (separate flag - risky!)
+        if self.use_logits_bias:
+            vocab_size = self.lm_head.out_features
+            self.logits_bias = TypeAwareLogitsBias(
+                vocab_size=vocab_size,
+                num_types=4,
+                init_scale=0.1  # Small initialization to not dominate base logits
+            )
+            print(f"  🔥 Type-Aware Logits Bias: vocab_size={vocab_size}, 4 types")
+        else:
+            self.logits_bias = None
+            print(f"  ℹ️  Type-Aware Logits Bias: DISABLED")
         
         # Gradient checkpointing for text encoder (vision already enabled earlier)
         if self.gradient_checkpointing:
@@ -840,7 +853,7 @@ class DeterministicVQA(nn.Module):
                 param.requires_grad = False
             print(f"[Freeze] Vision encoder: FULLY FROZEN")
         
-        # 🔥 Text Encoder: Freeze base, unfreeze LoRA OR last N layers
+        # 🔥 Text Encoder: Freeze base, then restore LoRA OR last N layers
         for param in self.encoder.parameters():
             param.requires_grad = False
         
@@ -849,7 +862,10 @@ class DeterministicVQA(nn.Module):
             try:
                 from peft import PeftModel
                 if isinstance(self.encoder, PeftModel):
-                    # PEFT automatically sets requires_grad for LoRA params
+                    # Freeze overwrite above, need to re-enable LoRA params explicitly
+                    for name, param in self.encoder.named_parameters():
+                        if 'lora_' in name:
+                            param.requires_grad = True
                     trainable = sum(p.numel() for p in self.encoder.parameters() if p.requires_grad)
                     print(f"[Freeze] Text encoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
                     print(f"         ✅ Adapting ALL 12 layers with low-rank matrices")
@@ -1033,15 +1049,15 @@ class DeterministicVQA(nn.Module):
         )
         text_features = text_encoder_outputs.last_hidden_state
         
-        # 🔥 NEW: Type prediction (auxiliary task)
+        # 🔥 Type prediction (auxiliary task)
         # Extract CLS token (first token in BARTpho)
         text_cls = text_features[:, 0, :]  # [B, D]
-        type_logits = self.type_head(text_cls)  # [B, 4]
-        
-        # Compute type loss if labels provided
+        type_logits = None
         type_loss = None
-        if question_types is not None:
-            type_loss = F.cross_entropy(type_logits, question_types)
+        if self.use_type_task:
+            type_logits = self.type_head(text_cls)  # [B, 4]
+            if question_types is not None:
+                type_loss = F.cross_entropy(type_logits, question_types)
         
         # 3. Vision-text fusion (Flamingo style with configurable direction)
         fused_vision = vision_features
@@ -1072,7 +1088,12 @@ class DeterministicVQA(nn.Module):
         gate_stats = None
         if self.use_vision_gate:
             # Use predicted types during inference, ground truth during training
-            type_ids_for_gating = question_types if question_types is not None else torch.argmax(type_logits, dim=-1)
+            if question_types is not None:
+                type_ids_for_gating = question_types
+            elif type_logits is not None:
+                type_ids_for_gating = torch.argmax(type_logits, dim=-1)
+            else:
+                type_ids_for_gating = None
             gated_vision, gate_values = self.vision_gating(
                 vision_for_decoder,  # Gate vision only
                 text_for_concat,     # Use text as context
@@ -1122,13 +1143,20 @@ class DeterministicVQA(nn.Module):
         # 6. Generate answer logits
         base_answer_logits = self.lm_head(decoder_outputs.last_hidden_state)
         
-        # 🔥 NEW: Apply type-aware logits biasing (soft vocab conditioning)
-        if question_types is not None:
-            answer_logits = self.logits_bias(base_answer_logits, question_types)
+        # 🔥 Apply type-aware logits biasing (soft vocab conditioning)
+        # Needs type_ids: use ground-truth (training) or type_head prediction (inference)
+        if self.use_logits_bias and self.logits_bias is not None:
+            if question_types is not None:
+                answer_logits = self.logits_bias(base_answer_logits, question_types)
+            elif type_logits is not None:
+                # Inference: use predicted types from type_head
+                predicted_types = torch.argmax(type_logits, dim=-1)
+                answer_logits = self.logits_bias(base_answer_logits, predicted_types)
+            else:
+                # No type info available (type_head disabled) → skip bias
+                answer_logits = base_answer_logits
         else:
-            # Inference: use predicted types
-            predicted_types = torch.argmax(type_logits, dim=-1)
-            answer_logits = self.logits_bias(base_answer_logits, predicted_types)
+            answer_logits = base_answer_logits
         
         # 7. 🔥 MULTI-TASK LOSS: Type + Answer + Distillation
         answer_loss = None
@@ -1238,8 +1266,10 @@ class DeterministicVQA(nn.Module):
 
         # Predict type for type-conditioned generation
         text_cls = text_features[:, 0, :]
-        type_logits = self.type_head(text_cls)
-        predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
+        predicted_types = None
+        if self.use_type_task and self.type_head is not None:
+            type_logits = self.type_head(text_cls)
+            predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
 
         # ── 3. Fusion ─────────────────────────────────────────────────────
         fused_vision = vision_features
@@ -1276,7 +1306,7 @@ class DeterministicVQA(nn.Module):
             expanded_mask = encoder_attention_mask.unsqueeze(1) \
                 .expand(-1, num_beams, -1) \
                 .reshape(batch_size * num_beams, encoder_attention_mask.size(1))
-            expanded_types = predicted_types.repeat_interleave(num_beams)  # [B*beams]
+            expanded_types = predicted_types.repeat_interleave(num_beams) if predicted_types is not None else None  # [B*beams]
 
             bos_ids = torch.full(
                 (batch_size, 1),
@@ -1308,7 +1338,10 @@ class DeterministicVQA(nn.Module):
 
                 # Logits của token cuối
                 base_logits = self.lm_head(dec_out.last_hidden_state[:, -1:, :])  # [B*beams, 1, V]
-                logits      = self.logits_bias(base_logits, expanded_types)        # [B*beams, 1, V]
+                if self.use_logits_bias and self.logits_bias is not None and expanded_types is not None:
+                    logits = self.logits_bias(base_logits, expanded_types)         # [B*beams, 1, V]
+                else:
+                    logits = base_logits
                 log_probs   = torch.log_softmax(logits[:, 0, :], dim=-1)           # [B*beams, V]
                 log_probs   = log_probs.reshape(batch_size, num_beams, -1)         # [B, beams, V]
 
@@ -1390,7 +1423,10 @@ class DeterministicVQA(nn.Module):
                 past_key_values = decoder_outputs.past_key_values
 
                 base_logits = self.lm_head(decoder_outputs.last_hidden_state[:, -1:, :])
-                logits      = self.logits_bias(base_logits, predicted_types)
+                if self.use_logits_bias and self.logits_bias is not None and predicted_types is not None:
+                    logits = self.logits_bias(base_logits, predicted_types)
+                else:
+                    logits = base_logits
                 next_tokens = torch.argmax(logits[:, 0, :], dim=-1, keepdim=True)  # [B, 1]
 
                 # Sample đã EOS: tiếp tục emit EOS để decode bỏ qua khi skip_special_tokens
