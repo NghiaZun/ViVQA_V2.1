@@ -666,6 +666,8 @@ def main():
                        help='LR scheduler type')
     parser.add_argument('--scheduler_patience', type=int, default=3, help='Patience for ReduceLROnPlateau')
     parser.add_argument('--scheduler_factor', type=float, default=0.5, help='Factor for ReduceLROnPlateau')
+    parser.add_argument('--warmup_epochs', type=int, default=0,
+                       help='Linear warmup epochs before main scheduler (default: 0, recommend 3 for bidirectional)')
     parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
     parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
     parser.add_argument('--early_stopping_metric', type=str, default='em',
@@ -1001,7 +1003,8 @@ def main():
         use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
-        distill_alpha=args.distill_alpha  # 🔥🔥🔥
+        distill_alpha=args.distill_alpha,  # 🔥🔥🔥
+        label_smoothing=args.label_smoothing  # ✅ wire từ --label_smoothing arg
     ).to(device)
     
     model.freeze_pretrained(
@@ -1119,9 +1122,24 @@ def main():
         )
         print(f"[Scheduler] ReduceLROnPlateau (patience={args.scheduler_patience}, factor={args.scheduler_factor})")
     elif args.scheduler == 'cosine':
-        from torch.optim.lr_scheduler import CosineAnnealingLR
-        scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
-        print(f"[Scheduler] CosineAnnealingLR (T_max={args.epochs})")
+        from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
+        if args.warmup_epochs > 0:
+            warmup_sched = LinearLR(
+                optimizer, start_factor=0.1, end_factor=1.0,
+                total_iters=args.warmup_epochs
+            )
+            cosine_sched = CosineAnnealingLR(
+                optimizer, T_max=max(1, args.epochs - args.warmup_epochs), eta_min=1e-6
+            )
+            scheduler = SequentialLR(
+                optimizer,
+                schedulers=[warmup_sched, cosine_sched],
+                milestones=[args.warmup_epochs]
+            )
+            print(f"[Scheduler] Warmup({args.warmup_epochs}ep) + CosineAnnealingLR (T_max={args.epochs - args.warmup_epochs})")
+        else:
+            scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
+            print(f"[Scheduler] CosineAnnealingLR (T_max={args.epochs})")
     else:
         print(f"[Scheduler] None (fixed LR)")
     
@@ -1131,7 +1149,7 @@ def main():
         es_mode = 'min' if args.early_stopping_metric == 'loss' else 'max'
         early_stopping = EarlyStopping(
             patience=args.early_stopping_patience,
-            min_delta=0.001,
+            min_delta=0.01,   # 0.01% EM — tránh floating point false-negative
             verbose=True,
             mode=es_mode
         )

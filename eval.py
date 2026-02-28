@@ -232,7 +232,9 @@ def main():
     has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in state_dict_keys if 'vision' in k)
     has_text_lora = any('encoder.base_model.model' in k for k in state_dict_keys)
     has_vision_gate = any('vision_gating' in k for k in state_dict_keys)
-    has_type_adapter = any('vision_adapter' in k for k in state_dict_keys)  # 🔥 NEW
+    has_type_adapter = any('vision_adapter' in k for k in state_dict_keys)  # TypeConditionedVisionAdapter
+    has_type_task = any(k.startswith('type_head') for k in state_dict_keys)   # 🔥 Type prediction head
+    has_logits_bias = any(k.startswith('logits_bias') for k in state_dict_keys)  # 🔥 Type-aware logits bias
     
     # Detect fusion layers
     fusion_layer_indices = set()
@@ -275,7 +277,9 @@ def main():
     if has_text_lora:
         print(f"    └─ Rank: {text_lora_r}")
     print(f"  Vision Gate: {has_vision_gate}")
-    print(f"  Type Adapter: {has_type_adapter}")  # 🔥 NEW
+    print(f"  Type Adapter: {has_type_adapter}")
+    print(f"  Type Task Head: {has_type_task}")       # 🔥
+    print(f"  Logits Bias: {has_logits_bias}")        # 🔥
     print(f"  Fusion Layers: {num_fusion_layers}")
     print(f"  Fusion Type: {fusion_type}")
     
@@ -298,6 +302,8 @@ def main():
         text_lora_alpha=32,
         text_lora_dropout=0.1,
         use_vision_gate=has_vision_gate,
+        use_type_task=has_type_task,          # 🔥 was missing
+        use_logits_bias=has_logits_bias,      # 🔥 was missing
         use_type_adapter=has_type_adapter,  # 🔥 NEW
         type_adapter_rank=64,  # 🔥 NEW
         type_adapter_bias=2.0  # 🔥 NEW

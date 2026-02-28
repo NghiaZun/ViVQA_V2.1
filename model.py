@@ -444,7 +444,8 @@ class DeterministicVQA(nn.Module):
         use_distillation: bool = False,  # Enable online knowledge distillation
         vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
         text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
-        distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
+        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
+        label_smoothing: float = 0.1  # Label smoothing for answer CE loss
     ):
         super().__init__()
         
@@ -458,6 +459,7 @@ class DeterministicVQA(nn.Module):
         # Store distillation config
         self.use_distillation = use_distillation
         self.distill_alpha = distill_alpha
+        self.label_smoothing = label_smoothing
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
         self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
@@ -1171,7 +1173,7 @@ class DeterministicVQA(nn.Module):
                 labels.view(-1),
                 ignore_index=-100,
                 weight=answer_weights if answer_weights is not None else None,
-                label_smoothing=0.1
+                label_smoothing=self.label_smoothing
             )
             
             # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
