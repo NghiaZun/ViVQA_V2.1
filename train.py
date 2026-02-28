@@ -1286,9 +1286,13 @@ def main():
             else:
                 scheduler.step()
             
-            # Print current LR
-            current_lr = optimizer.param_groups[0]['lr']
-            print(f"  📊 Learning Rate: {current_lr:.2e}")
+            # Print current LR cho tất cả groups
+            _lr_names = ['LoRA', 'New-init', 'Decoder', 'Encoder']
+            _lr_strs = ' | '.join(
+                f"{n}={pg['lr']:.2e}"
+                for n, pg in zip(_lr_names, optimizer.param_groups)
+            )
+            print(f"  📊 LR: {_lr_strs}")
         
         # Sample predictions every N epochs (chỉ để xem ví dụ, không dùng cho best/ES)
         if epoch % args.sample_every == 0:
