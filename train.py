@@ -362,6 +362,14 @@ def run_one_epoch_deterministic(
             # 🚀 SPEED OPTIMIZATION: Convert to channels_last for faster conv ops
             pixel_values = pixel_values.to(memory_format=torch.channels_last)
             
+            # 🔥 VISION DROPOUT (modality dropout — chỉ lúc training)
+            # Mục đích: Buộc Flamingo gate học "khi nào vision quan trọng".
+            # Khi model thấy blank image, gradient push gate mở ra ở những
+            # sample có real vision và đóng lại ở blank → gate trở nên có nghĩa.
+            # 15% rate: đủ để signal mà không mất quá nhiều vision training signal.
+            if is_training and random.random() < 0.15:
+                pixel_values = torch.zeros_like(pixel_values)
+            
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
@@ -653,8 +661,8 @@ def main():
     # Training
     parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
     parser.add_argument('--lr', type=float, default=2e-5,
-                       help='Base learning rate (decoder group). Other groups scale relative: '
-                            'LoRA/new-init=5x, decoder=1x, encoder=0.5x (default: 2e-5)')
+                       help='Learning rate for all parameters (flat, default: 2e-5). '
+                            'Differential LR was removed — empirically caused regressions.')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
     parser.add_argument('--max_norm', type=float, default=1.0, help='Gradient clipping max norm')
     parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision')
@@ -669,7 +677,7 @@ def main():
     parser.add_argument('--warmup_epochs', type=int, default=0,
                        help='Linear warmup epochs before main scheduler (default: 0, recommend 3 for bidirectional)')
     parser.add_argument('--early_stopping', action='store_true', help='Enable early stopping')
-    parser.add_argument('--early_stopping_patience', type=int, default=5, help='Early stopping patience')
+    parser.add_argument('--early_stopping_patience', type=int, default=8, help='Early stopping patience')
     parser.add_argument('--early_stopping_metric', type=str, default='em',
                        choices=['loss', 'em', 'f1', 'rouge1', 'rougeL'],
                        help='Metric to monitor for early stopping and best model (default: em)')
@@ -1003,8 +1011,7 @@ def main():
         use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
-        distill_alpha=args.distill_alpha,  # 🔥🔥🔥
-        label_smoothing=args.label_smoothing  # ✅ wire từ --label_smoothing arg
+        distill_alpha=args.distill_alpha  # 🔥🔥🔥
     ).to(device)
     
     model.freeze_pretrained(
@@ -1028,76 +1035,34 @@ def main():
     # OPTIMIZER
     # ========================================================================
     
-    # ── Differential Learning Rate Groups ───────────────────────────────────
-    # Phân loại params 1 lần duy nhất để tránh đếm 2 lần (bug quan trọng!)
-    # Thứ tự ưu tiên: LoRA > Newly-init fusion > Decoder/lm_head > Encoder
-    _lora_names      = set()
-    _new_init_names  = set()
-    _decoder_names   = set()
-    _encoder_names   = set()
+    # ── Optimizer: Flat LR (proved best empirically) ────────────────────────
+    # LESSON LEARNED: Differential LR bị loại bỏ vì thực nghiệm cho thấy nó
+    # gây hại thay vì giúp ích:
+    #
+    #   text2vision  flat LR cũ → 66.7%  |  differential LR mới → 60.58%  (-6.1%)
+    #   bidirectional flat LR cũ → 66.9% |  differential LR mới → 66.14%  (-0.76%)
+    #   bidirectional ratio 3x           → 60.38%  (-5.76% thêm)
+    #
+    # Nguyên nhân:
+    #   1. LoRA LR 5x (1e-4) QUÁ CAO cho decoder LoRA → kéo BARTpho khỏi
+    #      pretrained distribution, giảm generation quality
+    #   2. Encoder LR 0.5x (1e-5) QUÁ THẤP → text encoder gần như không học,
+    #      mất đi khả năng hiểu tiếng Việt
+    #   3. Gate init=0 + new-init 5x tạo mâu thuẫn: gate không đóng góp gì
+    #      trong khi decoder LoRA lại học nhanh hơn → text shortcut thắng
+    #
+    # Kết luận: Flat LR đơn giản + gate init fix (0.5) là đủ.
+    # ------------------------------------------------------------------
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    print(f"[Optimizer] Flat LR = {learning_rate:.2e} | "
+          f"trainable params: {sum(p.numel() for p in trainable_params)/1e6:.2f}M")
 
-    _NEW_INIT_KEYS  = ('vision_proj', 'flamingo_fusion', 'vision_gating',
-                       'vision_pos_embed', 'type_head', 'logits_bias',
-                       'type_adapter')
-    _DECODER_KEYS   = ('decoder', 'lm_head')
-
-    for n, p in model.named_parameters():
-        if not p.requires_grad:
-            continue
-        if 'lora_' in n:
-            _lora_names.add(n)
-        elif any(k in n for k in _NEW_INIT_KEYS):
-            _new_init_names.add(n)
-        elif any(k in n for k in _DECODER_KEYS):
-            _decoder_names.add(n)
-        else:
-            _encoder_names.add(n)  # text encoder unfrozen layers
-
-    _param_map = dict(model.named_parameters())
-
-    def _get(names):
-        return [_param_map[n] for n in names if _param_map[n].requires_grad]
-
-    _lora_params     = _get(_lora_names)
-    _new_init_params = _get(_new_init_names)
-    _decoder_params  = _get(_decoder_names)
-    _encoder_params  = _get(_encoder_names)
-
-    # ── New-init LR ratio: điều chỉnh theo fusion_type ──────────────────────
-    # bidirectional = 2x cross-attention layers → nhiều params hơn → LR thấp hơn để ổn định
-    # text2vision / vision2text = 1x → có thể dùng LR cao hơn
-    _new_init_lr_ratio = 3.0 if args.fusion_type == 'bidirectional' else 5.0
-
-    # Log group sizes
-    print(f"[Optimizer] Param groups (fusion={args.fusion_type}):")
-    print(f"  LoRA      : {sum(p.numel() for p in _lora_params)/1e6:.2f}M  @ lr={learning_rate * 5:.1e}")
-    print(f"  New-init  : {sum(p.numel() for p in _new_init_params)/1e6:.2f}M  @ lr={learning_rate * _new_init_lr_ratio:.1e}")
-    print(f"  Decoder   : {sum(p.numel() for p in _decoder_params)/1e6:.2f}M  @ lr={learning_rate:.1e}")
-    print(f"  Encoder   : {sum(p.numel() for p in _encoder_params)/1e6:.2f}M  @ lr={learning_rate * 0.5:.1e}")
-
-    optimizer = torch.optim.AdamW([
-        # 1. LoRA — khởi tạo gần zero, cần LR cao để học nhanh (paper LoRA: 1e-4)
-        {'params': _lora_params,
-         'lr': learning_rate * 5,    # 2e-5 * 5 = 1e-4
-         'weight_decay': 0.0},       # LoRA không cần weight decay (ít params, không overfit)
-
-        # 2. Newly initialized (fusion, projection) — ratio tự động theo fusion_type
-        #    bidirectional: 3x (6e-5) — 2x params, tránh oscillation
-        #    text2vision/vision2text: 5x (1e-4) — ít params hơn, học nhanh hơn
-        {'params': _new_init_params,
-         'lr': learning_rate * _new_init_lr_ratio,
-         'weight_decay': weight_decay},
-
-        # 3. Decoder + lm_head — pretrained BARTpho, fine-tune bình thường
-        {'params': _decoder_params,
-         'lr': learning_rate,         # 2e-5
-         'weight_decay': weight_decay},
-
-        # 4. Text encoder unfrozen layers — pretrained, cần LR nhỏ nhất
-        {'params': _encoder_params,
-         'lr': learning_rate * 0.5,   # 2e-5 * 0.5 = 1e-5
-         'weight_decay': weight_decay},
-    ], eps=1e-10)
+    optimizer = torch.optim.AdamW(
+        trainable_params,
+        lr=learning_rate,
+        weight_decay=weight_decay,
+        eps=1e-10
+    )
     
     # Mixed precision scaler (use new API to avoid deprecation warning)
     if use_amp:
@@ -1180,14 +1145,11 @@ def main():
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
         if scheduler and 'scheduler_state_dict' in checkpoint and not args.reset_lr:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        # ✅ reset_lr: restore đúng LR ratio cho từng group (không flatten về 1 LR)
+        # ✅ reset_lr: flat LR (single group), chỉ cần set 1 giá trị
         if args.reset_lr:
-            _group_lr_ratios = [5.0, _new_init_lr_ratio, 1.0, 0.5]  # LoRA, New-init, Decoder, Encoder
-            for pg, ratio in zip(optimizer.param_groups, _group_lr_ratios):
-                pg['lr'] = learning_rate * ratio
-            print(f"[Resume] LR reset — base={learning_rate:.2e} | groups: "
-                  f"LoRA={learning_rate*5:.1e}, New-init={learning_rate*_new_init_lr_ratio:.1e}, "
-                  f"Decoder={learning_rate:.1e}, Encoder={learning_rate*0.5:.1e}")
+            for pg in optimizer.param_groups:
+                pg['lr'] = learning_rate
+            print(f"[Resume] LR reset → {learning_rate:.2e} (flat, all params)")
         
         # ✅ Restore early stopping state — phục hồi cả counter LẪN best_score
         if early_stopping is not None and 'early_stopping_state' in checkpoint:
@@ -1310,13 +1272,8 @@ def main():
             else:
                 scheduler.step()
             
-            # Print current LR cho tất cả groups
-            _lr_names = ['LoRA', 'New-init', 'Decoder', 'Encoder']
-            _lr_strs = ' | '.join(
-                f"{n}={pg['lr']:.2e}"
-                for n, pg in zip(_lr_names, optimizer.param_groups)
-            )
-            print(f"  📊 LR: {_lr_strs}")
+            # Print current LR
+            print(f"  📊 Learning Rate: {optimizer.param_groups[0]['lr']:.2e}")
         
         # Sample predictions every N epochs (chỉ để xem ví dụ, không dùng cho best/ES)
         if epoch % args.sample_every == 0:

@@ -79,15 +79,18 @@ class FlamingoGatedCrossAttention(nn.Module):
         self.norm_cross = nn.LayerNorm(hidden_dim)
         self.norm_ffn = nn.LayerNorm(hidden_dim)
         
-        self.gate_cross = nn.Parameter(torch.zeros(1))
-        self.gate_ffn = nn.Parameter(torch.zeros(1))
+        # Init gates to 0.5 instead of 0.0 so tanh(0.5)≈0.46 ≠ 0 at epoch 0.
+        # With zero init, the entire cross-attention contribution is dead at start,
+        # forcing the model to find a text-only solution before fusion activates.
+        self.gate_cross = nn.Parameter(torch.full((1,), 0.5))
+        self.gate_ffn = nn.Parameter(torch.full((1,), 0.5))
         
         # Bidirectional: add reverse gates
         if fusion_type == 'bidirectional':
             self.norm_cross_reverse = nn.LayerNorm(hidden_dim)
             self.norm_ffn_reverse = nn.LayerNorm(hidden_dim)
-            self.gate_cross_reverse = nn.Parameter(torch.zeros(1))
-            self.gate_ffn_reverse = nn.Parameter(torch.zeros(1))
+            self.gate_cross_reverse = nn.Parameter(torch.full((1,), 0.5))
+            self.gate_ffn_reverse = nn.Parameter(torch.full((1,), 0.5))
             
             # Separate FFN for text in bidirectional mode
             self.ffn_reverse = nn.Sequential(
@@ -444,8 +447,7 @@ class DeterministicVQA(nn.Module):
         use_distillation: bool = False,  # Enable online knowledge distillation
         vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
         text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
-        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
-        label_smoothing: float = 0.1  # Label smoothing for answer CE loss
+        distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
     ):
         super().__init__()
         
@@ -459,7 +461,6 @@ class DeterministicVQA(nn.Module):
         # Store distillation config
         self.use_distillation = use_distillation
         self.distill_alpha = distill_alpha
-        self.label_smoothing = label_smoothing
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
         self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
@@ -1173,7 +1174,7 @@ class DeterministicVQA(nn.Module):
                 labels.view(-1),
                 ignore_index=-100,
                 weight=answer_weights if answer_weights is not None else None,
-                label_smoothing=self.label_smoothing
+                label_smoothing=0.1
             )
             
             # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
