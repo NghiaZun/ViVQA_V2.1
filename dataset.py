@@ -9,37 +9,66 @@ import re
 
 def detect_question_type(question: str) -> int:
     """
-    Detect Vietnamese VQA question type from question text
-    
+    Detect Vietnamese VQA question type from question text.
+
     Types:
-        0 = OBJECT (Đây là gì? Cái gì?)
-        1 = COUNT (Có bao nhiêu? Mấy cái?)
-        2 = COLOR (Màu gì? Màu sắc?)
-        3 = LOCATION (Ở đâu? Phía nào? Trên/dưới/trái/phải?)
-    
-    Args:
-        question: Vietnamese question text
-    
-    Returns:
-        type_id: 0-3 integer
+        0 = OBJECT   (Đây là gì? Cái gì? Ai? Con gì?)
+        1 = COUNT    (Có bao nhiêu? Mấy cái?)
+        2 = COLOR    (Màu gì? Màu sắc?)
+        3 = LOCATION (Ở đâu? Phía nào? Đặt/để/nằm ở chỗ nào?)
+
+    Design notes (v2 — fixed OBJECT→LOCATION confusion):
+    -------------------------------------------------------
+    Old rule triggered LOCATION on ANY sentence containing
+    trên/trong/dưới/bên/giữa/ngoài — these are common Vietnamese
+    prepositions that appear in OBJECT questions too, e.g.:
+        "cái gì đang đỗ TRÊN ổ đĩa"  → was wrongly LOCATION
+        "những gì đang đi TRÊN đường ray" → was wrongly LOCATION
+
+    Fix: LOCATION requires an EXPLICIT location-question marker:
+      • "ở đâu" / "ở nào" / "từ đâu"  — direct where-question
+      • "đặt ở" / "để ở" / "nằm ở" / "đứng ở" / "ngồi ở" — verb+ở
+      • "phía nào" / "phía trước/sau"  — directional question
+      • "vị trí"                        — position question
+      • bare "đâu" / "nơi nào" / "chỗ nào" — interrogative place
+
+    Bare prepositions (trên/trong/dưới/bên/giữa/ngoài/trái/phải)
+    are NOT counted unless attached to ở/đặt/để/nằm patterns above.
     """
     q_lower = question.lower().strip()
-    
-    # Pattern matching (order matters - more specific first!)
-    
-    # COLOR: Màu gì? Màu sắc?
-    if re.search(r'màu\s*(gì|sắc|nào)?', q_lower):
-        return 2
-    
-    # COUNT: Có bao nhiêu? Mấy cái? Số lượng?
-    if re.search(r'(bao nhiêu|mấy|số lượng|có\s*\d+)', q_lower):
+
+    # ── 1. COUNT: "bao nhiêu", "mấy", "số lượng" ────────────────────────────
+    # Check first — "bao nhiêu màu" should be COUNT not COLOR
+    if re.search(r'(bao nhiêu|mấy\b|số lượng)', q_lower):
         return 1
-    
-    # LOCATION: Ở đâu? Phía nào? Vị trí? Trên/dưới/trái/phải/trong/ngoài
-    if re.search(r'(ở\s*(đâu|nào)|phía|vị\s*trí|bên|trên|dưới|trái|phải|trong|ngoài|giữa)', q_lower):
+
+    # ── 2. LOCATION: explicit where-question markers only ────────────────────
+    # Must come BEFORE color check: "kéo màu xanh để ở đâu" → LOCATION not COLOR
+    #
+    # Strong markers: interrogative words that directly ask "where"
+    _loc_strong = r'(ở\s*(đâu|nào|chỗ\s*nào)|từ\s*đâu|đâu\b|nơi\s*nào|chỗ\s*nào|vị\s*trí)'
+    # Verb+ở patterns: "đặt ở", "để ở", "nằm ở", "đứng ở", "treo ở", "gắn ở"
+    _loc_verb   = r'(đặt|để|nằm|đứng|ngồi|treo|gắn|đỗ)\s*ở'
+    # Directional question: "phía nào", "hướng nào"
+    _loc_dir    = r'(phía\s*(nào|trước|sau|đông|tây|nam|bắc)|hướng\s*nào)'
+
+    if re.search(f'({_loc_strong}|{_loc_verb}|{_loc_dir})', q_lower):
         return 3
-    
-    # Default: OBJECT identification (Đây là gì? Cái gì? Ai?)
+
+    # ── 3. COLOR: question is specifically ASKING about color ────────────────
+    # Require interrogative color form, NOT bare "màu" as noun/adjective modifier
+    # e.g. "màu gì", "màu sắc", "màu nào", "có màu gì" → COLOR
+    # but "cái gì màu nâu" / "túi màu đỏ ... gì" → OBJECT (màu is just a descriptor)
+    #
+    # Rule: COLOR only when "màu" is followed by an interrogative (gì/sắc/nào/gì không)
+    # OR the question starts with "màu" as the topic
+    if re.search(r'màu\s*(gì|sắc|nào|như\s*thế\s*nào)', q_lower):
+        return 2
+    # Also catch "có màu gì", "là màu gì" patterns
+    if re.search(r'(có|là|được)\s*màu\s*(gì|nào|sắc)', q_lower):
+        return 2
+
+    # ── 4. Default: OBJECT ───────────────────────────────────────────────────
     return 0
 
 

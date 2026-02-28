@@ -652,7 +652,9 @@ def main():
     
     # Training
     parser.add_argument('--epochs', type=int, default=30, help='Number of training epochs')
-    parser.add_argument('--lr', type=float, default=5e-5, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=2e-5,
+                       help='Base learning rate (decoder group). Other groups scale relative: '
+                            'LoRA/new-init=5x, decoder=1x, encoder=0.5x (default: 2e-5)')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
     parser.add_argument('--max_norm', type=float, default=1.0, help='Gradient clipping max norm')
     parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision')
@@ -882,7 +884,7 @@ def main():
             vision_processor=vision_processor,
             tokenizer_name=bartpho_model,
             include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
-            auto_detect_type=True,  # 🔥 Auto-detect from Vietnamese question patterns
+            auto_detect_type=False,  # ✅ Dùng cột 'type' từ CSV (ground truth), không dùng regex
             use_distillation=args.use_distillation,  # 🔥🔥🔥
             teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
         )
@@ -896,7 +898,7 @@ def main():
                 vision_processor=vision_processor,
                 tokenizer_name=bartpho_model,
                 include_question_type=args.use_type_loss,
-                auto_detect_type=True,
+                auto_detect_type=False,  # ✅ Dùng cột 'type' từ CSV (ground truth)
                 use_distillation=args.use_distillation,
                 teacher_vision_processor=teacher_vision_processor
             )
@@ -1023,12 +1025,70 @@ def main():
     # OPTIMIZER
     # ========================================================================
     
-    optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=learning_rate,
-        weight_decay=weight_decay,
-        eps=1e-10  # Better than default 1e-8: keeps Adam adaptive in flat loss regions
-    )
+    # ── Differential Learning Rate Groups ───────────────────────────────────
+    # Phân loại params 1 lần duy nhất để tránh đếm 2 lần (bug quan trọng!)
+    # Thứ tự ưu tiên: LoRA > Newly-init fusion > Decoder/lm_head > Encoder
+    _lora_names      = set()
+    _new_init_names  = set()
+    _decoder_names   = set()
+    _encoder_names   = set()
+
+    _NEW_INIT_KEYS  = ('vision_proj', 'flamingo_fusion', 'vision_gating',
+                       'vision_pos_embed', 'type_head', 'logits_bias',
+                       'type_adapter')
+    _DECODER_KEYS   = ('decoder', 'lm_head')
+
+    for n, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        if 'lora_' in n:
+            _lora_names.add(n)
+        elif any(k in n for k in _NEW_INIT_KEYS):
+            _new_init_names.add(n)
+        elif any(k in n for k in _DECODER_KEYS):
+            _decoder_names.add(n)
+        else:
+            _encoder_names.add(n)  # text encoder unfrozen layers
+
+    _param_map = dict(model.named_parameters())
+
+    def _get(names):
+        return [_param_map[n] for n in names if _param_map[n].requires_grad]
+
+    _lora_params     = _get(_lora_names)
+    _new_init_params = _get(_new_init_names)
+    _decoder_params  = _get(_decoder_names)
+    _encoder_params  = _get(_encoder_names)
+
+    # Log group sizes
+    print(f"[Optimizer] Param groups:")
+    print(f"  LoRA      : {sum(p.numel() for p in _lora_params)/1e6:.2f}M  @ lr={learning_rate * 5:.1e}")
+    print(f"  New-init  : {sum(p.numel() for p in _new_init_params)/1e6:.2f}M  @ lr={learning_rate * 5:.1e}")
+    print(f"  Decoder   : {sum(p.numel() for p in _decoder_params)/1e6:.2f}M  @ lr={learning_rate:.1e}")
+    print(f"  Encoder   : {sum(p.numel() for p in _encoder_params)/1e6:.2f}M  @ lr={learning_rate * 0.5:.1e}")
+
+    optimizer = torch.optim.AdamW([
+        # 1. LoRA — khởi tạo gần zero, cần LR cao để học nhanh (paper LoRA: 1e-4)
+        {'params': _lora_params,
+         'lr': learning_rate * 5,    # 2e-5 * 5 = 1e-4
+         'weight_decay': 0.0},       # LoRA không cần weight decay (ít params, không overfit)
+
+        # 2. Newly initialized (fusion, projection) — random init nhưng input là pretrained features
+        #    Dùng 5x thay vì 10x để tránh instability đầu training
+        {'params': _new_init_params,
+         'lr': learning_rate * 5,    # 2e-5 * 5 = 1e-4
+         'weight_decay': weight_decay},
+
+        # 3. Decoder + lm_head — pretrained BARTpho, fine-tune bình thường
+        {'params': _decoder_params,
+         'lr': learning_rate,         # 2e-5
+         'weight_decay': weight_decay},
+
+        # 4. Text encoder unfrozen layers — pretrained, cần LR nhỏ nhất
+        {'params': _encoder_params,
+         'lr': learning_rate * 0.5,   # 2e-5 * 0.5 = 1e-5
+         'weight_decay': weight_decay},
+    ], eps=1e-10)
     
     # Mixed precision scaler (use new API to avoid deprecation warning)
     if use_amp:
@@ -1074,6 +1134,10 @@ def main():
     # Resume from checkpoint if specified
     start_epoch = 1
     best_val_loss = float('inf')
+    # best_monitor: giá trị tốt nhất của metric đang track (EM, F1, loss, ...)
+    # Dùng -inf cho max-metrics (em/f1/rouge), +inf cho loss
+    _es_metric = args.early_stopping_metric  # shorthand
+    best_monitor = 0.0 if _es_metric != 'loss' else float('inf')
     
     if args.resume:
         print(f"\n[Resume] Loading checkpoint: {args.resume}")
@@ -1082,23 +1146,33 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+
+        # ✅ Restore best_monitor (EM/F1/loss) từ checkpoint để tránh ghi đè best_model sai
+        best_monitor = checkpoint.get('best_monitor', best_monitor)
+        args._best_monitor = best_monitor   # sync với vòng lặp training
+        print(f"[Resume] best_monitor ({_es_metric}) restored: {best_monitor:.4f}")
+
         if scaler and 'scaler_state_dict' in checkpoint:
             scaler.load_state_dict(checkpoint['scaler_state_dict'])
         if scheduler and 'scheduler_state_dict' in checkpoint and not args.reset_lr:
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        # 🔥 reset_lr: override LR từ checkpoint về --lr mới, reset scheduler
+        # ✅ reset_lr: restore đúng LR ratio cho từng group (không flatten về 1 LR)
         if args.reset_lr:
-            for pg in optimizer.param_groups:
-                pg['lr'] = learning_rate
-            print(f"[Resume] LR reset to {learning_rate:.2e} (--reset_lr)")
+            _group_lr_ratios = [5.0, 5.0, 1.0, 0.5]  # LoRA, New-init, Decoder, Encoder
+            for pg, ratio in zip(optimizer.param_groups, _group_lr_ratios):
+                pg['lr'] = learning_rate * ratio
+            print(f"[Resume] LR reset — base={learning_rate:.2e} | groups: "
+                  f"LoRA={learning_rate*5:.1e}, New-init={learning_rate*5:.1e}, "
+                  f"Decoder={learning_rate:.1e}, Encoder={learning_rate*0.5:.1e}")
         
-        # 🔥 Restore early stopping state to avoid resetting counter/best_loss
+        # ✅ Restore early stopping state — phục hồi cả counter LẪN best_score
         if early_stopping is not None and 'early_stopping_state' in checkpoint:
             es_state = checkpoint['early_stopping_state']
             early_stopping.counter = es_state['counter']
-            early_stopping.best_loss = es_state['best_loss']
+            early_stopping.best_score = es_state.get('best_score', best_monitor)  # ← dùng best_score
+            early_stopping.best_loss = early_stopping.best_score   # mirror field cũ
             early_stopping.early_stop = es_state['early_stop']
-            print(f"[Resume] Early stopping restored: counter={early_stopping.counter}/{early_stopping.patience}, best_loss={early_stopping.best_loss:.4f}")
+            print(f"[Resume] Early stopping restored: counter={early_stopping.counter}/{early_stopping.patience}, best_score={early_stopping.best_score:.4f}")
         print(f"[Resume] Resuming from epoch {start_epoch}, best val loss: {best_val_loss:.4f}")
     
     # ========================================================================
@@ -1245,15 +1319,15 @@ def main():
                        'rouge1': 'rouge1', 'rougeL': 'rougeL'}
             monitor_val  = full_val[key_map[metric_key]]
             is_better    = lambda v, best: v > best
-            best_monitor = getattr(args, '_best_monitor', 0.0)
-
-        # Save best model checkpoint (BEFORE early stopping check)
+            best_monitor = getattr(args, '_best_monitor', 0.0)        # Save best model checkpoint (BEFORE early stopping check)
         is_best = is_better(monitor_val, best_monitor)
         if is_best:
             if metric_key == 'loss':
                 best_val_loss = monitor_val
+                best_monitor  = monitor_val
             else:
                 args._best_monitor = monitor_val   # store on args for persistence
+                best_monitor  = monitor_val
             print(f"  ✅ NEW BEST ({metric_key}={monitor_val:.4f})! Saving checkpoint...")
 
             checkpoint = {
@@ -1264,9 +1338,19 @@ def main():
                 'train_loss': train_metrics['loss'],
                 'val_loss': val_metrics['loss'],
                 'best_val_loss': best_val_loss,
+                'best_monitor': best_monitor,   # ✅ lưu để resume đúng
                 'args': vars(args)
             }
             
+            # ✅ Lưu early stopping state vào best_model.pt để resume từ best cũng đúng
+            if early_stopping is not None:
+                checkpoint['early_stopping_state'] = {
+                    'counter': early_stopping.counter,
+                    'best_score': early_stopping.best_score,
+                    'best_loss': early_stopping.best_score,
+                    'early_stop': early_stopping.early_stop,
+                }
+
             if scaler is not None:
                 checkpoint['scaler_state_dict'] = scaler.state_dict()
             
@@ -1286,15 +1370,17 @@ def main():
             'train_loss': train_metrics['loss'],
             'val_loss': val_metrics['loss'],
             'best_val_loss': best_val_loss,
+            'best_monitor': best_monitor,       # ✅ lưu để resume đúng
             'training_history': training_history,  # Include history for resume
             'args': vars(args)
         }
         
-        # 🔥 Save early stopping state for correct resume
+        # ✅ Save early stopping state — lưu best_score (không phải best_loss cũ)
         if early_stopping is not None:
             last_checkpoint['early_stopping_state'] = {
                 'counter': early_stopping.counter,
-                'best_loss': early_stopping.best_loss,
+                'best_score': early_stopping.best_score,   # ← field đúng
+                'best_loss': early_stopping.best_score,    # ← backward compat
                 'early_stop': early_stopping.early_stop,
             }
         
