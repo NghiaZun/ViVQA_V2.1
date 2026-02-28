@@ -1060,10 +1060,15 @@ def main():
     _decoder_params  = _get(_decoder_names)
     _encoder_params  = _get(_encoder_names)
 
+    # ── New-init LR ratio: điều chỉnh theo fusion_type ──────────────────────
+    # bidirectional = 2x cross-attention layers → nhiều params hơn → LR thấp hơn để ổn định
+    # text2vision / vision2text = 1x → có thể dùng LR cao hơn
+    _new_init_lr_ratio = 3.0 if args.fusion_type == 'bidirectional' else 5.0
+
     # Log group sizes
-    print(f"[Optimizer] Param groups:")
+    print(f"[Optimizer] Param groups (fusion={args.fusion_type}):")
     print(f"  LoRA      : {sum(p.numel() for p in _lora_params)/1e6:.2f}M  @ lr={learning_rate * 5:.1e}")
-    print(f"  New-init  : {sum(p.numel() for p in _new_init_params)/1e6:.2f}M  @ lr={learning_rate * 5:.1e}")
+    print(f"  New-init  : {sum(p.numel() for p in _new_init_params)/1e6:.2f}M  @ lr={learning_rate * _new_init_lr_ratio:.1e}")
     print(f"  Decoder   : {sum(p.numel() for p in _decoder_params)/1e6:.2f}M  @ lr={learning_rate:.1e}")
     print(f"  Encoder   : {sum(p.numel() for p in _encoder_params)/1e6:.2f}M  @ lr={learning_rate * 0.5:.1e}")
 
@@ -1073,10 +1078,11 @@ def main():
          'lr': learning_rate * 5,    # 2e-5 * 5 = 1e-4
          'weight_decay': 0.0},       # LoRA không cần weight decay (ít params, không overfit)
 
-        # 2. Newly initialized (fusion, projection) — random init nhưng input là pretrained features
-        #    Dùng 5x thay vì 10x để tránh instability đầu training
+        # 2. Newly initialized (fusion, projection) — ratio tự động theo fusion_type
+        #    bidirectional: 3x (6e-5) — 2x params, tránh oscillation
+        #    text2vision/vision2text: 5x (1e-4) — ít params hơn, học nhanh hơn
         {'params': _new_init_params,
-         'lr': learning_rate * 5,    # 2e-5 * 5 = 1e-4
+         'lr': learning_rate * _new_init_lr_ratio,
          'weight_decay': weight_decay},
 
         # 3. Decoder + lm_head — pretrained BARTpho, fine-tune bình thường
@@ -1158,11 +1164,11 @@ def main():
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         # ✅ reset_lr: restore đúng LR ratio cho từng group (không flatten về 1 LR)
         if args.reset_lr:
-            _group_lr_ratios = [5.0, 5.0, 1.0, 0.5]  # LoRA, New-init, Decoder, Encoder
+            _group_lr_ratios = [5.0, _new_init_lr_ratio, 1.0, 0.5]  # LoRA, New-init, Decoder, Encoder
             for pg, ratio in zip(optimizer.param_groups, _group_lr_ratios):
                 pg['lr'] = learning_rate * ratio
             print(f"[Resume] LR reset — base={learning_rate:.2e} | groups: "
-                  f"LoRA={learning_rate*5:.1e}, New-init={learning_rate*5:.1e}, "
+                  f"LoRA={learning_rate*5:.1e}, New-init={learning_rate*_new_init_lr_ratio:.1e}, "
                   f"Decoder={learning_rate:.1e}, Encoder={learning_rate*0.5:.1e}")
         
         # ✅ Restore early stopping state — phục hồi cả counter LẪN best_score
