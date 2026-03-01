@@ -333,7 +333,7 @@ def save_metrics_csv(history, output_dir):
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
-    answer_weights=None, use_type_loss=False
+    answer_weights=None, use_type_loss=False, vision_dropout_rate=0.10
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -343,6 +343,10 @@ def run_one_epoch_deterministic(
                                      for effective larger batch size
         answer_weights: Tensor of token-level weights for balanced loss
         use_type_loss: Whether to apply type-conditional loss weighting
+        vision_dropout_rate: Probability of zeroing pixel_values (modality dropout).
+            - text2vision:    0.10 recommended (only vision path affected)
+            - bidirectional:  0.05 or 0.0 (2x gradient noise from blank vision)
+            - vision2text:    0.10 OK
     
     Returns:
         dict with metrics: loss, answer_loss, type_loss
@@ -363,11 +367,11 @@ def run_one_epoch_deterministic(
             pixel_values = pixel_values.to(memory_format=torch.channels_last)
             
             # 🔥 VISION DROPOUT (modality dropout — chỉ lúc training)
-            # Mục đích: Buộc Flamingo gate học "khi nào vision quan trọng".
-            # Khi model thấy blank image, gradient push gate mở ra ở những
-            # sample có real vision và đóng lại ở blank → gate trở nên có nghĩa.
-            # 15% rate: đủ để signal mà không mất quá nhiều vision training signal.
-            if is_training and random.random() < 0.15:
+            # Rate được truyền vào từ caller theo fusion_type:
+            #   text2vision:   0.10 — chỉ vision path bị ảnh hưởng, safe
+            #   bidirectional: 0.05 — 2x gradient paths, giảm noise
+            #   vision2text:   0.10 — text path là primary, vision dropout OK
+            if is_training and vision_dropout_rate > 0 and random.random() < vision_dropout_rate:
                 pixel_values = torch.zeros_like(pixel_values)
             
             input_ids = batch['input_ids'].to(device)
@@ -1182,6 +1186,11 @@ def main():
     
     stage = 3
     
+    # Vision dropout rate theo fusion_type — empirically tuned
+    _vision_dropout = {'text2vision': 0.10, 'vision2text': 0.10, 'bidirectional': 0.05}
+    _vd_rate = _vision_dropout.get(args.fusion_type, 0.10)
+    print(f"[Vision Dropout] rate={_vd_rate:.2f} for fusion_type={args.fusion_type}")
+
     # Training history for plots and CSV
     training_history = []
     
@@ -1200,7 +1209,8 @@ def main():
             stage=stage,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
+            vision_dropout_rate=_vd_rate           # 🔥 fusion-aware
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -1215,7 +1225,8 @@ def main():
             is_training=False,
             stage=stage,
             answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss       # 🔥 Pass type loss flag
+            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
+            vision_dropout_rate=0.0                # val: không dropout
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
