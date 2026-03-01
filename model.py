@@ -445,6 +445,8 @@ class DeterministicVQA(nn.Module):
         type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
         # 🔥🔥🔥 ONLINE DISTILLATION 🔥🔥🔥
         use_distillation: bool = False,  # Enable online knowledge distillation
+        distill_vision: bool = True,     # Use vision KD component (SigLIP-SO400M teacher)
+        distill_text: bool = True,       # Use text KD component (PhoBERT-large teacher)
         vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
         text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
         distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
@@ -460,6 +462,8 @@ class DeterministicVQA(nn.Module):
         
         # Store distillation config
         self.use_distillation = use_distillation
+        self.distill_vision = distill_vision
+        self.distill_text = distill_text
         self.distill_alpha = distill_alpha
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
@@ -640,73 +644,79 @@ class DeterministicVQA(nn.Module):
         if self.use_distillation:
             print("\n" + "="*80)
             print("🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION ENABLED 🔥🔥🔥")
+            print(f"  Vision KD: {'ON' if distill_vision else 'OFF'}  |  Text KD: {'ON' if distill_text else 'OFF'}")
             print("="*80)
             
-            # Vision Teacher (SigLIP-SO400M)
-            print(f"  📚 Loading Vision Teacher: {vision_teacher_name}")
-            vision_teacher_full = AutoModel.from_pretrained(
-                vision_teacher_name,
-                torch_dtype=torch.float16  # FP16 to save VRAM
-            )
-            if hasattr(vision_teacher_full, 'vision_model'):
-                self.vision_teacher = vision_teacher_full.vision_model
+            # ── Vision Teacher (SigLIP-SO400M) ──────────────────────────────
+            if distill_vision:
+                print(f"  📚 Loading Vision Teacher: {vision_teacher_name}")
+                vision_teacher_full = AutoModel.from_pretrained(
+                    vision_teacher_name,
+                    torch_dtype=torch.float16  # FP16 to save VRAM
+                )
+                if hasattr(vision_teacher_full, 'vision_model'):
+                    self.vision_teacher = vision_teacher_full.vision_model
+                else:
+                    self.vision_teacher = vision_teacher_full
+                for param in self.vision_teacher.parameters():
+                    param.requires_grad = False
+                self.vision_teacher.eval()
+                self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name, use_fast=False)
+                teacher_vision_hidden = self.vision_teacher.config.hidden_size
+                print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
+                
+                # Projection: student bart_hidden → teacher vision dim
+                self.vision_distill_proj = nn.Linear(bart_hidden_dim, teacher_vision_hidden)
+                # Cross-attention for patch matching (student 196 ← teacher 729)
+                self.vision_distill_attn = nn.MultiheadAttention(
+                    embed_dim=teacher_vision_hidden,
+                    num_heads=8,  # 1152D / 8 = 144D per head
+                    dropout=0.1,
+                    batch_first=True
+                )
+                print(f"  🎯 Vision proj: {bart_hidden_dim} → {teacher_vision_hidden} (post vision_proj features)")
             else:
-                self.vision_teacher = vision_teacher_full
+                self.vision_teacher = None
+                self.vision_teacher_processor = None
+                self.vision_distill_proj = None
+                self.vision_distill_attn = None
+                teacher_vision_hidden = None
+                print(f"  ⏭️  Vision KD: SKIPPED")
             
-            # Freeze vision teacher
-            for param in self.vision_teacher.parameters():
-                param.requires_grad = False
-            self.vision_teacher.eval()
-            
-            # Get teacher's vision processor for 384px images
-            self.vision_teacher_processor = AutoImageProcessor.from_pretrained(vision_teacher_name, use_fast=False)
-            teacher_vision_hidden = self.vision_teacher.config.hidden_size
-            print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
-            
-            # Text Teacher (PhoBERT-large)
-            print(f"  📚 Loading Text Teacher: {text_teacher_name}")
-            self.text_teacher = AutoModel.from_pretrained(
-                text_teacher_name,
-                torch_dtype=torch.float16  # FP16 to save VRAM
-            )
-            
-            # Freeze text teacher
-            for param in self.text_teacher.parameters():
-                param.requires_grad = False
-            self.text_teacher.eval()
-            
-            # Get teacher's tokenizer
-            self.text_teacher_tokenizer = AutoTokenizer.from_pretrained(text_teacher_name)
-            teacher_text_hidden = self.text_teacher.config.hidden_size
-            print(f"     ✅ Text Teacher loaded: {teacher_text_hidden}D, FP16, frozen")
-            
-            # Projection layers for distillation
-            # Vision: Use attention-based matching (student attends to teacher's 729 patches)
-            # Project student patches to same dimension as teacher
-            self.vision_distill_proj = nn.Linear(vision_hidden_dim, teacher_vision_hidden)
-            
-            # Attention for cross-matching (student queries attend to teacher keys/values)
-            # This allows student to "select" important features from all 729 teacher patches
-            self.vision_distill_attn = nn.MultiheadAttention(
-                embed_dim=teacher_vision_hidden,
-                num_heads=8,  # 8 heads for 1152D (144D per head)
-                dropout=0.1,
-                batch_first=True
-            )
-            
-            # Text: student text embeddings → teacher text embeddings
-            self.text_distill_proj = nn.Linear(bart_hidden_dim, teacher_text_hidden)
+            # ── Text Teacher (PhoBERT-large) ─────────────────────────────────
+            if distill_text:
+                print(f"  📚 Loading Text Teacher: {text_teacher_name}")
+                self.text_teacher = AutoModel.from_pretrained(
+                    text_teacher_name,
+                    torch_dtype=torch.float16  # FP16 to save VRAM
+                )
+                for param in self.text_teacher.parameters():
+                    param.requires_grad = False
+                self.text_teacher.eval()
+                self.text_teacher_tokenizer = AutoTokenizer.from_pretrained(text_teacher_name)
+                teacher_text_hidden = self.text_teacher.config.hidden_size
+                print(f"     ✅ Text Teacher loaded: {teacher_text_hidden}D, FP16, frozen")
+                
+                # Projection: student bart_hidden → teacher text dim
+                self.text_distill_proj = nn.Linear(bart_hidden_dim, teacher_text_hidden)
+                print(f"  🎯 Text proj: {bart_hidden_dim} → {teacher_text_hidden}")
+            else:
+                self.text_teacher = None
+                self.text_teacher_tokenizer = None
+                self.text_distill_proj = None
+                teacher_text_hidden = None
+                print(f"  ⏭️  Text KD: SKIPPED")
             
             print(f"  🎯 Distillation α={distill_alpha:.2f}")
-            print(f"  🎯 Vision: Attention-based matching (196 → 729 patches)")
-            print(f"  🎯 Vision proj: {vision_hidden_dim} → {teacher_vision_hidden}")
-            print(f"  🎯 Text proj: {bart_hidden_dim} → {teacher_text_hidden}")
             print("="*80 + "\n")
         else:
             self.vision_teacher = None
             self.text_teacher = None
             self.vision_teacher_processor = None
             self.text_teacher_tokenizer = None
+            self.vision_distill_proj = None
+            self.vision_distill_attn = None
+            self.text_distill_proj = None
         
         print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
     
@@ -918,7 +928,7 @@ class DeterministicVQA(nn.Module):
             teacher_patches = teacher_outputs.last_hidden_state  # [B, 730, 1152] with CLS
             
             # Remove CLS token
-            if teacher_patches.size(1) == 730:  # 729 patches + 1 CLS
+            if teacher_patches.size(1) > 729:  # 729 patches + 1 CLS (or any extra token)
                 teacher_patches = teacher_patches[:, 1:, :]  # [B, 729, 1152]
             
             return teacher_patches.float()  # Convert back to FP32 for loss
@@ -946,11 +956,11 @@ class DeterministicVQA(nn.Module):
             teacher_outputs = self.text_teacher(**teacher_inputs)
             teacher_cls = teacher_outputs.last_hidden_state[:, 0, :]  # [B, 1024]
             
-            return teacher_cls.half().float()  # FP16 → FP32
+            return teacher_cls.float()  # Cast FP16 → FP32 for loss computation
     
     def compute_distillation_loss(
         self,
-        student_vision_patches,  # [B, 196, vision_hidden]
+        student_vision_patches,  # [B, 196, bart_hidden] — post vision_proj (features decoder uses)
         student_text_features,   # [B, bart_hidden]
         teacher_vision_patches,  # [B, 729, teacher_vision_hidden]
         teacher_text_features    # [B, teacher_text_hidden]
@@ -962,30 +972,36 @@ class DeterministicVQA(nn.Module):
         Text KD: Direct MSE between CLS embeddings
         
         Returns:
-            vision_kd_loss: MSE between student and attention-aligned teacher features
-            text_kd_loss: MSE between student and teacher text features
+            vision_kd_loss: MSE between student and attention-aligned teacher features (or 0 if disabled)
+            text_kd_loss: MSE between student and teacher text features (or 0 if disabled)
         """
-        # Vision KD: Attention-based matching
-        # Student (196 patches) attends to Teacher (729 patches)
+        zero = torch.tensor(0.0, device=student_vision_patches.device)
         
-        # Project student to teacher dimension
-        student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
+        # ── Vision KD ──────────────────────────────────────────────────────
+        if self.distill_vision and teacher_vision_patches is not None:
+            # Project student (post vision_proj, bart_hidden) → teacher dim
+            student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
+            
+            # Cross-attention: student queries attend to teacher keys/values
+            # Lets student "select" important features from all 729 teacher patches
+            attn_output, _ = self.vision_distill_attn(
+                query=student_vision_proj,       # [B, 196, teacher_D]
+                key=teacher_vision_patches,      # [B, 729, teacher_D]
+                value=teacher_vision_patches,    # [B, 729, teacher_D]
+                need_weights=False
+            )  # → [B, 196, teacher_D]
+            
+            # detach target so gradient doesn't backprop through attn_output
+            vision_kd_loss = F.mse_loss(student_vision_proj, attn_output.detach())
+        else:
+            vision_kd_loss = zero
         
-        # Cross-attention: student queries attend to teacher keys/values
-        # This lets student "select" important features from all 729 teacher patches
-        attn_output, _ = self.vision_distill_attn(
-            query=student_vision_proj,       # [B, 196, teacher_D]
-            key=teacher_vision_patches,      # [B, 729, teacher_D]
-            value=teacher_vision_patches,    # [B, 729, teacher_D]
-            need_weights=False
-        )  # → [B, 196, teacher_D]
-        
-        # MSE between student and attention-aligned teacher
-        vision_kd_loss = F.mse_loss(student_vision_proj, attn_output)
-        
-        # Text KD: Direct MSE between CLS embeddings
-        student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
-        text_kd_loss = F.mse_loss(student_text_proj, teacher_text_features)
+        # ── Text KD ────────────────────────────────────────────────────────
+        if self.distill_text and teacher_text_features is not None:
+            student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
+            text_kd_loss = F.mse_loss(student_text_proj, teacher_text_features)
+        else:
+            text_kd_loss = zero
         
         return vision_kd_loss, text_kd_loss
     
@@ -1178,23 +1194,32 @@ class DeterministicVQA(nn.Module):
             )
             
             # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
-            if self.use_distillation and images_384 is not None and raw_questions is not None:
-                # Extract teacher features
-                teacher_vision_patches = self._extract_teacher_vision_features(images_384)
-                teacher_text_features = self._extract_teacher_text_features(raw_questions)
-                
-                # Compute KD losses
-                vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
-                    student_vision_patches=patch_tokens,  # Before projection! [B, 196, vision_hidden]
-                    student_text_features=text_cls,  # Question CLS embedding [B, bart_hidden]
-                    teacher_vision_patches=teacher_vision_patches,  # [B, 729, teacher_hidden]
-                    teacher_text_features=teacher_text_features  # [B, teacher_hidden]
+            if self.use_distillation:
+                # Only extract what's needed based on which KD components are active
+                teacher_vision_patches = (
+                    self._extract_teacher_vision_features(images_384)
+                    if self.distill_vision and images_384 is not None else None
+                )
+                teacher_text_features = (
+                    self._extract_teacher_text_features(raw_questions)
+                    if self.distill_text and raw_questions is not None else None
                 )
                 
-                # Combine: (1-α)*CE + α*KD
-                # KD = 0.5*vision + 0.5*text (equal weight)
-                kd_loss = 0.5 * vision_kd_loss + 0.5 * text_kd_loss
-                answer_loss_with_kd = (1 - self.distill_alpha) * answer_loss + self.distill_alpha * kd_loss
+                # Compute KD losses (returns 0 for disabled components)
+                vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
+                    student_vision_patches=vision_features,  # Post vision_proj [B, 196, bart_hidden]
+                    student_text_features=text_cls,          # Question CLS [B, bart_hidden]
+                    teacher_vision_patches=teacher_vision_patches,
+                    teacher_text_features=teacher_text_features
+                )
+                
+                # Combine active KD losses with equal weight
+                n_active = int(self.distill_vision) + int(self.distill_text)
+                kd_loss = (vision_kd_loss + text_kd_loss) / max(n_active, 1)
+                # Normalize KD to same scale as answer_loss before applying alpha
+                # Prevents feature MSE (large magnitude) from dominating CE
+                kd_loss_normalized = kd_loss / (kd_loss.detach() + 1e-8) * answer_loss.detach()
+                answer_loss_with_kd = answer_loss + self.distill_alpha * kd_loss_normalized
             else:
                 answer_loss_with_kd = answer_loss
             

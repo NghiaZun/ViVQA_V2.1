@@ -735,12 +735,20 @@ def main():
     # 🔥🔥🔥 ONLINE KNOWLEDGE DISTILLATION 🔥🔥🔥
     parser.add_argument('--use_distillation', action='store_true',
                        help='Enable online knowledge distillation from large teachers')
+    parser.add_argument('--distill_vision', action='store_true', default=True,
+                       help='Use vision KD component (SigLIP-SO400M teacher). Default: ON when --use_distillation')
+    parser.add_argument('--no_distill_vision', dest='distill_vision', action='store_false',
+                       help='Disable vision KD component (keep only text KD)')
+    parser.add_argument('--distill_text', action='store_true', default=True,
+                       help='Use text KD component (PhoBERT-large teacher). Default: ON when --use_distillation')
+    parser.add_argument('--no_distill_text', dest='distill_text', action='store_false',
+                       help='Disable text KD component (keep only vision KD)')
     parser.add_argument('--vision_teacher', type=str, default='google/siglip-so400m-patch14-384',
                        help='Vision teacher model (default: SigLIP-SO400M at 384px)')
     parser.add_argument('--text_teacher', type=str, default='vinai/phobert-large',
                        help='Text teacher model (default: PhoBERT-large)')
     parser.add_argument('--distill_alpha', type=float, default=0.5,
-                       help='Distillation weight: (1-α)*CE + α*KD (default: 0.5 = balanced)')
+                       help='Distillation weight: CE + α*KD_normalized (default: 0.5, recommended: 0.1-0.2)')
     
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
@@ -1013,6 +1021,8 @@ def main():
         type_adapter_rank=args.type_adapter_rank,  # 🔥 NEW
         type_adapter_bias=args.type_adapter_bias,  # 🔥 NEW
         use_distillation=args.use_distillation,  # 🔥🔥🔥 ONLINE DISTILLATION
+        distill_vision=args.distill_vision,      # 🔥🔥🔥 Vision KD on/off
+        distill_text=args.distill_text,          # 🔥🔥🔥 Text KD on/off
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
         distill_alpha=args.distill_alpha  # 🔥🔥🔥
