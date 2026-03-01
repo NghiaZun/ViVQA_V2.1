@@ -893,9 +893,9 @@ def main():
         
         vision_processor = AutoProcessor.from_pretrained(vision_model)
         
-        # 🔥🔥🔥 Load teacher vision processor if distillation enabled
+        # 🔥🔥🔥 Load teacher vision processor if vision KD enabled
         teacher_vision_processor = None
-        if args.use_distillation:
+        if args.use_distillation and args.distill_vision:
             print(f"[Distillation] Loading teacher vision processor: {args.vision_teacher}")
             teacher_vision_processor = AutoProcessor.from_pretrained(args.vision_teacher)
         
