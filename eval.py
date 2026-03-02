@@ -11,6 +11,11 @@ from collections import Counter, defaultdict
 
 from dataset import VQAGenDataset
 from model import DeterministicVQA
+from dataset import detect_question_type as _detect_type_int
+
+
+# Map integer type → string label for display
+_TYPE_NAMES = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
 
 
 def _normalize_vn(text: str) -> str:
@@ -43,28 +48,8 @@ def compute_f1_score(prediction: str, ground_truth: str) -> float:
 
 
 def detect_question_type(question_text: str) -> str:
-    """
-    Detect question type from Vietnamese text
-    
-    Returns:
-        'OBJECT', 'COUNT', 'COLOR', or 'LOCATION'
-    """
-    q = question_text.lower()
-    
-    # COUNT patterns
-    if any(word in q for word in ['bao nhiêu', 'mấy', 'số lượng']):
-        return 'COUNT'
-    
-    # COLOR patterns
-    if any(word in q for word in ['màu', 'màu sắc']):
-        return 'COLOR'
-    
-    # LOCATION patterns
-    if any(word in q for word in ['đâu', 'ở đâu', 'chỗ nào', 'vị trí', 'bên', 'phía']):
-        return 'LOCATION'
-    
-    # Default: OBJECT
-    return 'OBJECT'
+    """Wrapper around dataset.detect_question_type — same logic as training."""
+    return _TYPE_NAMES[_detect_type_int(question_text)]
 
 
 def evaluate(model, dataloader, device, tokenizer):
