@@ -263,7 +263,7 @@ class VisionGating(nn.Module):
         # Gating network: outputs raw logit (sigmoid applied later with vision_bias)
         self.gate_net = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim // 2),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(hidden_dim // 2, 1)
         )
