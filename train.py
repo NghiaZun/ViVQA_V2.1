@@ -837,7 +837,8 @@ def main():
     print(f"  Batch size: {batch_size}")
     if args.pk_sampling:
         print(f"  🔥 PK Sampling: P={args.pk_p} types × K={args.pk_k} samples → batch={args.pk_p * args.pk_k}")
-    print(f"  Epochs: {stage3_epochs}")    print(f"  Learning rate: {learning_rate}")
+    print(f"  Epochs: {stage3_epochs}")
+    print(f"  Learning rate: {learning_rate}")
     print(f"  Weight decay: {weight_decay}")
     print(f"  Gradient clipping: {max_norm}")
     print(f"  Mixed precision: {use_amp}")
