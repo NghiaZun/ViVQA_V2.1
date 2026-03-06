@@ -1,10 +1,13 @@
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 from transformers import BartphoTokenizer
 from PIL import Image
 import pandas as pd
 import os
 import re
+import random
+from collections import defaultdict
+from typing import Iterator, List, Optional
 
 
 def detect_question_type(question: str) -> int:
@@ -165,3 +168,139 @@ class VQAGenDataset(Dataset):
             result['question_type'] = question_type
         
         return result
+
+
+# ============================================================================
+# PK SAMPLER
+# ============================================================================
+
+class PKSampler(Sampler):
+    """
+    PK Sampling cho VQA dataset với 4 question types.
+
+    Cách hoạt động:
+        Mỗi batch = P types × K samples/type  →  batch_size = P × K
+
+        Ví dụ P=4, K=8 → batch=32:
+            TYPE_0 (OBJECT):   idx1 idx2 ... idx8
+            TYPE_1 (COUNT):    idx1 idx2 ... idx8
+            TYPE_2 (COLOR):    idx1 idx2 ... idx8
+            TYPE_3 (LOCATION): idx1 idx2 ... idx8
+
+    Lợi ích:
+        - Mỗi batch luôn có đủ diversity về question type
+        - use_type_loss nhận gradient từ đủ 4 class mỗi step
+        - Tránh batch toàn COUNT hoặc toàn COLOR
+
+    Args:
+        dataset:      VQAGenDataset (hoặc Subset của nó)
+        p:            Số lượng types per batch. Default 4 (dùng hết 4 types)
+        k:            Số samples per type per batch. Default 8
+        shuffle:      Shuffle trong từng type pool mỗi epoch. Default True
+        drop_last:    Bỏ batch cuối nếu không đủ P × K. Default True
+
+    Cách xác định type:
+        1. Nếu dataset.data có cột 'type' → dùng trực tiếp (nhanh, chính xác)
+        2. Nếu không → auto-detect từ question text qua detect_question_type()
+    """
+
+    TYPE_NAMES = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
+
+    def __init__(
+        self,
+        dataset,
+        p: int = 4,
+        k: int = 8,
+        shuffle: bool = True,
+        drop_last: bool = True
+    ):
+        super().__init__(dataset)
+        self.p = p
+        self.k = k
+        self.shuffle = shuffle
+        self.drop_last = drop_last
+
+        # Resolve inner dataset (handles torch.utils.data.Subset)
+        from torch.utils.data import Subset
+        if isinstance(dataset, Subset):
+            inner = dataset.dataset
+            indices = list(dataset.indices)
+        else:
+            inner = dataset
+            indices = list(range(len(dataset)))
+
+        # ── Build type → [idx] mapping ───────────────────────────────────
+        self.type_to_indices: dict[int, List[int]] = defaultdict(list)
+
+        has_type_col = (
+            hasattr(inner, 'data')
+            and isinstance(inner.data, pd.DataFrame)
+            and ('type' in inner.data.columns or 'question_type' in inner.data.columns)
+        )
+        type_col = 'type' if (has_type_col and 'type' in inner.data.columns) else 'question_type'
+
+        for pos, real_idx in enumerate(indices):
+            if has_type_col:
+                t = int(inner.data.iloc[real_idx][type_col])
+            else:
+                # Fallback: auto-detect from question text
+                row = inner.data.iloc[real_idx]
+                t = detect_question_type(str(row['question']))
+            self.type_to_indices[t].append(pos)  # pos = index in this dataset view
+
+        # Print distribution summary
+        print("[PKSampler] Type distribution:")
+        for t in sorted(self.type_to_indices):
+            n = len(self.type_to_indices[t])
+            print(f"  Type {t} ({self.TYPE_NAMES.get(t, '?')}): {n:,} samples")
+
+        # Warn if a type has fewer samples than K
+        for t, idxs in self.type_to_indices.items():
+            if len(idxs) < k:
+                print(f"  ⚠️  Type {t} ({self.TYPE_NAMES.get(t, '?')}) has only {len(idxs)} samples "
+                      f"< K={k}. Will sample with replacement.")
+
+        # Determine which P types to use (sorted by type id, take first p)
+        available_types = sorted(self.type_to_indices.keys())
+        if len(available_types) < p:
+            print(f"  ⚠️  Only {len(available_types)} types available, reducing P={p} → {len(available_types)}")
+            self.p = len(available_types)
+        self.active_types: List[int] = available_types[:self.p]
+
+        # Compute total batches
+        min_type_size = min(len(self.type_to_indices[t]) for t in self.active_types)
+        self._num_batches = min_type_size // k
+        if not drop_last and min_type_size % k != 0:
+            self._num_batches += 1
+
+        print(f"[PKSampler] Config: P={self.p}, K={k}, batch_size={self.p * k}")
+        print(f"[PKSampler] Batches per epoch: {self._num_batches} "
+              f"({'drop_last' if drop_last else 'keep_last'})")
+
+    # ── Sampler interface ─────────────────────────────────────────────────
+
+    def __len__(self) -> int:
+        """Total number of samples yielded per epoch."""
+        return self._num_batches * self.p * self.k
+
+    def __iter__(self) -> Iterator[int]:
+        """Yield indices forming P×K structured batches."""
+        # Shuffle each type pool
+        pools: dict[int, List[int]] = {}
+        for t in self.active_types:
+            idxs = list(self.type_to_indices[t])
+            if self.shuffle:
+                random.shuffle(idxs)
+            # If fewer than needed, sample with replacement to fill
+            needed = self._num_batches * self.k
+            if len(idxs) < needed:
+                extra = random.choices(idxs, k=needed - len(idxs))
+                idxs = idxs + extra
+            pools[t] = idxs
+
+        # Yield interleaved: for each batch position, yield K from each type
+        for batch_i in range(self._num_batches):
+            start = batch_i * self.k
+            end = start + self.k
+            for t in self.active_types:
+                yield from pools[t][start:end]

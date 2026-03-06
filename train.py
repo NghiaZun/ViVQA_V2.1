@@ -649,6 +649,16 @@ def main():
     parser.add_argument('--batch_size', type=int, default=12, help='Batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of dataloader workers')
     
+    # PK Sampling
+    parser.add_argument('--pk_sampling', action='store_true',
+                       help='Enable PK Sampling: P question types × K samples/type per batch. '
+                            'Batch size becomes P × K (overrides --batch_size). '
+                            'Recommended: --pk_p 4 --pk_k 8 (batch=32) or --pk_p 4 --pk_k 16 (batch=64).')
+    parser.add_argument('--pk_p', type=int, default=4,
+                       help='P: number of question types per batch for PK Sampling (max 4, default: 4)')
+    parser.add_argument('--pk_k', type=int, default=8,
+                       help='K: number of samples per type per batch for PK Sampling (default: 8, batch=32)')
+    
     # Model
     parser.add_argument('--vision_model', type=str, default='google/siglip-base-patch16-224', 
                        help='Vision encoder model (default: SigLIP-base)')
@@ -825,8 +835,9 @@ def main():
     print("="*80)
     print(f"  Data dir: {data_dir}")
     print(f"  Batch size: {batch_size}")
-    print(f"  Epochs: {stage3_epochs}")
-    print(f"  Learning rate: {learning_rate}")
+    if args.pk_sampling:
+        print(f"  🔥 PK Sampling: P={args.pk_p} types × K={args.pk_k} samples → batch={args.pk_p * args.pk_k}")
+    print(f"  Epochs: {stage3_epochs}")    print(f"  Learning rate: {learning_rate}")
     print(f"  Weight decay: {weight_decay}")
     print(f"  Gradient clipping: {max_norm}")
     print(f"  Mixed precision: {use_amp}")
@@ -959,15 +970,33 @@ def main():
     # Create generator for reproducible shuffling
     train_generator = torch.Generator().manual_seed(args.seed)
     
+    # ── PK Sampling setup ─────────────────────────────────────────────────
+    pk_sampler = None
+    if args.pk_sampling:
+        from dataset import PKSampler
+        random.seed(args.seed)  # PKSampler uses Python random internally
+        pk_sampler = PKSampler(
+            dataset=train_dataset,
+            p=args.pk_p,
+            k=args.pk_k,
+            shuffle=True,
+            drop_last=True
+        )
+        # When using PKSampler, effective batch size = P × K
+        pk_batch_size = args.pk_p * args.pk_k
+        print(f"[PK Sampling] Enabled: P={args.pk_p} × K={args.pk_k} = batch_size={pk_batch_size}")
+        print(f"[PK Sampling] Batches/epoch: {len(pk_sampler) // pk_batch_size}")
+    
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
-        shuffle=True,
+        batch_size=args.pk_p * args.pk_k if args.pk_sampling else batch_size,
+        shuffle=False if pk_sampler is not None else True,
+        sampler=pk_sampler,  # None = default random sampler (with shuffle)
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True if num_workers > 0 else False,
         prefetch_factor=2 if num_workers > 0 else None,
-        generator=train_generator  # ✅ FIX: Deterministic shuffle!
+        generator=train_generator if pk_sampler is None else None  # generator only for shuffle mode
     )
     
     val_loader = DataLoader(
