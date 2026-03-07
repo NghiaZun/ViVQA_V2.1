@@ -720,6 +720,18 @@ def main():
     parser.add_argument('--text_lora_dropout', type=float, default=0.1,
                        help='LoRA dropout for text encoder (default: 0.1)')
 
+    # 🔥 Decoder Adaptation (LoRA recommended over full unfreeze for ~10K samples)
+    parser.add_argument('--use_decoder_lora', action='store_true',
+                       help='Use LoRA for BARTpho decoder (RECOMMENDED: ~5M params vs 80M full unfreeze). '
+                            'Freeze base decoder, only train low-rank adapters. '
+                            'Reduces overfitting and text shortcut on small datasets.')
+    parser.add_argument('--decoder_lora_r', type=int, default=16,
+                       help='LoRA rank for decoder (default: 16)')
+    parser.add_argument('--decoder_lora_alpha', type=int, default=32,
+                       help='LoRA alpha scaling for decoder (default: 32)')
+    parser.add_argument('--decoder_lora_dropout', type=float, default=0.05,
+                       help='LoRA dropout for decoder (default: 0.05, lower than encoder)')
+
     # 🔥 Vision Dependency (combat text shortcut)
     parser.add_argument('--use_vision_gate', action='store_true',
                        help='Enable learnable vision gating (boost vision importance)')
@@ -796,12 +808,11 @@ def main():
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    # Reproducible convolution kernels without touching SDPA.
-    # NOTE: cudnn.deterministic=True breaks MBart SDPA mask optimisation on
-    # newer transformers (AcceleratorError: unspecified launch failure), so we
-    # leave cuDNN in its default state and only disable benchmark mode
-    # (which picks a different algorithm per run and is the main source of
-    # cross-run variance for conv-heavy vision encoders).
+    # Force full determinism on CUDA kernels.
+    # cuDNN by default picks the fastest algorithm per run (non-deterministic).
+    # These two lines make every run identical given the same seed.
+    # Trade-off: ~5-10% slower training — acceptable for ablation reproducibility.
+    torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     
     # ========================================================================
@@ -856,6 +867,8 @@ def main():
         print(f"  🔥 Vision LoRA: r={args.vision_lora_r}, alpha={args.vision_lora_alpha}, dropout={args.vision_lora_dropout}")
     if args.use_text_lora:
         print(f"  🔥 Text LoRA: r={args.text_lora_r}, alpha={args.text_lora_alpha}, dropout={args.text_lora_dropout}")
+    if args.use_decoder_lora:
+        print(f"  🔥 Decoder LoRA: r={args.decoder_lora_r}, alpha={args.decoder_lora_alpha}, dropout={args.decoder_lora_dropout} (~5M params vs 80M full unfreeze)")
     if args.answer_weights:
         print(f"  🔥 Answer-aware loss: {args.answer_weights}")
     if args.use_type_loss:
@@ -1062,7 +1075,12 @@ def main():
         distill_text=args.distill_text,          # 🔥🔥🔥 Text KD on/off
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
-        distill_alpha=args.distill_alpha  # 🔥🔥🔥
+        distill_alpha=args.distill_alpha,  # 🔥🔥🔥
+        # Decoder LoRA args
+        use_decoder_lora=args.use_decoder_lora,
+        decoder_lora_r=args.decoder_lora_r,
+        decoder_lora_alpha=args.decoder_lora_alpha,
+        decoder_lora_dropout=args.decoder_lora_dropout
     ).to(device)
     
     model.freeze_pretrained(

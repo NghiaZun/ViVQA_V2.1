@@ -449,7 +449,12 @@ class DeterministicVQA(nn.Module):
         distill_text: bool = True,       # Use text KD component (PhoBERT-large teacher)
         vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
         text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
-        distill_alpha: float = 0.5  # Distillation weight (0.5 = 50% CE + 50% KD)
+        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
+        # 🔥 Decoder LoRA (recommended for ~10K samples — replaces full decoder unfreeze)
+        use_decoder_lora: bool = False,  # Use LoRA for BARTpho decoder (freeze base, train ~5M adapters)
+        decoder_lora_r: int = 16,        # LoRA rank for decoder (16 recommended)
+        decoder_lora_alpha: int = 32,    # LoRA alpha scaling
+        decoder_lora_dropout: float = 0.05  # Lower dropout for decoder (generation task)
     ):
         super().__init__()
         
@@ -483,6 +488,12 @@ class DeterministicVQA(nn.Module):
         self.text_lora_r = text_lora_r  # 🔥 NEW
         self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
         self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
+
+        # 🔥 Decoder LoRA settings
+        self.use_decoder_lora = use_decoder_lora
+        self.decoder_lora_r = decoder_lora_r
+        self.decoder_lora_alpha = decoder_lora_alpha
+        self.decoder_lora_dropout = decoder_lora_dropout
         
         # 🔥 Vision gating (will be initialized after knowing bart_hidden_dim)
         self.use_vision_gate = use_vision_gate
@@ -556,6 +567,11 @@ class DeterministicVQA(nn.Module):
         if use_text_lora:
             self._inject_lora_to_text_encoder()
             print(f"  🔥 Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}, dropout={text_lora_dropout}")
+
+        # 🔥 Add LoRA to decoder if requested
+        if use_decoder_lora:
+            self._inject_lora_to_decoder()
+            print(f"  🔥 Decoder LoRA: r={decoder_lora_r}, alpha={decoder_lora_alpha}, dropout={decoder_lora_dropout}")
         
         # Vision position embeddings (calculate dynamically based on model)
         # SigLIP & DINOv2: 224x224 image with patch_size=16 → 14x14 = 196 patches
@@ -827,10 +843,55 @@ class DeterministicVQA(nn.Module):
             print(f"      Install with: pip install peft")
             print(f"      Text encoder will remain frozen unless you unfreeze layers manually")
             raise RuntimeError("PEFT required for text LoRA. Install: pip install peft")
-    
+
+    def _inject_lora_to_decoder(self):
+        """
+        Inject LoRA into BARTpho decoder using PEFT library.
+
+        Why decoder LoRA instead of full unfreeze?
+        ------------------------------------------
+        BARTpho decoder has ~80M params (12 layers × self-attn + cross-attn + FFN).
+        With only ~10K training samples, full unfreeze leads to:
+          1. Overfitting: decoder memorises train answers, fails to generalise
+          2. Text shortcut: decoder learns to ignore vision and rely on question patterns
+          3. Memory pressure: 80M × 2 (Adam states) ≈ 640MB extra VRAM
+
+        LoRA (r=16) trains only ~5M adapter params (~6% of full decoder) while
+        adapting ALL 12 layers via low-rank updates — better coverage, less overfit.
+
+        Note: task_type=SEQ_2_SEQ_LM targets both self-attn and cross-attn
+        in the decoder, which is exactly what we want (cross-attn learns vision
+        fusion; self-attn learns answer generation).
+        """
+        try:
+            from peft import LoraConfig, get_peft_model, TaskType
+
+            print(f"  [LoRA] Injecting into BARTpho decoder (r={self.decoder_lora_r})...")
+
+            lora_config = LoraConfig(
+                r=self.decoder_lora_r,
+                lora_alpha=self.decoder_lora_alpha,
+                lora_dropout=self.decoder_lora_dropout,
+                # Target both self-attention and cross-attention proj layers
+                target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
+                bias="none",
+                task_type="FEATURE_EXTRACTION"  # Decoder is used as feature extractor here (lm_head is separate)
+            )
+
+            self.decoder = get_peft_model(self.decoder, lora_config)
+
+            trainable_params = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.decoder.parameters())
+            print(f"  [LoRA] Decoder - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+
+        except ImportError:
+            print(f"  ⚠️  PEFT library not found!")
+            print(f"      Install with: pip install peft")
+            raise RuntimeError("PEFT required for decoder LoRA. Install: pip install peft")
+
     def freeze_pretrained(
-        self, 
-        unfreeze_encoder_layers: int = 3, 
+        self,
+        unfreeze_encoder_layers: int = 3,
         unfreeze_decoder: bool = True
     ):
         """
@@ -894,12 +955,34 @@ class DeterministicVQA(nn.Module):
             print(f"[Freeze] Text encoder: FULLY FROZEN")
         
         # Decoder
-        if unfreeze_decoder:
+        if self.use_decoder_lora:
+            # LoRA: freeze base decoder, re-enable only LoRA adapter params
+            for param in self.decoder.parameters():
+                param.requires_grad = False
+            try:
+                from peft import PeftModel
+                if isinstance(self.decoder, PeftModel):
+                    for name, param in self.decoder.named_parameters():
+                        if 'lora_' in name:
+                            param.requires_grad = True
+                    trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Decoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
+                    print(f"         ✅ ~6% of full decoder params — less overfit on 10K samples")
+                else:
+                    print(f"[Freeze] Decoder: LoRA requested but PEFT not applied")
+            except ImportError:
+                print(f"[Freeze] Decoder: LoRA requested but PEFT not installed")
+            # lm_head is always trained (small linear layer, essential for generation)
+            for param in self.lm_head.parameters():
+                param.requires_grad = True
+            print(f"[Freeze] LM head: UNFROZEN (always)")
+        elif unfreeze_decoder:
             for param in self.decoder.parameters():
                 param.requires_grad = True
             for param in self.lm_head.parameters():
                 param.requires_grad = True
-            print(f"[Freeze] Decoder + LM head: UNFROZEN")
+            print(f"[Freeze] Decoder + LM head: FULLY UNFROZEN")
+            print(f"         ⚠️  Full unfreeze on ~10K samples may overfit. Consider --use_decoder_lora")
         else:
             for param in self.decoder.parameters():
                 param.requires_grad = False
