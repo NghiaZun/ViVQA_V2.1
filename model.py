@@ -665,21 +665,16 @@ class DeterministicVQA(nn.Module):
                 teacher_vision_hidden = self.vision_teacher.config.hidden_size
                 print(f"     ✅ Vision Teacher loaded: {teacher_vision_hidden}D, FP16, frozen")
                 
-                # Projection: student bart_hidden → teacher vision dim
-                self.vision_distill_proj = nn.Linear(bart_hidden_dim, teacher_vision_hidden)
-                # Cross-attention for patch matching (student 196 ← teacher 729)
-                self.vision_distill_attn = nn.MultiheadAttention(
-                    embed_dim=teacher_vision_hidden,
-                    num_heads=8,  # 1152D / 8 = 144D per head
-                    dropout=0.1,
-                    batch_first=True
-                )
-                print(f"  🎯 Vision proj: {bart_hidden_dim} → {teacher_vision_hidden} (post vision_proj features)")
+                # Projection: student RAW encoder dim → teacher vision dim.
+                # We distill from raw patch_tokens (vision_hidden, e.g. 768D for SigLIP-base)
+                # BEFORE vision_proj to avoid double-projection interference.
+                # vision_hidden_dim is captured in outer scope.
+                self.vision_distill_proj = nn.Linear(vision_hidden_dim, teacher_vision_hidden)
+                print(f"  🎯 Vision KD proj: {vision_hidden_dim}D (raw encoder) → {teacher_vision_hidden}D teacher")
             else:
                 self.vision_teacher = None
                 self.vision_teacher_processor = None
                 self.vision_distill_proj = None
-                self.vision_distill_attn = None
                 teacher_vision_hidden = None
                 print(f"  ⏭️  Vision KD: SKIPPED")
             
@@ -715,7 +710,6 @@ class DeterministicVQA(nn.Module):
             self.vision_teacher_processor = None
             self.text_teacher_tokenizer = None
             self.vision_distill_proj = None
-            self.vision_distill_attn = None
             self.text_distill_proj = None
         
         print("[DETERMINISTIC VQA] ✓ Multi-task type-conditioned model initialized!")
@@ -960,49 +954,80 @@ class DeterministicVQA(nn.Module):
     
     def compute_distillation_loss(
         self,
-        student_vision_patches,  # [B, 196, bart_hidden] — post vision_proj (features decoder uses)
-        student_text_features,   # [B, bart_hidden]
+        student_vision_patches,  # [B, 196, bart_hidden] — post vision_proj, PRE-fusion
+        student_text_features,   # [B, bart_hidden] — CLS token from text encoder
         teacher_vision_patches,  # [B, 729, teacher_vision_hidden]
         teacher_text_features    # [B, teacher_text_hidden]
     ):
         """
-        Compute knowledge distillation losses using attention-based matching
-        
-        Vision KD: Student queries attend to all 729 teacher patches (no downsampling!)
-        Text KD: Direct MSE between CLS embeddings
-        
-        Returns:
-            vision_kd_loss: MSE between student and attention-aligned teacher features (or 0 if disabled)
-            text_kd_loss: MSE between student and teacher text features (or 0 if disabled)
+        Compute feature-level knowledge distillation losses.
+
+        Design rationale
+        ----------------
+        The student vision encoder (SigLIP-base, 224px, 768D) must learn to produce
+        features that are *semantically aligned* with the teacher (SigLIP-SO400M,
+        384px, 1152D).  Two complementary objectives are used:
+
+        (1) Vision KD — patch-level feature mimicry (Romero et al., FitNets 2015):
+            • The teacher has 729 patches (384/14²); the student has 196 (224/16²).
+            • A fixed average-pool reduces teacher → 196 slots so every student
+              patch has a 1-to-1 positional target.  No student features enter the
+              target computation, eliminating the circular-gradient problem that
+              existed in the previous cross-attention formulation.
+            • Loss = cosine distance (scale-invariant, more robust to norm mismatch
+              across architectures than raw MSE) — Park et al., RKD CVPR 2019.
+
+        (2) Text KD — sentence-level semantic alignment (Hinton et al. 2015):
+            • CLS-pooled student (bart_hidden) → projected → teacher dim.
+            • Same cosine distance loss.
+
+        Total loss formula (Hinton 2015):
+            L = (1 - α) * L_CE  +  α * L_KD
+
+        Returns
+        -------
+        vision_kd_loss : scalar tensor
+        text_kd_loss   : scalar tensor
         """
         zero = torch.tensor(0.0, device=student_vision_patches.device)
-        
+
         # ── Vision KD ──────────────────────────────────────────────────────
         if self.distill_vision and teacher_vision_patches is not None:
-            # Project student (post vision_proj, bart_hidden) → teacher dim
-            student_vision_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, teacher_D]
-            
-            # Cross-attention: student queries attend to teacher keys/values
-            # Lets student "select" important features from all 729 teacher patches
-            attn_output, _ = self.vision_distill_attn(
-                query=student_vision_proj,       # [B, 196, teacher_D]
-                key=teacher_vision_patches,      # [B, 729, teacher_D]
-                value=teacher_vision_patches,    # [B, 729, teacher_D]
-                need_weights=False
-            )  # → [B, 196, teacher_D]
-            
-            # detach target so gradient doesn't backprop through attn_output
-            vision_kd_loss = F.mse_loss(student_vision_proj, attn_output.detach())
+            # Step 1: Reduce teacher 729 patches → 196 student slots via
+            #         adaptive average pooling along the sequence dimension.
+            #         This is a FIXED deterministic mapping — no learnable params,
+            #         no student gradient in the target.
+            # teacher_vision_patches: [B, 729, D_t]
+            # Reshape → [B, D_t, 729] → AdaptiveAvgPool1d(196) → [B, D_t, 196]
+            # → transpose → [B, 196, D_t]
+            with torch.no_grad():
+                teacher_pooled = F.adaptive_avg_pool1d(
+                    teacher_vision_patches.transpose(1, 2),  # [B, D_t, 729]
+                    output_size=student_vision_patches.size(1)  # 196
+                ).transpose(1, 2)  # [B, 196, D_t]
+
+            # Step 2: Project student features into teacher embedding space
+            student_proj = self.vision_distill_proj(student_vision_patches)  # [B, 196, D_t]
+
+            # Step 3: Cosine distance loss averaged over all patch positions
+            # Flatten patches for vectorised cosine computation
+            s = student_proj.reshape(-1, student_proj.size(-1))       # [B*196, D_t]
+            t = teacher_pooled.reshape(-1, teacher_pooled.size(-1))   # [B*196, D_t]
+            vision_kd_loss = (1.0 - F.cosine_similarity(s, t, dim=-1)).mean()
         else:
             vision_kd_loss = zero
-        
+
         # ── Text KD ────────────────────────────────────────────────────────
         if self.distill_text and teacher_text_features is not None:
-            student_text_proj = self.text_distill_proj(student_text_features)  # [B, teacher_text_D]
-            text_kd_loss = F.mse_loss(student_text_proj, teacher_text_features)
+            student_text_proj = self.text_distill_proj(student_text_features)  # [B, D_t]
+            text_kd_loss = (1.0 - F.cosine_similarity(
+                student_text_proj,
+                teacher_text_features.detach(),
+                dim=-1
+            )).mean()
         else:
             text_kd_loss = zero
-        
+
         return vision_kd_loss, text_kd_loss
     
     def forward(
@@ -1059,6 +1084,10 @@ class DeterministicVQA(nn.Module):
         
         # Add position embeddings
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        # Save raw encoder features (768D) for distillation BEFORE projection.
+        # Distilling here avoids double-projection bias: the distill_proj learns
+        # a clean 768→1152 mapping without interference from vision_proj (768→1024).
+        raw_patch_tokens = patch_tokens  # [B, 196, vision_hidden] — used for KD only
         vision_features = self.vision_proj(patch_tokens)  # [batch, 196, bart_hidden]
         
         # 2. Text encoding
@@ -1207,8 +1236,8 @@ class DeterministicVQA(nn.Module):
                 
                 # Compute KD losses (returns 0 for disabled components)
                 vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
-                    student_vision_patches=vision_features,  # Post vision_proj [B, 196, bart_hidden]
-                    student_text_features=text_cls,          # Question CLS [B, bart_hidden]
+                    student_vision_patches=raw_patch_tokens,  # RAW encoder output [B, 196, vision_hidden] — pre vision_proj
+                    student_text_features=text_cls,           # Question CLS [B, bart_hidden]
                     teacher_vision_patches=teacher_vision_patches,
                     teacher_text_features=teacher_text_features
                 )
@@ -1216,10 +1245,12 @@ class DeterministicVQA(nn.Module):
                 # Combine active KD losses with equal weight
                 n_active = int(self.distill_vision) + int(self.distill_text)
                 kd_loss = (vision_kd_loss + text_kd_loss) / max(n_active, 1)
-                # Normalize KD to same scale as answer_loss before applying alpha
-                # Prevents feature MSE (large magnitude) from dominating CE
-                kd_loss_normalized = kd_loss / (kd_loss.detach() + 1e-8) * answer_loss.detach()
-                answer_loss_with_kd = answer_loss + self.distill_alpha * kd_loss_normalized
+
+                # Hinton et al. 2015: L = (1-α)*L_CE + α*L_KD
+                # α controls how much the student is pulled toward teacher features.
+                # KD loss is already bounded [0,1] for the cosine term + MSE term,
+                # so no additional rescaling is needed — it won't dominate CE.
+                answer_loss_with_kd = (1.0 - self.distill_alpha) * answer_loss + self.distill_alpha * kd_loss
             else:
                 answer_loss_with_kd = answer_loss
             
