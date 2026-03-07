@@ -796,11 +796,12 @@ def main():
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    # Force full determinism on CUDA kernels.
-    # cuDNN by default picks the fastest algorithm per run (non-deterministic).
-    # These two lines make every run identical given the same seed.
-    # Trade-off: ~5-10% slower training — acceptable for ablation reproducibility.
-    torch.backends.cudnn.deterministic = True
+    # Reproducible convolution kernels without touching SDPA.
+    # NOTE: cudnn.deterministic=True breaks MBart SDPA mask optimisation on
+    # newer transformers (AcceleratorError: unspecified launch failure), so we
+    # leave cuDNN in its default state and only disable benchmark mode
+    # (which picks a different algorithm per run and is the main source of
+    # cross-run variance for conv-heavy vision encoders).
     torch.backends.cudnn.benchmark = False
     
     # ========================================================================
