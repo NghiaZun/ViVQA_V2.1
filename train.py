@@ -796,6 +796,12 @@ def main():
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
+    # Force full determinism on CUDA kernels.
+    # cuDNN by default picks the fastest algorithm per run (non-deterministic).
+    # These two lines make every run identical given the same seed.
+    # Trade-off: ~5-10% slower training — acceptable for ablation reproducibility.
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     
     # ========================================================================
     # CONFIG (from args)
