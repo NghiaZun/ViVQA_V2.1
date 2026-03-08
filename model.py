@@ -846,43 +846,56 @@ class DeterministicVQA(nn.Module):
 
     def _inject_lora_to_decoder(self):
         """
-        Inject LoRA into BARTpho decoder using PEFT library.
+        Inject LoRA into BARTpho decoder manually via LoraModel (NOT get_peft_model).
 
-        Why decoder LoRA instead of full unfreeze?
-        ------------------------------------------
-        BARTpho decoder has ~80M params (12 layers × self-attn + cross-attn + FFN).
-        With only ~10K training samples, full unfreeze leads to:
-          1. Overfitting: decoder memorises train answers, fails to generalise
-          2. Text shortcut: decoder learns to ignore vision and rely on question patterns
-          3. Memory pressure: 80M × 2 (Adam states) ≈ 640MB extra VRAM
+        Why NOT get_peft_model?
+        -----------------------
+        get_peft_model() wraps the module in a PeftModel subclass. When task_type is
+        SEQ_2_SEQ_LM, PeftModel.__init__ tries to call
+        self.base_model.prepare_inputs_for_generation — a method that only exists on
+        the FULL MBartForConditionalGeneration, not on MBartDecoder alone.
 
-        LoRA (r=16) trains only ~5M adapter params (~6% of full decoder) while
-        adapting ALL 12 layers via low-rank updates — better coverage, less overfit.
+        Using FEATURE_EXTRACTION avoids the prepare_inputs_for_generation check, but
+        causes a different issue: if the text encoder LoRA was applied first
+        (self.encoder is already a PeftModel), PEFT detects a nested model and raises
+        a conflict error when wrapping self.decoder.
 
-        Note: task_type=SEQ_2_SEQ_LM targets both self-attn and cross-attn
-        in the decoder, which is exactly what we want (cross-attn learns vision
-        fusion; self-attn learns answer generation).
+        Fix: use LoraModel() directly. It injects the low-rank adapter weights
+        in-place into the decoder's attention layers without creating any PeftModel
+        wrapper, so there is no nesting conflict and no prepare_inputs_for_generation
+        requirement. The LoRA math (W + BA) is identical either way.
         """
         try:
-            from peft import LoraConfig, get_peft_model, TaskType
+            from peft import LoraConfig
+            from peft.tuners.lora import LoraModel
 
-            print(f"  [LoRA] Injecting into BARTpho decoder (r={self.decoder_lora_r})...")
+            print(f"  [LoRA] Injecting into BARTpho decoder manually (r={self.decoder_lora_r})...")
 
             lora_config = LoraConfig(
                 r=self.decoder_lora_r,
                 lora_alpha=self.decoder_lora_alpha,
                 lora_dropout=self.decoder_lora_dropout,
-                # Target both self-attention and cross-attention proj layers
                 target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
                 bias="none",
-                task_type="SEQ_2_SEQ_LM"  # Decoder is used as feature extractor here (lm_head is separate)
+                task_type="FEATURE_EXTRACTION",
             )
 
-            self.decoder = get_peft_model(self.decoder, lora_config)
+            # LoraModel injects adapter layers in-place into the decoder submodules.
+            # We then unwrap back to the raw decoder (which now contains lora_ layers)
+            # so self.decoder remains a plain nn.Module — no PeftModel wrapper.
+            lora_model = LoraModel(self.decoder, lora_config, adapter_name="default")
+            self.decoder = lora_model.model
 
-            trainable_params = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-            total_params = sum(p.numel() for p in self.decoder.parameters())
-            print(f"  [LoRA] Decoder - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+            # Freeze everything; freeze_pretrained() will re-enable lora_ params.
+            for param in self.decoder.parameters():
+                param.requires_grad = False
+            for name, param in self.decoder.named_parameters():
+                if "lora_" in name:
+                    param.requires_grad = True
+
+            trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in self.decoder.parameters())
+            print(f"  [LoRA] Decoder - Trainable: {trainable:,} ({trainable/total*100:.2f}%) | Total: {total:,}")
 
         except ImportError:
             print(f"  ⚠️  PEFT library not found!")
@@ -956,22 +969,18 @@ class DeterministicVQA(nn.Module):
         
         # Decoder
         if self.use_decoder_lora:
-            # LoRA: freeze base decoder, re-enable only LoRA adapter params
+            # LoRA was injected via LoraModel (NOT get_peft_model), so self.decoder is
+            # a plain nn.Module with lora_A / lora_B submodules embedded inside.
+            # Detect LoRA params by name — no isinstance(PeftModel) check needed.
             for param in self.decoder.parameters():
                 param.requires_grad = False
-            try:
-                from peft import PeftModel
-                if isinstance(self.decoder, PeftModel):
-                    for name, param in self.decoder.named_parameters():
-                        if 'lora_' in name:
-                            param.requires_grad = True
-                    trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-                    print(f"[Freeze] Decoder: FROZEN (base) + PEFT LoRA TRAINABLE ({trainable/1e6:.2f}M params)")
-                    print(f"         ✅ ~6% of full decoder params — less overfit on 10K samples")
-                else:
-                    print(f"[Freeze] Decoder: LoRA requested but PEFT not applied")
-            except ImportError:
-                print(f"[Freeze] Decoder: LoRA requested but PEFT not installed")
+            for name, param in self.decoder.named_parameters():
+                if 'lora_' in name:
+                    param.requires_grad = True
+            trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
+            total = sum(p.numel() for p in self.decoder.parameters())
+            print(f"[Freeze] Decoder: FROZEN (base) + LoRA TRAINABLE ({trainable/1e6:.2f}M / {total/1e6:.1f}M params)")
+            print(f"         ✅ ~{trainable/total*100:.1f}% of full decoder — less overfit on 10K samples")
             # lm_head is always trained (small linear layer, essential for generation)
             for param in self.lm_head.parameters():
                 param.requires_grad = True
