@@ -875,7 +875,7 @@ class DeterministicVQA(nn.Module):
                 # Target both self-attention and cross-attention proj layers
                 target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
                 bias="none",
-                task_type="FEATURE_EXTRACTION"  # Decoder is used as feature extractor here (lm_head is separate)
+                task_type="SEQ_2_SEQ_LM"  # Decoder is used as feature extractor here (lm_head is separate)
             )
 
             self.decoder = get_peft_model(self.decoder, lora_config)
