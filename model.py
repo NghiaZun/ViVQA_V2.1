@@ -397,8 +397,9 @@ class DeterministicVQAOutput:
     type_logits: Optional[torch.Tensor] = None  # 🔥 NEW: Type predictions [B, num_types]
     attention_weights: Optional[torch.Tensor] = None
     gate_stats: Optional[dict] = None  # Vision gate statistics
-    vision_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Vision distillation loss
-    text_kd_loss: Optional[torch.Tensor] = None  # 🔥🔥🔥 Text distillation loss
+    vision_kd_loss: Optional[torch.Tensor] = None  # kept for compat (unused)
+    text_kd_loss: Optional[torch.Tensor] = None    # kept for compat (unused)
+    contrastive_loss: Optional[torch.Tensor] = None  # 🔥 Cross-modal contrastive loss
 
 
 # ============================================================================
@@ -443,18 +444,17 @@ class DeterministicVQA(nn.Module):
         use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
         type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
         type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
-        # 🔥🔥🔥 ONLINE DISTILLATION 🔥🔥🔥
-        use_distillation: bool = False,  # Enable online knowledge distillation
-        distill_vision: bool = True,     # Use vision KD component (SigLIP-SO400M teacher)
-        distill_text: bool = True,       # Use text KD component (PhoBERT-large teacher)
-        vision_teacher_name: str = 'google/siglip-so400m-patch14-384',  # Vision teacher (SigLIP-SO400M)
-        text_teacher_name: str = 'vinai/phobert-large',  # Text teacher (PhoBERT-large)
-        distill_alpha: float = 0.5,  # Distillation weight (0.5 = 50% CE + 50% KD)
-        # 🔥 Decoder LoRA (recommended for ~10K samples — replaces full decoder unfreeze)
-        use_decoder_lora: bool = False,  # Use LoRA for BARTpho decoder (freeze base, train ~5M adapters)
-        decoder_lora_r: int = 16,        # LoRA rank for decoder (16 recommended)
-        decoder_lora_alpha: int = 32,    # LoRA alpha scaling
-        decoder_lora_dropout: float = 0.05  # Lower dropout for decoder (generation task)
+        # 🔥🔥🔥 ONLINE DISTILLATION (deprecated — removed, kept for CLI compat)
+        use_distillation: bool = False,
+        distill_vision: bool = True,
+        distill_text: bool = True,
+        vision_teacher_name: str = 'google/siglip-so400m-patch14-384',
+        text_teacher_name: str = 'vinai/phobert-large',
+        distill_alpha: float = 0.5,
+        # 🔥 Cross-Modal Contrastive Alignment Loss
+        use_contrastive: bool = False,   # Enable InfoNCE vision↔text alignment
+        contrastive_lambda: float = 0.1, # λ_c weight (recommended: 0.05–0.15)
+        contrastive_temp: float = 0.07   # Temperature τ (0.07 = SimCLR default)
     ):
         super().__init__()
         
@@ -465,11 +465,16 @@ class DeterministicVQA(nn.Module):
         print(f"  🔥 Fusion type: {fusion_type}")
         print(f"  🔥 Vision Encoder: {vision_model_name}")
         
-        # Store distillation config
-        self.use_distillation = use_distillation
-        self.distill_vision = distill_vision
-        self.distill_text = distill_text
+        # Store distillation config (deprecated — stubs kept for CLI compat)
+        self.use_distillation = False   # KD removed — proven ineffective
+        self.distill_vision = False
+        self.distill_text = False
         self.distill_alpha = distill_alpha
+
+        # 🔥 Cross-modal contrastive alignment config
+        self.use_contrastive = use_contrastive
+        self.contrastive_lambda = contrastive_lambda
+        self.contrastive_temp = contrastive_temp
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
         self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
@@ -488,12 +493,6 @@ class DeterministicVQA(nn.Module):
         self.text_lora_r = text_lora_r  # 🔥 NEW
         self.text_lora_alpha = text_lora_alpha  # 🔥 NEW
         self.text_lora_dropout = text_lora_dropout  # 🔥 NEW
-
-        # 🔥 Decoder LoRA settings
-        self.use_decoder_lora = use_decoder_lora
-        self.decoder_lora_r = decoder_lora_r
-        self.decoder_lora_alpha = decoder_lora_alpha
-        self.decoder_lora_dropout = decoder_lora_dropout
         
         # 🔥 Vision gating (will be initialized after knowing bart_hidden_dim)
         self.use_vision_gate = use_vision_gate
@@ -567,11 +566,6 @@ class DeterministicVQA(nn.Module):
         if use_text_lora:
             self._inject_lora_to_text_encoder()
             print(f"  🔥 Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}, dropout={text_lora_dropout}")
-
-        # 🔥 Add LoRA to decoder if requested
-        if use_decoder_lora:
-            self._inject_lora_to_decoder()
-            print(f"  🔥 Decoder LoRA: r={decoder_lora_r}, alpha={decoder_lora_alpha}, dropout={decoder_lora_dropout}")
         
         # Vision position embeddings (calculate dynamically based on model)
         # SigLIP & DINOv2: 224x224 image with patch_size=16 → 14x14 = 196 patches
@@ -590,6 +584,28 @@ class DeterministicVQA(nn.Module):
             nn.Dropout(dropout)
         )
         print(f"  ✅ Vision projection: {vision_hidden_dim} → {bart_hidden_dim}")
+        
+        # 🔥 Cross-Modal Contrastive Alignment: projection heads
+        # Both heads project into a shared contrastive space (128D follows SimCLR/MoCo convention:
+        # small enough to prevent dimensional collapse, large enough for InfoNCE discrimination).
+        # They are applied AFTER fusion so the contrastive objective directly supervises the
+        # fused representations, not the raw encoder outputs.
+        _contrastive_dim = 128
+        if use_contrastive:
+            self.vision_contrastive_head = nn.Sequential(
+                nn.Linear(bart_hidden_dim, bart_hidden_dim),
+                nn.GELU(),
+                nn.Linear(bart_hidden_dim, _contrastive_dim)
+            )
+            self.text_contrastive_head = nn.Sequential(
+                nn.Linear(bart_hidden_dim, bart_hidden_dim),
+                nn.GELU(),
+                nn.Linear(bart_hidden_dim, _contrastive_dim)
+            )
+            print(f"  🔥 Cross-Modal Contrastive: λ={contrastive_lambda}, τ={contrastive_temp}, proj_dim={_contrastive_dim}")
+        else:
+            self.vision_contrastive_head = None
+            self.text_contrastive_head = None
         
         # Flamingo-style fusion with configurable direction
         self.fusion_type = fusion_type
@@ -843,68 +859,10 @@ class DeterministicVQA(nn.Module):
             print(f"      Install with: pip install peft")
             print(f"      Text encoder will remain frozen unless you unfreeze layers manually")
             raise RuntimeError("PEFT required for text LoRA. Install: pip install peft")
-
-    def _inject_lora_to_decoder(self):
-        """
-        Inject LoRA into BARTpho decoder manually via LoraModel (NOT get_peft_model).
-
-        Why NOT get_peft_model?
-        -----------------------
-        get_peft_model() wraps the module in a PeftModel subclass. When task_type is
-        SEQ_2_SEQ_LM, PeftModel.__init__ tries to call
-        self.base_model.prepare_inputs_for_generation — a method that only exists on
-        the FULL MBartForConditionalGeneration, not on MBartDecoder alone.
-
-        Using FEATURE_EXTRACTION avoids the prepare_inputs_for_generation check, but
-        causes a different issue: if the text encoder LoRA was applied first
-        (self.encoder is already a PeftModel), PEFT detects a nested model and raises
-        a conflict error when wrapping self.decoder.
-
-        Fix: use LoraModel() directly. It injects the low-rank adapter weights
-        in-place into the decoder's attention layers without creating any PeftModel
-        wrapper, so there is no nesting conflict and no prepare_inputs_for_generation
-        requirement. The LoRA math (W + BA) is identical either way.
-        """
-        try:
-            from peft import LoraConfig
-            from peft.tuners.lora import LoraModel
-
-            print(f"  [LoRA] Injecting into BARTpho decoder manually (r={self.decoder_lora_r})...")
-
-            lora_config = LoraConfig(
-                r=self.decoder_lora_r,
-                lora_alpha=self.decoder_lora_alpha,
-                lora_dropout=self.decoder_lora_dropout,
-                target_modules=["q_proj", "k_proj", "v_proj", "out_proj"],
-                bias="none",
-                task_type="FEATURE_EXTRACTION",
-            )
-
-            # LoraModel injects adapter layers in-place into the decoder submodules.
-            # We then unwrap back to the raw decoder (which now contains lora_ layers)
-            # so self.decoder remains a plain nn.Module — no PeftModel wrapper.
-            lora_model = LoraModel(self.decoder, lora_config, adapter_name="default")
-            self.decoder = lora_model.model
-
-            # Freeze everything; freeze_pretrained() will re-enable lora_ params.
-            for param in self.decoder.parameters():
-                param.requires_grad = False
-            for name, param in self.decoder.named_parameters():
-                if "lora_" in name:
-                    param.requires_grad = True
-
-            trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-            total = sum(p.numel() for p in self.decoder.parameters())
-            print(f"  [LoRA] Decoder - Trainable: {trainable:,} ({trainable/total*100:.2f}%) | Total: {total:,}")
-
-        except ImportError:
-            print(f"  ⚠️  PEFT library not found!")
-            print(f"      Install with: pip install peft")
-            raise RuntimeError("PEFT required for decoder LoRA. Install: pip install peft")
-
+    
     def freeze_pretrained(
-        self,
-        unfreeze_encoder_layers: int = 3,
+        self, 
+        unfreeze_encoder_layers: int = 3, 
         unfreeze_decoder: bool = True
     ):
         """
@@ -968,30 +926,12 @@ class DeterministicVQA(nn.Module):
             print(f"[Freeze] Text encoder: FULLY FROZEN")
         
         # Decoder
-        if self.use_decoder_lora:
-            # LoRA was injected via LoraModel (NOT get_peft_model), so self.decoder is
-            # a plain nn.Module with lora_A / lora_B submodules embedded inside.
-            # Detect LoRA params by name — no isinstance(PeftModel) check needed.
-            for param in self.decoder.parameters():
-                param.requires_grad = False
-            for name, param in self.decoder.named_parameters():
-                if 'lora_' in name:
-                    param.requires_grad = True
-            trainable = sum(p.numel() for p in self.decoder.parameters() if p.requires_grad)
-            total = sum(p.numel() for p in self.decoder.parameters())
-            print(f"[Freeze] Decoder: FROZEN (base) + LoRA TRAINABLE ({trainable/1e6:.2f}M / {total/1e6:.1f}M params)")
-            print(f"         ✅ ~{trainable/total*100:.1f}% of full decoder — less overfit on 10K samples")
-            # lm_head is always trained (small linear layer, essential for generation)
-            for param in self.lm_head.parameters():
-                param.requires_grad = True
-            print(f"[Freeze] LM head: UNFROZEN (always)")
-        elif unfreeze_decoder:
+        if unfreeze_decoder:
             for param in self.decoder.parameters():
                 param.requires_grad = True
             for param in self.lm_head.parameters():
                 param.requires_grad = True
-            print(f"[Freeze] Decoder + LM head: FULLY UNFROZEN")
-            print(f"         ⚠️  Full unfreeze on ~10K samples may overfit. Consider --use_decoder_lora")
+            print(f"[Freeze] Decoder + LM head: UNFROZEN")
         else:
             for param in self.decoder.parameters():
                 param.requires_grad = False
@@ -1121,7 +1061,107 @@ class DeterministicVQA(nn.Module):
             text_kd_loss = zero
 
         return vision_kd_loss, text_kd_loss
-    
+
+    def compute_contrastive_loss(
+        self,
+        fused_vision: torch.Tensor,  # [B, num_patches, D] — fused vision after Flamingo
+        text_cls: torch.Tensor,       # [B, D]              — BARTpho CLS (LoRA-adapted)
+        labels: Optional[torch.Tensor] = None,  # [B, seq_len] — for false-negative masking
+    ) -> torch.Tensor:
+        """
+        Cross-Modal Contrastive Alignment Loss (InfoNCE / NT-Xent style).
+
+        Goal
+        ----
+        Force fused_vision and text_cls to be semantically aligned:
+          - Same sample (i, i) → high cosine similarity   (positive pair)
+          - Different samples (i, j≠i) → low similarity   (negatives)
+
+        This directly addresses the English-vision / Vietnamese-text alignment gap
+        that cross-entropy alone cannot close.
+
+        Design choices
+        ---------------
+        • Align FUSED vision (post-Flamingo) not raw patches:
+            After Flamingo cross-attention, vision has attended to Vietnamese text
+            → the Flamingo gates are directly responsible for alignment quality.
+
+        • Mean-pool vision → single vector:
+            [B, 196, D] → [B, D]. More stable than CLS-only after fusion layers.
+
+        • False-negative masking (critical for PK Sampling + Vietnamese VQA):
+            PK Sampling puts K samples of the same type in every batch.
+            Many of them share the same answer (e.g. 8 COUNT samples all answer "hai").
+            Without masking, these are penalised as negatives → noisy gradient.
+            → We detect same-answer pairs via token overlap (labels) and mask them
+              out of the denominator, treating them as "neither positive nor negative".
+
+        • Temperature τ=0.07 (SimCLR default).
+
+        Args
+        ----
+        fused_vision : [B, P, D]       — vision features post-Flamingo fusion
+        text_cls     : [B, D]          — BARTpho encoder CLS token
+        labels       : [B, seq_len]    — token ids of answers (-100 = padding)
+                        If provided, enables false-negative masking.
+
+        Returns
+        -------
+        loss : scalar — symmetric InfoNCE loss (image→text + text→image) / 2
+        """
+        B = text_cls.size(0)
+        device = text_cls.device
+
+        # 1. Mean-pool vision patches → [B, D]
+        v = fused_vision.mean(dim=1)  # [B, D]
+        t = text_cls                   # [B, D]
+
+        # 2. Project into shared contrastive space [B, 128]
+        v = self.vision_contrastive_head(v)   # [B, 128]
+        t = self.text_contrastive_head(t)     # [B, 128]
+
+        # 3. L2-normalise (cosine similarity becomes dot product)
+        v = F.normalize(v, dim=-1)
+        t = F.normalize(t, dim=-1)
+
+        # 4. Similarity matrix [B, B] scaled by temperature
+        logits = torch.matmul(v, t.T) / self.contrastive_temp  # [B, B]
+
+        # 5. False-negative mask: samples sharing the same answer should NOT
+        #    be treated as negatives — mask them out of the CE denominator.
+        #    mask[i, j] = True  → pair (i,j) is a false negative → ignore
+        #    mask[i, i] = False → diagonal is always the positive (kept)
+        fn_mask = None
+        if labels is not None:
+            # Extract valid answer tokens (ignore -100 padding)
+            # Build a binary fingerprint per sample: which token ids appear?
+            # Two samples "share an answer" if their valid token sets overlap.
+            valid_tokens = []
+            for lab in labels:
+                toks = lab[lab != -100]
+                valid_tokens.append(set(toks.cpu().tolist()))
+
+            # [B, B] bool: True where i≠j AND answer sets overlap
+            fn_mask = torch.zeros(B, B, dtype=torch.bool, device=device)
+            for i in range(B):
+                for j in range(B):
+                    if i != j and len(valid_tokens[i] & valid_tokens[j]) > 0:
+                        fn_mask[i, j] = True
+
+        # 6. Apply false-negative mask by setting those logits to -inf
+        #    → they contribute 0 to the softmax denominator
+        if fn_mask is not None and fn_mask.any():
+            logits = logits.masked_fill(fn_mask, float('-inf'))
+
+        # 7. Positive targets = diagonal (i, i)
+        targets = torch.arange(B, device=device)
+
+        # 8. Symmetric InfoNCE: vision→text + text→image
+        loss_v2t = F.cross_entropy(logits,   targets)
+        loss_t2v = F.cross_entropy(logits.T, targets)
+
+        return (loss_v2t + loss_t2v) / 2.0
+
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1298,14 +1338,15 @@ class DeterministicVQA(nn.Module):
         else:
             answer_logits = base_answer_logits
         
-        # 7. 🔥 MULTI-TASK LOSS: Type + Answer + Distillation
+        # 7. 🔥 MULTI-TASK LOSS: CE + Type + Contrastive
         answer_loss = None
         total_loss = None
         vision_kd_loss = None
         text_kd_loss = None
-        
+        contrastive_loss = None
+
         if labels is not None:
-            # (A) Answer generation loss
+            # (A) Answer generation loss (weighted CE + label smoothing)
             answer_loss = F.cross_entropy(
                 answer_logits.view(-1, answer_logits.size(-1)),
                 labels.view(-1),
@@ -1313,56 +1354,41 @@ class DeterministicVQA(nn.Module):
                 weight=answer_weights if answer_weights is not None else None,
                 label_smoothing=0.1
             )
-            
-            # (B) 🔥🔥🔥 KNOWLEDGE DISTILLATION 🔥🔥🔥
-            if self.use_distillation:
-                # Only extract what's needed based on which KD components are active
-                teacher_vision_patches = (
-                    self._extract_teacher_vision_features(images_384)
-                    if self.distill_vision and images_384 is not None else None
-                )
-                teacher_text_features = (
-                    self._extract_teacher_text_features(raw_questions)
-                    if self.distill_text and raw_questions is not None else None
-                )
-                
-                # Compute KD losses (returns 0 for disabled components)
-                vision_kd_loss, text_kd_loss = self.compute_distillation_loss(
-                    student_vision_patches=raw_patch_tokens,  # RAW encoder output [B, 196, vision_hidden] — pre vision_proj
-                    student_text_features=text_cls,           # Question CLS [B, bart_hidden]
-                    teacher_vision_patches=teacher_vision_patches,
-                    teacher_text_features=teacher_text_features
-                )
-                
-                # Combine active KD losses with equal weight
-                n_active = int(self.distill_vision) + int(self.distill_text)
-                kd_loss = (vision_kd_loss + text_kd_loss) / max(n_active, 1)
 
-                # Hinton et al. 2015: L = (1-α)*L_CE + α*L_KD
-                # α controls how much the student is pulled toward teacher features.
-                # KD loss is already bounded [0,1] for the cosine term + MSE term,
-                # so no additional rescaling is needed — it won't dominate CE.
-                answer_loss_with_kd = (1.0 - self.distill_alpha) * answer_loss + self.distill_alpha * kd_loss
-            else:
-                answer_loss_with_kd = answer_loss
-            
-            # (C) Multi-task loss: Type (auxiliary) + Answer (main) + KD
+            # (B) 🔥 Cross-Modal Contrastive Alignment Loss
+            # Aligns fused vision ↔ Vietnamese text CLS in a shared 128D space.
+            # Applied only during training (labels is not None) and only when
+            # batch_size > 1 (need at least one negative per anchor).
+            if self.use_contrastive and self.vision_contrastive_head is not None and batch_size > 1:
+                contrastive_loss = self.compute_contrastive_loss(
+                    fused_vision=vision_for_decoder,  # post-Flamingo, post-gating
+                    text_cls=text_cls,                # LoRA-adapted CLS
+                    labels=labels                     # for false-negative masking
+                )
+
+            # (C) Multi-task total loss: Answer + Type (aux) + Contrastive (aux)
+            total_loss = answer_loss
+
             if type_loss is not None:
-                # Weight type loss lower (auxiliary signal, not primary task)
-                # λ_type = 0.2 means type contributes 20% to total loss
-                total_loss = answer_loss_with_kd + 0.2 * type_loss
-            else:
-                total_loss = answer_loss_with_kd
-        
+                # λ_type = 0.2: type head is auxiliary — keep it secondary
+                total_loss = total_loss + 0.2 * type_loss
+
+            if contrastive_loss is not None:
+                # λ_c (default 0.1): contrastive is auxiliary alignment signal.
+                # Scale is chosen so that at epoch 0 (contrastive ≈ log(B) ≈ 3.4 for B=32)
+                # the term contributes ~0.34 vs CE ≈ 3–5, i.e. ~7–10% of total loss.
+                total_loss = total_loss + self.contrastive_lambda * contrastive_loss
+
         return DeterministicVQAOutput(
             answer_logits=answer_logits,
             answer_loss=answer_loss,
-            type_loss=type_loss,  # 🔥 NEW
+            type_loss=type_loss,
             total_loss=total_loss,
-            type_logits=type_logits,  # 🔥 NEW
+            type_logits=type_logits,
             gate_stats=gate_stats,
-            vision_kd_loss=vision_kd_loss,  # 🔥🔥🔥 NEW
-            text_kd_loss=text_kd_loss  # 🔥🔥🔥 NEW
+            vision_kd_loss=vision_kd_loss,    # always None (KD removed)
+            text_kd_loss=text_kd_loss,         # always None (KD removed)
+            contrastive_loss=contrastive_loss  # 🔥 new
         )
     
     @torch.inference_mode()  # Faster than @torch.no_grad()!

@@ -467,7 +467,9 @@ def run_one_epoch_deterministic(
                     postfix['vkd'] = f"{outputs.vision_kd_loss.item():.3f}"
                 if outputs.text_kd_loss is not None:
                     postfix['tkd'] = f"{outputs.text_kd_loss.item():.3f}"
-                
+                # 🔥 Contrastive loss display
+                if outputs.contrastive_loss is not None:
+                    postfix['ctr'] = f"{outputs.contrastive_loss.item():.3f}"
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
                     postfix.update({
@@ -720,18 +722,6 @@ def main():
     parser.add_argument('--text_lora_dropout', type=float, default=0.1,
                        help='LoRA dropout for text encoder (default: 0.1)')
 
-    # 🔥 Decoder Adaptation (LoRA recommended over full unfreeze for ~10K samples)
-    parser.add_argument('--use_decoder_lora', action='store_true',
-                       help='Use LoRA for BARTpho decoder (RECOMMENDED: ~5M params vs 80M full unfreeze). '
-                            'Freeze base decoder, only train low-rank adapters. '
-                            'Reduces overfitting and text shortcut on small datasets.')
-    parser.add_argument('--decoder_lora_r', type=int, default=16,
-                       help='LoRA rank for decoder (default: 16)')
-    parser.add_argument('--decoder_lora_alpha', type=int, default=32,
-                       help='LoRA alpha scaling for decoder (default: 32)')
-    parser.add_argument('--decoder_lora_dropout', type=float, default=0.05,
-                       help='LoRA dropout for decoder (default: 0.05, lower than encoder)')
-
     # 🔥 Vision Dependency (combat text shortcut)
     parser.add_argument('--use_vision_gate', action='store_true',
                        help='Enable learnable vision gating (boost vision importance)')
@@ -771,6 +761,16 @@ def main():
                        help='Text teacher model (default: PhoBERT-large)')
     parser.add_argument('--distill_alpha', type=float, default=0.5,
                        help='Distillation weight: CE + α*KD_normalized (default: 0.5, recommended: 0.1-0.2)')
+    
+    # 🔥 Cross-Modal Contrastive Alignment Loss
+    parser.add_argument('--use_contrastive', action='store_true',
+                       help='Enable cross-modal contrastive alignment loss (InfoNCE fused_vision ↔ text_cls). '
+                            'Addresses English-vision / Vietnamese-text alignment gap. '
+                            'Recommended: --contrastive_lambda 0.1 --contrastive_temp 0.07')
+    parser.add_argument('--contrastive_lambda', type=float, default=0.1,
+                       help='Weight λ_c for contrastive loss (default: 0.1, range: 0.05–0.15)')
+    parser.add_argument('--contrastive_temp', type=float, default=0.07,
+                       help='Temperature τ for InfoNCE (default: 0.07, SimCLR standard)')
     
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
@@ -867,12 +867,12 @@ def main():
         print(f"  🔥 Vision LoRA: r={args.vision_lora_r}, alpha={args.vision_lora_alpha}, dropout={args.vision_lora_dropout}")
     if args.use_text_lora:
         print(f"  🔥 Text LoRA: r={args.text_lora_r}, alpha={args.text_lora_alpha}, dropout={args.text_lora_dropout}")
-    if args.use_decoder_lora:
-        print(f"  🔥 Decoder LoRA: r={args.decoder_lora_r}, alpha={args.decoder_lora_alpha}, dropout={args.decoder_lora_dropout} (~5M params vs 80M full unfreeze)")
     if args.answer_weights:
         print(f"  🔥 Answer-aware loss: {args.answer_weights}")
     if args.use_type_loss:
         print(f"  🔥 Type-conditional loss: 1.5x counting, 1.4x location, 1.3x color")
+    if args.use_contrastive:
+        print(f"  🔥 Contrastive alignment: λ={args.contrastive_lambda}, τ={args.contrastive_temp}")
     print(f"  Output dir: {output_dir}")
     print(f"  Random seed: {args.seed}")
     print("="*80 + "\n")
@@ -1076,11 +1076,9 @@ def main():
         vision_teacher_name=args.vision_teacher,  # 🔥🔥🔥
         text_teacher_name=args.text_teacher,  # 🔥🔥🔥
         distill_alpha=args.distill_alpha,  # 🔥🔥🔥
-        # Decoder LoRA args
-        use_decoder_lora=args.use_decoder_lora,
-        decoder_lora_r=args.decoder_lora_r,
-        decoder_lora_alpha=args.decoder_lora_alpha,
-        decoder_lora_dropout=args.decoder_lora_dropout
+        use_contrastive=args.use_contrastive,          # 🔥 Cross-modal contrastive
+        contrastive_lambda=args.contrastive_lambda,    # 🔥
+        contrastive_temp=args.contrastive_temp         # 🔥
     ).to(device)
     
     model.freeze_pretrained(
