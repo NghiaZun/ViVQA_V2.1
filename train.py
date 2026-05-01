@@ -484,17 +484,27 @@ def run_one_epoch_deterministic(
 
                 # ── SCST backward (accumulated alongside CE gradients) ────────
                 if use_scst and current_epoch >= scst_start_epoch:
-                    # Use original (non-dropped) pixel_values — dropout must not affect SCST rollouts
                     _pv = pixel_values_orig
-                    _greedy = model.generate(_pv, input_ids, attention_mask, max_length=10, num_beams=1)
-                    _sample = model.generate_sample(_pv, input_ids, attention_mask, max_length=10, temperature=scst_sample_temp)
+                    # Sample in eval mode + no_grad:
+                    #   1. Disables dropout so sampled sequences aren't noise-corrupted
+                    #   2. Avoids building a useless 10-step autoregressive computation graph
+                    model.eval()
+                    with torch.no_grad():
+                        _greedy = model.generate(_pv, input_ids, attention_mask, max_length=10, num_beams=1)
+                        _sample = model.generate_sample(_pv, input_ids, attention_mask, max_length=10, temperature=scst_sample_temp)
+                    model.train()
                     _adv = []
                     for _i in range(len(_greedy)):
                         _lbl = labels[_i][labels[_i] != -100].cpu().tolist()
                         _gt  = _decode_gt(model.tokenizer, _lbl)
                         _adv.append(compute_f1_score(_sample[_i], _gt) - compute_f1_score(_greedy[_i], _gt))
                     _advantage = torch.tensor(_adv, dtype=torch.float32, device=device)
-                    if _advantage.abs().max() > 1e-6:
+                    # Positive-only advantage: only reward samples strictly better than greedy.
+                    # Negative advantage penalizes the whole sampled sequence including any
+                    # correct prefix tokens (e.g. "màu đen" in "màu đen ám ván ván") which
+                    # collapses EOS probability and creates repetition loops.
+                    _pos_mask = (_advantage > 1e-3)
+                    if _pos_mask.any():
                         _sample_enc = model.tokenizer(
                             _sample, truncation=True, padding='max_length',
                             max_length=10, return_tensors='pt'
@@ -503,7 +513,8 @@ def run_one_epoch_deterministic(
                         _sample_ids[_sample_ids == model.tokenizer.pad_token_id] = -100
                         with autocast('cuda', enabled=(scaler is not None)):
                             _log_prob = model.compute_seq_logprob(_pv, input_ids, attention_mask, _sample_ids)
-                            _scst_loss = -(_advantage.detach() * _log_prob).mean()
+                            _masked_adv = (_advantage * _pos_mask.float()).detach()
+                            _scst_loss = -(_masked_adv * _log_prob).mean()
                             _scst_scaled = scst_lambda * _scst_loss / gradient_accumulation_steps
                         if scaler is not None:
                             scaler.scale(_scst_scaled).backward()
