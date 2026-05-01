@@ -454,7 +454,8 @@ class DeterministicVQA(nn.Module):
         # 🔥 Cross-Modal Contrastive Alignment Loss
         use_contrastive: bool = False,   # Enable InfoNCE vision↔text alignment
         contrastive_lambda: float = 0.1, # λ_c weight (recommended: 0.05–0.15)
-        contrastive_temp: float = 0.07   # Temperature τ (0.07 = SimCLR default)
+        contrastive_temp: float = 0.07,  # Temperature τ (0.07 = SimCLR default)
+        label_smoothing: float = 0.1
     ):
         super().__init__()
         
@@ -475,6 +476,7 @@ class DeterministicVQA(nn.Module):
         self.use_contrastive = use_contrastive
         self.contrastive_lambda = contrastive_lambda
         self.contrastive_temp = contrastive_temp
+        self.label_smoothing = label_smoothing
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
         self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
@@ -1133,19 +1135,21 @@ class DeterministicVQA(nn.Module):
         #    mask[i, i] = False → diagonal is always the positive (kept)
         fn_mask = None
         if labels is not None:
-            # Extract valid answer tokens (ignore -100 padding)
-            # Build a binary fingerprint per sample: which token ids appear?
-            # Two samples "share an answer" if their valid token sets overlap.
+            # Exact-match false-negative masking: only mask pairs whose full
+            # answer token sequences are identical. Any-token-overlap is too
+            # aggressive for BartPho syllable tokenisation (common tokens like
+            # "có", "một", "hai" appear in most answers and would collapse the
+            # effective batch to size 1, making ctr → 0).
             valid_tokens = []
             for lab in labels:
-                toks = lab[lab != -100]
-                valid_tokens.append(set(toks.cpu().tolist()))
+                toks = tuple(lab[lab != -100].cpu().tolist())
+                valid_tokens.append(toks)
 
-            # [B, B] bool: True where i≠j AND answer sets overlap
+            # [B, B] bool: True where i≠j AND full answer sequence is identical
             fn_mask = torch.zeros(B, B, dtype=torch.bool, device=device)
             for i in range(B):
                 for j in range(B):
-                    if i != j and len(valid_tokens[i] & valid_tokens[j]) > 0:
+                    if i != j and valid_tokens[i] == valid_tokens[j]:
                         fn_mask[i, j] = True
 
         # 6. Apply false-negative mask by setting those logits to -inf
@@ -1352,7 +1356,7 @@ class DeterministicVQA(nn.Module):
                 labels.view(-1),
                 ignore_index=-100,
                 weight=answer_weights if answer_weights is not None else None,
-                label_smoothing=0.1
+                label_smoothing=self.label_smoothing
             )
 
             # (B) 🔥 Cross-Modal Contrastive Alignment Loss
@@ -1391,6 +1395,14 @@ class DeterministicVQA(nn.Module):
             contrastive_loss=contrastive_loss  # 🔥 new
         )
     
+    def _decode_seq(self, token_ids) -> str:
+        """Decode token ids, explicitly stripping decoder_start/BOS tokens that
+        BartphoTokenizer may not include in all_special_ids (causing 'ôr' artifacts)."""
+        ids = [t for t in token_ids.tolist()
+               if t != self.config.decoder_start_token_id
+               and t != self.tokenizer.bos_token_id]
+        return self.tokenizer.decode(ids, skip_special_tokens=True).strip()
+
     @torch.inference_mode()  # Faster than @torch.no_grad()!
     def generate(
         self,
@@ -1569,11 +1581,7 @@ class DeterministicVQA(nn.Module):
                     break
 
             best_seqs = beam_seqs[:, 0, :]  # beam có score cao nhất
-            answers = [
-                self.tokenizer.decode(best_seqs[i], skip_special_tokens=True)
-                for i in range(batch_size)
-            ]
-            return answers
+            return [self._decode_seq(best_seqs[i]) for i in range(batch_size)]
 
         else:
             # ── Greedy decoding với KV-cache (num_beams=1, nhanh nhất) ────
@@ -1618,12 +1626,118 @@ class DeterministicVQA(nn.Module):
                 if done.all():
                     break
 
-            answers = []
-            for i in range(batch_size):
-                answer = self.tokenizer.decode(generated_ids[i], skip_special_tokens=True)
-                answers.append(answer)
-            return answers
+            return [self._decode_seq(generated_ids[i]) for i in range(batch_size)]
 
+    @torch.inference_mode()
+    def generate_sample(
+        self,
+        pixel_values: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        max_length: int = 10,
+        temperature: float = 1.0,
+    ):
+        """
+        Autoregressive sampling decode for SCST. Returns List[str].
+        Same encoding pipeline as generate(); only the token selection differs
+        (multinomial instead of argmax).
+        """
+        batch_size = pixel_values.size(0)
+        device = pixel_values.device
+
+        # ── Encode (identical to generate()) ─────────────────────────────────
+        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
+        patch_tokens = vision_outputs.last_hidden_state
+        if patch_tokens.size(1) > self.num_patches:
+            patch_tokens = patch_tokens[:, 1:, :]
+        if self.vision_adapter is not None:
+            patch_tokens = self.vision_adapter(patch_tokens, type_ids=None)
+        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+        vision_features = self.vision_proj(patch_tokens)
+
+        text_features = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
+        text_cls = text_features[:, 0, :]
+        predicted_types = None
+        if self.use_type_task and self.type_head is not None:
+            predicted_types = torch.argmax(self.type_head(text_cls), dim=-1)
+
+        fused_vision, fused_text = vision_features, text_features
+        for layer in self.flamingo_fusion:
+            fused_vision, fused_text = layer(fused_vision, fused_text, attention_mask)
+
+        gated_vision, _ = self.vision_gating(fused_vision, fused_text, type_ids=predicted_types) \
+            if self.use_vision_gate else (fused_vision, None)
+
+        encoder_hidden_states = torch.cat([gated_vision, fused_text], dim=1)
+        encoder_attention_mask = torch.cat([
+            torch.ones(batch_size, gated_vision.size(1), device=device),
+            attention_mask
+        ], dim=1)
+
+        # ── Sampling decode ───────────────────────────────────────────────────
+        generated_ids = torch.full(
+            (batch_size, 1), self.config.decoder_start_token_id,
+            dtype=torch.long, device=device
+        )
+        past_key_values = None
+        done = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
+        for _ in range(max_length):
+            cur_input = generated_ids if past_key_values is None else generated_ids[:, -1:]
+            dec_out = self.decoder(
+                input_ids=cur_input,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=True,
+            )
+            past_key_values = dec_out.past_key_values
+            base_logits = self.lm_head(dec_out.last_hidden_state[:, -1:, :])
+            logits = self.logits_bias(base_logits, predicted_types) \
+                if (self.use_logits_bias and self.logits_bias is not None and predicted_types is not None) \
+                else base_logits
+            probs = torch.softmax(logits[:, 0, :] / max(temperature, 1e-6), dim=-1)
+            next_tokens = torch.multinomial(probs, num_samples=1)  # [B, 1]
+            next_tokens = torch.where(
+                done.unsqueeze(-1),
+                torch.full_like(next_tokens, self.config.eos_token_id),
+                next_tokens
+            )
+            generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
+            done = done | (next_tokens.squeeze(-1) == self.config.eos_token_id)
+            if done.all():
+                break
+
+        return [self._decode_seq(generated_ids[i]) for i in range(batch_size)]
+
+    def compute_seq_logprob(
+        self,
+        pixel_values: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        target_ids: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Teacher-forced per-sample sum of log probs for target_ids.
+        Called during SCST to compute the policy log prob of sampled sequences.
+        Requires gradients — do NOT wrap in torch.no_grad().
+
+        target_ids : [B, seq_len] with -100 at padding positions
+        Returns    : [B] scalar log prob per sample
+        """
+        outputs = self.forward(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=target_ids,
+        )
+        # answer_logits: [B, seq_len, vocab_size]
+        log_probs = F.log_softmax(outputs.answer_logits, dim=-1)
+        tgt = target_ids.clone()
+        mask = (tgt != -100)
+        tgt[~mask] = 0  # avoid out-of-bounds index; masked out below
+        gathered = log_probs.gather(2, tgt.unsqueeze(-1)).squeeze(-1)  # [B, seq_len]
+        return (gathered * mask.float()).sum(-1)  # [B]
 
 
 if __name__ == '__main__':

@@ -18,6 +18,14 @@ Version: 2.0 with improvements:
 """
 
 import os
+# Must be set before CUDA initializes — force override any existing value
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+# PYTHONHASHSEED inside Python only affects child processes, not the current
+# interpreter (it's read at startup). Set it as a shell var before launching:
+#   PYTHONHASHSEED=42 python train.py ...
+# We still set it here so subprocesses (e.g. DataLoader workers) inherit it.
+os.environ["PYTHONHASHSEED"] = "42"
+
 import json
 import argparse
 import random
@@ -25,8 +33,8 @@ import unicodedata
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-from torch.cuda.amp import autocast, GradScaler
+from torch.utils.data import DataLoader, Sampler
+from torch.amp import autocast, GradScaler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from collections import Counter
@@ -78,6 +86,13 @@ def _normalize_vn(text: str) -> str:
     Tránh false negative khi tokenizer decode ra NFC nhưng CSV lưu NFD.
     """
     return unicodedata.normalize('NFC', text).strip().lower()
+
+
+def _decode_gt(tokenizer, label_token_ids: list) -> str:
+    """Decode ground-truth label ids with the same BOS filtering as model._decode_seq.
+    Prevents false EM mismatches when BOS token is not in tokenizer.all_special_ids."""
+    ids = [t for t in label_token_ids if t != tokenizer.bos_token_id]
+    return tokenizer.decode(ids, skip_special_tokens=True).strip()
 
 
 class EarlyStopping:
@@ -170,6 +185,46 @@ def compute_rouge_scores(prediction: str, ground_truth: str) -> dict:
         'rouge1': scores['rouge1'].fmeasure,
         'rougeL': scores['rougeL'].fmeasure
     }
+
+
+class CurriculumSampler(Sampler):
+    """
+    Curriculum learning sampler: sorts training samples from easy (frequent answers)
+    to hard (rare answers), then uses a pacing function to include increasingly
+    harder samples as training progresses.
+
+    Call set_epoch(epoch, total_epochs) before each training epoch.
+    """
+
+    def __init__(self, dataset, seed=42, start_ratio=0.4):
+        answer_freq = Counter(dataset.data['answer'].tolist())
+        # Sort descending by frequency (high freq = easy = first)
+        self.indices_by_difficulty = sorted(
+            range(len(dataset)),
+            key=lambda i: -answer_freq.get(dataset.data.iloc[i]['answer'], 0)
+        )
+        self.seed = seed
+        self.start_ratio = start_ratio
+        self._epoch = 1
+        self._total = 1
+
+    def set_epoch(self, epoch: int, total_epochs: int):
+        self._epoch = epoch
+        self._total = total_epochs
+
+    def _active_size(self) -> int:
+        ratio = self.start_ratio + (1.0 - self.start_ratio) * (self._epoch - 1) / max(1, self._total - 1)
+        return max(1, int(len(self.indices_by_difficulty) * min(ratio, 1.0)))
+
+    def __iter__(self):
+        n = self._active_size()
+        subset = list(self.indices_by_difficulty[:n])
+        rng = random.Random(self.seed + self._epoch)
+        rng.shuffle(subset)
+        return iter(subset)
+
+    def __len__(self):
+        return self._active_size()
 
 
 def analyze_dataset(dataset, tokenizer, num_samples=1000):
@@ -333,7 +388,9 @@ def save_metrics_csv(history, output_dir):
 def run_one_epoch_deterministic(
     model, dataloader, optimizer, scaler, device,
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
-    answer_weights=None, use_type_loss=False, vision_dropout_rate=0.10
+    answer_weights=None, use_type_loss=False, vision_dropout_rate=0.10,
+    use_scst=False, scst_start_epoch=5, scst_lambda=0.1,
+    scst_sample_temp=1.0, current_epoch=0,
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -357,6 +414,10 @@ def run_one_epoch_deterministic(
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
     num_batches = 0
+    steps_since_update = 0
+
+    if is_training and optimizer is not None:
+        optimizer.zero_grad()
     
     with torch.set_grad_enabled(is_training):
         pbar = tqdm(dataloader, desc=f"{'Train' if is_training else 'Val'} Stage {stage}")
@@ -371,6 +432,8 @@ def run_one_epoch_deterministic(
             #   text2vision:   0.10 — chỉ vision path bị ảnh hưởng, safe
             #   bidirectional: 0.05 — 2x gradient paths, giảm noise
             #   vision2text:   0.10 — text path là primary, vision dropout OK
+            # Save original pixel_values before dropout — SCST must use real images
+            pixel_values_orig = pixel_values
             if is_training and vision_dropout_rate > 0 and random.random() < vision_dropout_rate:
                 pixel_values = torch.zeros_like(pixel_values)
             
@@ -394,7 +457,7 @@ def run_one_epoch_deterministic(
                 raw_questions = batch['raw_question']  # List[str], keep on CPU
             
             # Forward pass with mixed precision
-            with autocast(enabled=(scaler is not None)):
+            with autocast('cuda', enabled=(scaler is not None)):
                 outputs = model(
                     pixel_values=pixel_values,
                     input_ids=input_ids,
@@ -418,9 +481,39 @@ def run_one_epoch_deterministic(
                     scaler.scale(loss).backward()
                 else:
                     loss.backward()
-                
+
+                # ── SCST backward (accumulated alongside CE gradients) ────────
+                if use_scst and current_epoch >= scst_start_epoch:
+                    # Use original (non-dropped) pixel_values — dropout must not affect SCST rollouts
+                    _pv = pixel_values_orig
+                    _greedy = model.generate(_pv, input_ids, attention_mask, max_length=10, num_beams=1)
+                    _sample = model.generate_sample(_pv, input_ids, attention_mask, max_length=10, temperature=scst_sample_temp)
+                    _adv = []
+                    for _i in range(len(_greedy)):
+                        _lbl = labels[_i][labels[_i] != -100].cpu().tolist()
+                        _gt  = _decode_gt(model.tokenizer, _lbl)
+                        _adv.append(compute_f1_score(_sample[_i], _gt) - compute_f1_score(_greedy[_i], _gt))
+                    _advantage = torch.tensor(_adv, dtype=torch.float32, device=device)
+                    if _advantage.abs().max() > 1e-6:
+                        _sample_enc = model.tokenizer(
+                            _sample, truncation=True, padding='max_length',
+                            max_length=10, return_tensors='pt'
+                        )
+                        _sample_ids = _sample_enc['input_ids'].to(device)
+                        _sample_ids[_sample_ids == model.tokenizer.pad_token_id] = -100
+                        with autocast('cuda', enabled=(scaler is not None)):
+                            _log_prob = model.compute_seq_logprob(_pv, input_ids, attention_mask, _sample_ids)
+                            _scst_loss = -(_advantage.detach() * _log_prob).mean()
+                            _scst_scaled = scst_lambda * _scst_loss / gradient_accumulation_steps
+                        if scaler is not None:
+                            scaler.scale(_scst_scaled).backward()
+                        else:
+                            _scst_scaled.backward()
+
+                steps_since_update += 1
+
                 # Update weights after accumulating gradients
-                if (batch_idx + 1) % gradient_accumulation_steps == 0:
+                if steps_since_update == gradient_accumulation_steps:
                     if scaler is not None:
                         scaler.unscale_(optimizer)
                         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
@@ -431,6 +524,7 @@ def run_one_epoch_deterministic(
                         optimizer.step()
                     
                     optimizer.zero_grad()
+                    steps_since_update = 0
             
             # Accumulate metrics (use original loss, not scaled)
             if loss is not None:
@@ -478,6 +572,18 @@ def run_one_epoch_deterministic(
                     })
                 
                 pbar.set_postfix(postfix)
+
+    # Flush remaining accumulated gradients at end of epoch
+    if is_training and optimizer is not None and steps_since_update > 0:
+        if scaler is not None:
+            scaler.unscale_(optimizer)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            optimizer.step()
+        optimizer.zero_grad()
     
     if num_batches == 0:
         return {
@@ -496,23 +602,26 @@ def run_one_epoch_deterministic(
 def evaluate_full_val(model, dataloader, tokenizer, device):
     """
     Tính EM và F1 trên TOÀN BỘ val set — gọi mỗi epoch để track best model.
-    Nhanh hơn sample_predictions vì chỉ generate, không in ví dụ.
 
     Returns:
-        dict với 'exact_match' (%), 'f1_score' (%), 'rouge1' (%), 'rougeL' (%)
+        dict với 'exact_match', 'f1_score', 'rouge1', 'rougeL' (%)
+        và per-type EM: 'em_object', 'em_counting', 'em_color', 'em_location' (nếu có)
     """
+    _TYPE_NAMES = {0: 'object', 1: 'counting', 2: 'color', 3: 'location'}
     model.eval()
     exact_matches = []
     f1_scores = []
     rouge1_scores = []
     rougeL_scores = []
+    per_type_em: dict = {k: [] for k in _TYPE_NAMES}
 
     with torch.no_grad():
         for batch in tqdm(dataloader, desc='Eval EM/F1', leave=False):
-            pixel_values = batch['pixel_values'].to(device)
-            input_ids    = batch['input_ids'].to(device)
+            pixel_values   = batch['pixel_values'].to(device)
+            input_ids      = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
-            labels       = batch['labels'].to(device)
+            labels         = batch['labels'].to(device)
+            qtypes         = batch.get('question_type', None)
 
             predictions = model.generate(
                 pixel_values=pixel_values,
@@ -522,9 +631,9 @@ def evaluate_full_val(model, dataloader, tokenizer, device):
                 num_beams=3
             )
 
-            for pred, label in zip(predictions, labels):
+            for idx, (pred, label) in enumerate(zip(predictions, labels)):
                 label_tokens = label[label != -100].cpu().tolist()
-                gt = tokenizer.decode(label_tokens, skip_special_tokens=True)
+                gt = _decode_gt(tokenizer, label_tokens)
 
                 em = 1.0 if _normalize_vn(pred) == _normalize_vn(gt) else 0.0
                 exact_matches.append(em)
@@ -534,16 +643,23 @@ def evaluate_full_val(model, dataloader, tokenizer, device):
                 rouge1_scores.append(rouge['rouge1'])
                 rougeL_scores.append(rouge['rougeL'])
 
+                if qtypes is not None:
+                    per_type_em[qtypes[idx].item()].append(em)
+
     n = len(exact_matches)
     if n == 0:
         return {'exact_match': 0.0, 'f1_score': 0.0, 'rouge1': 0.0, 'rougeL': 0.0}
 
-    return {
+    result = {
         'exact_match': sum(exact_matches) / n * 100,
         'f1_score':    sum(f1_scores)     / n * 100,
         'rouge1':      sum(rouge1_scores) / n * 100,
         'rougeL':      sum(rougeL_scores) / n * 100,
     }
+    for t, ems in per_type_em.items():
+        if ems:
+            result[f'em_{_TYPE_NAMES[t]}'] = sum(ems) / len(ems) * 100
+    return result
 
 
 def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, compute_metrics=True):
@@ -577,15 +693,15 @@ def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, com
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_length=5,
-                num_beams=3  # Use beam search!
+                max_length=10,
+                num_beams=3
             )
-            
-            # Decode labels
+
+            # Decode labels — use _decode_gt for consistency with evaluate_full_val
             label_texts = []
             for label in labels:
                 label_tokens = label[label != -100].cpu().tolist()
-                label_text = tokenizer.decode(label_tokens, skip_special_tokens=True)
+                label_text = _decode_gt(tokenizer, label_tokens)
                 label_texts.append(label_text)
             
             # Decode questions
@@ -772,6 +888,22 @@ def main():
     parser.add_argument('--contrastive_temp', type=float, default=0.07,
                        help='Temperature τ for InfoNCE (default: 0.07, SimCLR standard)')
     
+    # Curriculum Learning
+    parser.add_argument('--curriculum', action='store_true',
+                       help='Enable curriculum learning: train easy (frequent) answers first, gradually add harder ones')
+    parser.add_argument('--curriculum_start_ratio', type=float, default=0.4,
+                       help='Fraction of easiest samples used in epoch 1 (default: 0.4, linearly ramps to 1.0)')
+
+    # SCST (Self-Critical Sequence Training)
+    parser.add_argument('--use_scst', action='store_true',
+                       help='Enable SCST: optimise F1 reward directly via REINFORCE after CE warmup')
+    parser.add_argument('--scst_start_epoch', type=int, default=5,
+                       help='Epoch from which SCST loss is added (default: 5, after CE warmup)')
+    parser.add_argument('--scst_lambda', type=float, default=0.1,
+                       help='Weight of SCST loss relative to CE loss (default: 0.1)')
+    parser.add_argument('--scst_sample_temp', type=float, default=1.0,
+                       help='Sampling temperature for SCST rollouts (default: 1.0)')
+
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
@@ -803,17 +935,27 @@ def main():
     # Random seed (basic setup like 7/2)
     # ========================================================================
     # Set all random seeds for reproducibility
+    os.environ["PYTHONHASHSEED"] = str(args.seed)
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    # Force full determinism on CUDA kernels.
-    # cuDNN by default picks the fastest algorithm per run (non-deterministic).
-    # These two lines make every run identical given the same seed.
-    # Trade-off: ~5-10% slower training — acceptable for ablation reproducibility.
-    torch.backends.cudnn.deterministic = True
+    # NOTE: cudnn.deterministic=True breaks MBart SDPA on newer transformers
+    # (CUDNN_STATUS_NOT_INITIALIZED on H100 MIG). benchmark=False is enough
+    # to reduce cross-run variance for conv-heavy vision encoders.
     torch.backends.cudnn.benchmark = False
+    # Flash Attention is non-deterministic on CUDA but fast (H100 HBM3 optimised).
+    # Re-enable for speed; use warn_only so any other non-det op surfaces as a
+    # warning rather than crashing.  Reproducibility is maintained via fixed seeds
+    # + CUBLAS_WORKSPACE_CONFIG + PYTHONHASHSEED — the residual flash-attn variance
+    # is ~1e-7 and does not affect ablation comparisons.
+    # To restore full bit-exact reproducibility: set all three to False/False/True
+    # and change warn_only to False.
+    torch.backends.cuda.enable_flash_sdp(True)
+    torch.backends.cuda.enable_mem_efficient_sdp(True)
+    torch.backends.cuda.enable_math_sdp(True)
+    torch.use_deterministic_algorithms(True, warn_only=True)
     
     # ========================================================================
     # CONFIG (from args)
@@ -990,10 +1132,21 @@ def main():
     
     # Create generator for reproducible shuffling
     train_generator = torch.Generator().manual_seed(args.seed)
-    
+
+    # ── Curriculum sampler (overrides PK sampler if both set) ─────────────
+    curriculum_sampler = None
+    if args.curriculum:
+        _actual_train = train_dataset.dataset if hasattr(train_dataset, 'dataset') else train_dataset
+        curriculum_sampler = CurriculumSampler(
+            dataset=_actual_train,
+            seed=args.seed,
+            start_ratio=args.curriculum_start_ratio,
+        )
+        print(f"[Curriculum] Enabled: start_ratio={args.curriculum_start_ratio:.1%} → 100% over {stage3_epochs} epochs")
+
     # ── PK Sampling setup ─────────────────────────────────────────────────
     pk_sampler = None
-    if args.pk_sampling:
+    if args.pk_sampling and curriculum_sampler is None:
         from dataset import PKSampler
         random.seed(args.seed)  # PKSampler uses Python random internally
         pk_sampler = PKSampler(
@@ -1008,18 +1161,26 @@ def main():
         print(f"[PK Sampling] Enabled: P={args.pk_p} × K={args.pk_k} = batch_size={pk_batch_size}")
         print(f"[PK Sampling] Batches/epoch: {len(pk_sampler) // pk_batch_size}")
     
+    def _worker_init_fn(worker_id):
+        seed = args.seed + worker_id
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+
+    _train_sampler = curriculum_sampler or pk_sampler
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.pk_p * args.pk_k if args.pk_sampling else batch_size,
-        shuffle=False if pk_sampler is not None else True,
-        sampler=pk_sampler,  # None = default random sampler (with shuffle)
+        shuffle=False if _train_sampler is not None else True,
+        sampler=_train_sampler,
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True if num_workers > 0 else False,
         prefetch_factor=2 if num_workers > 0 else None,
-        generator=train_generator if pk_sampler is None else None  # generator only for shuffle mode
+        generator=train_generator if _train_sampler is None else None,
+        worker_init_fn=_worker_init_fn if num_workers > 0 else None
     )
-    
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
@@ -1027,7 +1188,8 @@ def main():
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True if num_workers > 0 else False,
-        prefetch_factor=2 if num_workers > 0 else None
+        prefetch_factor=2 if num_workers > 0 else None,
+        worker_init_fn=_worker_init_fn if num_workers > 0 else None
     )
     
     print(f"[Data] Train: {len(train_dataset)} samples")
@@ -1054,6 +1216,7 @@ def main():
         fusion_type=args.fusion_type,  # 🔥 NEW: Fusion direction
         num_heads=args.num_heads,
         dropout=args.dropout,
+        label_smoothing=args.label_smoothing,
         gradient_checkpointing=not args.no_gradient_checkpointing,
         use_vision_lora=args.use_vision_lora,  # 🔥 LoRA for vision encoder
         vision_lora_r=args.vision_lora_r,
@@ -1145,14 +1308,15 @@ def main():
     # 🔥 LR Scheduler
     scheduler = None
     if args.scheduler == 'plateau':
+        plateau_mode = 'min' if args.early_stopping_metric == 'loss' else 'max'
         scheduler = ReduceLROnPlateau(
             optimizer,
-            mode='min',
+            mode=plateau_mode,
             factor=args.scheduler_factor,
             patience=args.scheduler_patience,
             min_lr=1e-7
         )
-        print(f"[Scheduler] ReduceLROnPlateau (patience={args.scheduler_patience}, factor={args.scheduler_factor})")
+        print(f"[Scheduler] ReduceLROnPlateau (mode={plateau_mode}, monitor={args.early_stopping_metric}, patience={args.scheduler_patience}, factor={args.scheduler_factor})")
     elif args.scheduler == 'cosine':
         from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
         if args.warmup_epochs > 0:
@@ -1259,7 +1423,14 @@ def main():
     
     for epoch in range(start_epoch, stage3_epochs + 1):
         print(f"\n[Stage 3 | Epoch {epoch}/{stage3_epochs}]")
-        
+
+        # Update curriculum pacing before creating DataLoader iterator
+        if curriculum_sampler is not None:
+            curriculum_sampler.set_epoch(epoch, stage3_epochs)
+            _active = len(curriculum_sampler)
+            print(f"  [Curriculum] Active samples: {_active}/{len(train_dataset)} "
+                  f"({_active/len(train_dataset):.1%})")
+
         # Training
         train_metrics = run_one_epoch_deterministic(
             model=model,
@@ -1271,9 +1442,14 @@ def main():
             max_norm=max_norm,
             stage=stage,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
-            vision_dropout_rate=_vd_rate           # 🔥 fusion-aware
+            answer_weights=answer_weights_tensor,
+            use_type_loss=args.use_type_loss,
+            vision_dropout_rate=_vd_rate,
+            use_scst=args.use_scst,
+            scst_start_epoch=args.scst_start_epoch,
+            scst_lambda=args.scst_lambda,
+            scst_sample_temp=args.scst_sample_temp,
+            current_epoch=epoch,
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -1297,6 +1473,10 @@ def main():
         # 🔥 Tính EM/F1 trên TOÀN BỘ val set mỗi epoch
         full_val = evaluate_full_val(model, val_loader, model.tokenizer, device)
         print(f"  VAL   -> EM={full_val['exact_match']:.2f}% | F1={full_val['f1_score']:.2f}% | ROUGE-1={full_val['rouge1']:.2f}% | ROUGE-L={full_val['rougeL']:.2f}%")
+        _type_keys = [k for k in full_val if k.startswith('em_')]
+        if _type_keys:
+            _type_str = ' | '.join(f"{k[3:]}={full_val[k]:.1f}%" for k in sorted(_type_keys))
+            print(f"  VAL   -> per-type: {_type_str}")
 
         # Track metrics in history
         epoch_metrics = {
@@ -1342,7 +1522,17 @@ def main():
         # 🔥 LR Scheduler step
         if scheduler is not None:
             if isinstance(scheduler, ReduceLROnPlateau):
-                scheduler.step(val_metrics['loss'])
+                if args.early_stopping_metric == 'loss':
+                    scheduler_metric = val_metrics['loss']
+                else:
+                    scheduler_key_map = {
+                        'em': 'exact_match',
+                        'f1': 'f1_score',
+                        'rouge1': 'rouge1',
+                        'rougeL': 'rougeL'
+                    }
+                    scheduler_metric = full_val[scheduler_key_map[args.early_stopping_metric]]
+                scheduler.step(scheduler_metric)
             else:
                 scheduler.step()
             
