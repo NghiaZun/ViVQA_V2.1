@@ -70,6 +70,10 @@ def detect_question_type(question: str) -> int:
     # Also catch "có màu gì", "là màu gì" patterns
     if re.search(r'(có|là|được)\s*màu\s*(gì|nào|sắc)', q_lower):
         return 2
+    # "màu của X là gì" — question topic IS color (starts with "màu")
+    # e.g. "màu của chiếc bình là gì", "màu của áo là gì"
+    if q_lower.startswith('màu'):
+        return 2
 
     # ── 4. Default: OBJECT ───────────────────────────────────────────────────
     return 0

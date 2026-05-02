@@ -62,7 +62,7 @@ def detect_question_type(question_text: str) -> str:
     return _TYPE_NAMES[_detect_type_int(question_text)]
 
 
-def evaluate(model, dataloader, device, tokenizer, num_beams=3):
+def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penalty=1.3):
     model.eval()
 
     _INT_TO_TYPE = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
@@ -115,7 +115,8 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10,
-                num_beams=num_beams
+                num_beams=num_beams,
+                repetition_penalty=repetition_penalty
             )
 
             # Decode questions + detect types via regex (ground-truth type)
@@ -218,7 +219,9 @@ def main():
                        help='Fusion type (default: auto-detect from checkpoint args)')
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_beams', type=int, default=3,
-                        help='Beam search width (default: 3, try 5 for +0.5-1%% EM)')
+                        help='Beam search width (default: 3, beam=5 is slower and not better)')
+    parser.add_argument('--repetition_penalty', type=float, default=1.3,
+                        help='Repetition penalty to suppress repeated tokens (default: 1.3)')
     parser.add_argument('--output_csv', type=str, default=None)
     args = parser.parse_args()
 
@@ -342,8 +345,9 @@ def main():
     print(f"Loaded weights from epoch {checkpoint.get('epoch', 'N/A')}")
     
     # Evaluate
-    print(f"\nEvaluating... (num_beams={args.num_beams})")
-    results = evaluate(model, dataloader, device, model.tokenizer, num_beams=args.num_beams)
+    print(f"\nEvaluating... (num_beams={args.num_beams}, repetition_penalty={args.repetition_penalty})")
+    results = evaluate(model, dataloader, device, model.tokenizer,
+                       num_beams=args.num_beams, repetition_penalty=args.repetition_penalty)
     
     print("\n" + "="*80)
     print("RESULTS")

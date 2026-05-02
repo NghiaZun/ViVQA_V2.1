@@ -1414,7 +1414,8 @@ class DeterministicVQA(nn.Module):
         temperature: float = 1.0,
         do_sample: bool = False,
         top_p: float = 0.9,
-        top_k: int = 50
+        top_k: int = 50,
+        repetition_penalty: float = 1.0,
     ):
         """
         Generate answers với greedy (num_beams=1) hoặc beam search (num_beams>1).
@@ -1531,6 +1532,15 @@ class DeterministicVQA(nn.Module):
                     logits = self.logits_bias(base_logits, expanded_types)         # [B*beams, 1, V]
                 else:
                     logits = base_logits
+
+                # Repetition penalty: divide positive logits, multiply negative logits
+                if repetition_penalty != 1.0:
+                    logits_2d = logits[:, 0, :]  # [B*beams, V]
+                    flat_seqs = beam_seqs.reshape(batch_size * num_beams, -1)  # [B*beams, L]
+                    prev_scores = torch.gather(logits_2d, 1, flat_seqs)
+                    penalized = torch.where(prev_scores < 0, prev_scores * repetition_penalty, prev_scores / repetition_penalty)
+                    logits = logits_2d.scatter(1, flat_seqs, penalized).unsqueeze(1)
+
                 log_probs   = torch.log_softmax(logits[:, 0, :], dim=-1)           # [B*beams, V]
                 log_probs   = log_probs.reshape(batch_size, num_beams, -1)         # [B, beams, V]
 
@@ -1612,6 +1622,14 @@ class DeterministicVQA(nn.Module):
                     logits = self.logits_bias(base_logits, predicted_types)
                 else:
                     logits = base_logits
+
+                # Repetition penalty
+                if repetition_penalty != 1.0:
+                    logits_2d = logits[:, 0, :]  # [B, V]
+                    prev_scores = torch.gather(logits_2d, 1, generated_ids)
+                    penalized = torch.where(prev_scores < 0, prev_scores * repetition_penalty, prev_scores / repetition_penalty)
+                    logits = logits_2d.scatter(1, generated_ids, penalized).unsqueeze(1)
+
                 next_tokens = torch.argmax(logits[:, 0, :], dim=-1, keepdim=True)  # [B, 1]
 
                 # Sample đã EOS: tiếp tục emit EOS để decode bỏ qua khi skip_special_tokens
