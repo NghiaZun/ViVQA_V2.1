@@ -23,6 +23,13 @@ def _normalize_vn(text: str) -> str:
     return unicodedata.normalize('NFC', text).strip().lower()
 
 
+def _decode_gt(tokenizer, label_token_ids: list) -> str:
+    """Decode ground-truth labels, filtering BOS token manually.
+    BARTpho's BOS is not in all_special_ids so skip_special_tokens won't remove it."""
+    ids = [t for t in label_token_ids if t != tokenizer.bos_token_id]
+    return tokenizer.decode(ids, skip_special_tokens=True).strip()
+
+
 def compute_exact_match(prediction: str, ground_truth: str) -> float:
     return 1.0 if _normalize_vn(prediction) == _normalize_vn(ground_truth) else 0.0
 
@@ -30,20 +37,23 @@ def compute_exact_match(prediction: str, ground_truth: str) -> float:
 def compute_f1_score(prediction: str, ground_truth: str) -> float:
     pred_tokens = _normalize_vn(prediction).split()
     gt_tokens   = _normalize_vn(ground_truth).split()
-    
+
+    if len(pred_tokens) == 0 and len(gt_tokens) == 0:
+        return 1.0
+
     if len(pred_tokens) == 0 or len(gt_tokens) == 0:
         return 0.0
-    
+
     common = Counter(pred_tokens) & Counter(gt_tokens)
     num_same = sum(common.values())
-    
+
     if num_same == 0:
         return 0.0
-    
+
     precision = num_same / len(pred_tokens)
     recall = num_same / len(gt_tokens)
     f1 = 2 * precision * recall / (precision + recall)
-    
+
     return f1
 
 
@@ -96,7 +106,7 @@ def evaluate(model, dataloader, device, tokenizer):
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_length=20,
+                max_length=10,
                 num_beams=3
             )
             
@@ -110,7 +120,7 @@ def evaluate(model, dataloader, device, tokenizer):
             # Decode ground truths
             for label in labels:
                 label_tokens = label[label != -100].cpu().tolist()
-                gt_text = tokenizer.decode(label_tokens, skip_special_tokens=True)
+                gt_text = _decode_gt(tokenizer, label_tokens)
                 all_ground_truths.append(gt_text)
             
             all_predictions.extend(predictions)
