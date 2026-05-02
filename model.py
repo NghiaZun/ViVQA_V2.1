@@ -244,9 +244,11 @@ class VisionGating(nn.Module):
         3. Attention query @ vision → importance scores α
         4. Gated vision = α * vision + (1-α) * text_context
     """
-    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.5):
+    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.5, min_alpha=0.0):
         super().__init__()
-        
+
+        self.min_alpha = min_alpha  # floor on α to prevent over-suppression
+
         # Type embeddings (learnable per-type representations)
         self.type_embedding = nn.Embedding(num_types, hidden_dim)
         
@@ -316,18 +318,20 @@ class VisionGating(nn.Module):
         alpha = self.gate_net(gate_input)  # [B, P, 1]
         
         # 6. Apply vision bias (learnable parameter)
-        alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P]
+        # min_alpha: prevent over-suppression of visual signal.
+        # Without a floor, COLOR learns α≈0.18 (82% text anchor) and COUNT α≈0.33 —
+        # visual features become too weak for color discrimination and counting.
+        alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias).clamp(min=self.min_alpha)  # [B, P]
         alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
         
-        # 7. Gated combination: spatial soft-attention over patches
-        # α close to 1 → use patch-specific features (salient/type-relevant patch)
-        # α close to 0 → fall back to global vision average (non-salient patch)
-        #
-        # NOTE: fallback must be visual, not text_pooled.
-        # text_pooled = avg("màu của X là gì") contains no color/count/location info;
-        # mixing it in destroys the visual signal for COLOR (α≈0.18) and COUNT (α≈0.33).
-        v_global = v_proj.mean(dim=1, keepdim=True).expand(-1, num_patches, -1)  # [B, P, D]
-        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * v_global
+        # 7. Gated combination
+        # Pool text for context (average over sequence)
+        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
+        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
+
+        # α close to 1 → use vision features (important patches)
+        # α close to 0 → use text context (suppress noise)
+        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
         
         # 8. Layer norm for stability
         gated_vision = self.layer_norm(gated_vision)
@@ -442,6 +446,7 @@ class DeterministicVQA(nn.Module):
         use_logits_bias: bool = False,  # 🔥 Enable TypeAwareLogitsBias (risky - use separately)
         use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
         vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
+        vision_gate_min_alpha: float = 0.0,  # 🔥 Floor on α (0.4 recommended for retrain)
         use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
         type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
         type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
@@ -499,7 +504,8 @@ class DeterministicVQA(nn.Module):
         
         # 🔥 Vision gating (will be initialized after knowing bart_hidden_dim)
         self.use_vision_gate = use_vision_gate
-        self.vision_gate_init = vision_gate_init  # Store for later init
+        self.vision_gate_init = vision_gate_init
+        self.vision_gate_min_alpha = vision_gate_min_alpha
         
         # Vision encoder (SigLIP or DINOv2)
         # For SigLIP, load full model first, then extract vision_model
@@ -638,10 +644,11 @@ class DeterministicVQA(nn.Module):
         if self.use_vision_gate:
             self.vision_gating = VisionGating(
                 hidden_dim=bart_hidden_dim,
-                num_types=4,  # 🔥 NEW: 4 question types
-                init_bias=self.vision_gate_init
+                num_types=4,
+                init_bias=self.vision_gate_init,
+                min_alpha=self.vision_gate_min_alpha
             )
-            print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}")
+            print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}, min_alpha={self.vision_gate_min_alpha:.2f}")
         
         # 🔥 NEW: Type prediction head (auxiliary task)
         if self.use_type_task:

@@ -854,6 +854,9 @@ def main():
                        help='Enable learnable vision gating (boost vision importance)')
     parser.add_argument('--vision_gate_init', type=float, default=1.5,
                        help='Initial vision gate value (>1.0 = prefer vision, default=1.5)')
+    parser.add_argument('--vision_gate_min_alpha', type=float, default=0.0,
+                       help='Minimum alpha floor for VisionGating (0.4 recommended to prevent '
+                            'COLOR/COUNT from over-suppressing vision: α≈0.18/0.33 without floor)')
     
     # 🔥 Type-Conditioned Vision Adapter (NEW!)
     parser.add_argument('--use_type_adapter', action='store_true',
@@ -1239,8 +1242,9 @@ def main():
         text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
         use_type_task=args.use_type_loss,       # 🔥 type head auxiliary loss only
         use_logits_bias=args.use_logits_bias,   # 🔥 type-aware logits bias (risky, separate flag)
-        use_vision_gate=args.use_vision_gate,  # 🔥 NEW: Vision gating
-        vision_gate_init=args.vision_gate_init,  # 🔥 NEW
+        use_vision_gate=args.use_vision_gate,
+        vision_gate_init=args.vision_gate_init,
+        vision_gate_min_alpha=args.vision_gate_min_alpha,
         use_type_adapter=args.use_type_adapter,  # 🔥 NEW: Type-conditioned adapter
         type_adapter_rank=args.type_adapter_rank,  # 🔥 NEW
         type_adapter_bias=args.type_adapter_bias,  # 🔥 NEW
