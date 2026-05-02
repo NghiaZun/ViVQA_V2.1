@@ -319,14 +319,15 @@ class VisionGating(nn.Module):
         alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P]
         alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
         
-        # 7. Gated combination
-        # Pool text for context (average over sequence)
-        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
-        text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
-        
-        # α close to 1 → use vision features (important patches)
-        # α close to 0 → use text context (suppress noise)
-        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
+        # 7. Gated combination: spatial soft-attention over patches
+        # α close to 1 → use patch-specific features (salient/type-relevant patch)
+        # α close to 0 → fall back to global vision average (non-salient patch)
+        #
+        # NOTE: fallback must be visual, not text_pooled.
+        # text_pooled = avg("màu của X là gì") contains no color/count/location info;
+        # mixing it in destroys the visual signal for COLOR (α≈0.18) and COUNT (α≈0.33).
+        v_global = v_proj.mean(dim=1, keepdim=True).expand(-1, num_patches, -1)  # [B, P, D]
+        gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * v_global
         
         # 8. Layer norm for stability
         gated_vision = self.layer_norm(gated_vision)
