@@ -1,629 +1,629 @@
 question,prediction,ground_truth,question_type,exact_match,f1_score
-màu của miếng vá là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của áo là gì,màu xám,màu xanh dương,OBJECT,0.0,0.4
-màu của căn phòng là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của quả bóng là gì,màu đen,màu đỏ,OBJECT,0.0,0.5
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của nhà là gì,màu vàng,màu xám,OBJECT,0.0,0.5
-màu của thập giá là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của điện thoại là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của xe máy là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của áo là gì,màu đỏ,màu xám,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của túi là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của khăn là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của miếng vá là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của áo là gì,màu xám,màu xanh dương,COLOR,0.0,0.4
+màu của căn phòng là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của quả bóng là gì,màu đen,màu đỏ,COLOR,0.0,0.5
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của nhà là gì,màu vàng,màu xám,COLOR,0.0,0.5
+màu của thập giá là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của điện thoại là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của xe máy là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của vòi nước là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của áo là gì,màu đỏ,màu xám,COLOR,0.0,0.5
+màu của xe buýt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của túi là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của khăn là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của máy bay phản lực là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của một nửa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của quầy là gì,màu trắng,màu đen,OBJECT,0.0,0.5
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của quả bóng là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của xe máy là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của xe là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của bảng là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của áo là gì,màu tía,màu đỏ,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của bồn rửa mặt là gì,màu cam,màu đen,OBJECT,0.0,0.5
-màu của áo là gì,màu xám,màu tía,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu trắng,màu xanh lá,OBJECT,0.0,0.4
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của cà vạt là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của áo là gì,màu xám,màu trắng,OBJECT,0.0,0.5
-màu của xe là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
+màu của một nửa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của quầy là gì,màu trắng,màu đen,COLOR,0.0,0.5
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của quả bóng là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của xe máy là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của xe là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của bảng là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của áo là gì,màu tía,màu đỏ,COLOR,0.0,0.5
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của bồn rửa mặt là gì,màu cam,màu đen,COLOR,0.0,0.5
+màu của áo là gì,màu xám,màu tía,COLOR,0.0,0.5
+màu của xe buýt là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của cà vạt là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của áo là gì,màu xám,màu trắng,COLOR,0.0,0.5
+màu của xe là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
 màu sắc của icing là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của chiếc ô là gì,màu tía,màu tía,OBJECT,1.0,1.0
+màu của chiếc ô là gì,màu tía,màu tía,COLOR,1.0,1.0
 màu sắc của hành tây là gì,màu đỏ,màu tía,COLOR,0.0,0.5
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của bồn là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của quầy là gì,màu đen,màu trắng,OBJECT,0.0,0.5
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của bồn là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của quầy là gì,màu đen,màu trắng,COLOR,0.0,0.5
 màu sắc của người trồng là gì,màu cam,màu cam,COLOR,1.0,1.0
-màu mắt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo là gì,màu tía,màu xám,OBJECT,0.0,0.5
-màu của mặt bàn là gì,màu nâu,màu đen,OBJECT,0.0,0.5
-màu của chiếc thuyền là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu đen,màu nâu,OBJECT,0.0,0.5
-màu của bình hoa là gì,màu vàng,màu xanh dương,OBJECT,0.0,0.4
-màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con chim là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của lon là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu mắt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo là gì,màu tía,màu xám,COLOR,0.0,0.5
+màu của mặt bàn là gì,màu nâu,màu đen,COLOR,0.0,0.5
+màu của chiếc thuyền là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con ngựa là gì,màu đen,màu nâu,COLOR,0.0,0.5
+màu của bình hoa là gì,màu vàng,màu xanh dương,COLOR,0.0,0.4
+màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con chim là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của lon là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của hành khách là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
-màu của con chim là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của ghế là gì,màu nâu,màu đỏ,OBJECT,0.0,0.5
-màu của vali là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của bồn cầu là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc cặp là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của ghế là gì,màu cam,màu đỏ,OBJECT,0.0,0.5
-màu của dấu hiệu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu trắng,OBJECT,0.0,0.5
-màu của vali là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con mèo là gì,màu nâu,màu cam,OBJECT,0.0,0.5
-màu của bộ đồ là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của tiểu bồn tiểu là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của phòng tắm là gì,màu trắng,màu nâu,OBJECT,0.0,0.5
-màu của tường là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh dương,màu trắng,OBJECT,0.0,0.4
-màu tóc là gì,màu đỏ,màu trắng,OBJECT,0.0,0.5
-màu của ghế là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc thuyền là gì,màu xanh lá,màu nâu,OBJECT,0.0,0.4
-màu của dấu hiệu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc ghế dài là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của cam là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu cam,màu trắng,OBJECT,0.0,0.5
-màu của ánh sáng là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của lửa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của xe máy là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
+màu của con chim là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của ghế là gì,màu nâu,màu đỏ,COLOR,0.0,0.5
+màu của vali là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của bồn cầu là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc cặp là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của ghế là gì,màu cam,màu đỏ,COLOR,0.0,0.5
+màu của dấu hiệu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu trắng,COLOR,0.0,0.5
+màu của vali là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con mèo là gì,màu nâu,màu cam,COLOR,0.0,0.5
+màu của bộ đồ là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của tiểu bồn tiểu là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của áo là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của phòng tắm là gì,màu trắng,màu nâu,COLOR,0.0,0.5
+màu của tường là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
+màu tóc là gì,màu đỏ,màu trắng,COLOR,0.0,0.5
+màu của ghế là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc thuyền là gì,màu xanh lá,màu nâu,COLOR,0.0,0.4
+màu của dấu hiệu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc ghế dài là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của cam là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu cam,màu trắng,COLOR,0.0,0.5
+màu của ánh sáng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của lửa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của xe máy là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
 màu sắc của bộ đồ là gì,màu cam,màu cam,COLOR,1.0,1.0
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của chiếc cặp là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của cây là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của bảng là gì,màu đỏ,màu nâu,OBJECT,0.0,0.5
-màu của chai là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của chiếc cặp là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của cây là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của bảng là gì,màu đỏ,màu nâu,COLOR,0.0,0.5
+màu của chai là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của đại dương là gì,màu đen,màu xanh dương,COLOR,0.0,0.4
-màu của ván trượt là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của xe buýt là gì,màu xanh dương,màu xám,OBJECT,0.0,0.4
+màu của ván trượt là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của xe buýt là gì,màu xanh dương,màu xám,COLOR,0.0,0.4
 màu sắc của giao thông là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của con ngựa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của lớp phủ là gì,màu xanh dương,màu xanh lá,OBJECT,0.0,0.6666666666666666
-màu con hổ là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của cái tủ là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu cam,màu tía,OBJECT,0.0,0.5
-màu của xe tải là gì,màu trắng,màu xanh lá,OBJECT,0.0,0.4
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của gấu bông là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của xe đạp là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của áo là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của máy bay phản lực là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu trắng,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc giường là gì,màu nâu,màu tía,OBJECT,0.0,0.5
-màu của lửa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của kính bảo hộ là gì,màu vàng,màu cam,OBJECT,0.0,0.5
-màu của nhà là gì,màu cam,màu vàng,OBJECT,0.0,0.5
-màu của các mặt hàng là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của lá là gì,màu cam,màu xanh lá,OBJECT,0.0,0.4
-màu của lát là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của bề mặt là gì,màu đen,màu xám,OBJECT,0.0,0.5
-màu của bộ đồ là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của ghế là gì,màu xám,màu trắng,OBJECT,0.0,0.5
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của cái tủ là gì,màu tía,màu đen,OBJECT,0.0,0.5
-màu của cà vạt là gì,màu nâu,màu xanh dương,OBJECT,0.0,0.4
-màu của radio là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con chó là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của trang trí là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của bánh là gì,màu xanh dương,màu tía,OBJECT,0.0,0.4
-màu của lửa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của chăn là gì,màu vàng,màu trắng,OBJECT,0.0,0.5
-màu của chiếc bình là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
+màu của con ngựa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của lớp phủ là gì,màu xanh dương,màu xanh lá,COLOR,0.0,0.6666666666666666
+màu con hổ là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của cái tủ là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu cam,màu tía,COLOR,0.0,0.5
+màu của xe tải là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của gấu bông là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của xe đạp là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của áo là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của máy bay phản lực là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu trắng,COLOR,0.0,0.5
+màu của xe buýt là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của xe buýt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc giường là gì,màu nâu,màu tía,COLOR,0.0,0.5
+màu của lửa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của kính bảo hộ là gì,màu vàng,màu cam,COLOR,0.0,0.5
+màu của nhà là gì,màu cam,màu vàng,COLOR,0.0,0.5
+màu của các mặt hàng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của lá là gì,màu cam,màu xanh lá,COLOR,0.0,0.4
+màu của lát là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của bề mặt là gì,màu đen,màu xám,COLOR,0.0,0.5
+màu của bộ đồ là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của ghế là gì,màu xám,màu trắng,COLOR,0.0,0.5
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của cái tủ là gì,màu tía,màu đen,COLOR,0.0,0.5
+màu của cà vạt là gì,màu nâu,màu xanh dương,COLOR,0.0,0.4
+màu của radio là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con chó là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của trang trí là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của bánh là gì,màu xanh dương,màu tía,COLOR,0.0,0.4
+màu của lửa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của chăn là gì,màu vàng,màu trắng,COLOR,0.0,0.5
+màu của chiếc bình là gì,màu vàng,màu vàng,COLOR,1.0,1.0
 màu sắc của vật này là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
-màu của áo len là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của cây cầu là gì,màu xanh dương,màu trắng,OBJECT,0.0,0.4
+màu của áo len là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của cây cầu là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
 màu sắc của trang phục là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
-màu của cà vạt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu tía,màu đen,OBJECT,0.0,0.5
-màu của cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của quầy là gì,màu vàng,màu đen,OBJECT,0.0,0.5
-màu của nón là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của diều là gì,màu xanh lá,màu xanh dương,OBJECT,0.0,0.6666666666666666
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
+màu của cà vạt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con ngựa là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của áo khoác là gì,màu tía,màu đen,COLOR,0.0,0.5
+màu của cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của quầy là gì,màu vàng,màu đen,COLOR,0.0,0.5
+màu của nón là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của diều là gì,màu xanh lá,màu xanh dương,COLOR,0.0,0.6666666666666666
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
 màu sắc của quần vợt là gì,màu tía,màu tía,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
 màu sắc của lễ hội là gì,màu cam,màu cam,COLOR,1.0,1.0
-màu của vòi nước là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con chó là gì,màu đen,màu nâu,OBJECT,0.0,0.5
-màu của chiếc điều khiển là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
+màu của vòi nước là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con chó là gì,màu đen,màu nâu,COLOR,0.0,0.5
+màu của chiếc điều khiển là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của áo là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
 màu sắc của đi bộ là gì,màu đen,màu đen,COLOR,1.0,1.0
-màu của ban nhạc là gì,màu xanh lá,màu đỏ,OBJECT,0.0,0.4
-màu của gạch là gì,màu tía,màu tía,OBJECT,1.0,1.0
+màu của ban nhạc là gì,màu xanh lá,màu đỏ,COLOR,0.0,0.4
+màu của gạch là gì,màu tía,màu tía,COLOR,1.0,1.0
 màu sắc của đường phố là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
-màu của thảm là gì,màu xanh lá,màu nâu,OBJECT,0.0,0.4
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của quả táo là gì,màu cam,màu cam,OBJECT,1.0,1.0
+màu của thảm là gì,màu xanh lá,màu nâu,COLOR,0.0,0.4
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của quả táo là gì,màu cam,màu cam,COLOR,1.0,1.0
 màu sắc của cảnh là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của áo là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của lát là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của nhà là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của bảng là gì,màu xanh lá,màu trắng,OBJECT,0.0,0.4
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của bánh là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu xanh lá,màu vàng,OBJECT,0.0,0.4
+màu của áo là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của lát là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của nhà là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của bảng là gì,màu xanh lá,màu trắng,COLOR,0.0,0.4
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của bánh là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu xanh lá,màu vàng,COLOR,0.0,0.4
 màu sắc của hành khách là gì,màu vàng,màu xanh dương,COLOR,0.0,0.4
-màu của bông hoa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của chăn là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con cừu là gì,màu xám,màu trắng,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của chăn là gì,màu xanh lá,màu nâu,OBJECT,0.0,0.4
-màu của cà vạt là gì,màu đen,màu đỏ,OBJECT,0.0,0.5
-màu của tường là gì,màu xanh dương,màu nâu,OBJECT,0.0,0.4
-màu của bồn rửa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của hàng rào là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của xe tải là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của đậu là gì,màu trắng,màu xanh lá,OBJECT,0.0,0.4
-màu của chăn là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của bông hoa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của chăn là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con cừu là gì,màu xám,màu trắng,COLOR,0.0,0.5
+màu của xe buýt là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của chăn là gì,màu xanh lá,màu nâu,COLOR,0.0,0.4
+màu của cà vạt là gì,màu đen,màu đỏ,COLOR,0.0,0.5
+màu của tường là gì,màu xanh dương,màu nâu,COLOR,0.0,0.4
+màu của bồn rửa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của hàng rào là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của xe tải là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của vòi nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của đậu là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
+màu của chăn là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu tía,màu tía,COLOR,1.0,1.0
-màu của xe là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của áo là gì,màu xám,màu đen,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu xám,màu đen,OBJECT,0.0,0.5
-màu của các chuyến tàu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu đen,màu trắng,OBJECT,0.0,0.5
+màu của xe là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo khoác là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của áo là gì,màu xám,màu đen,COLOR,0.0,0.5
+màu của xe buýt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo khoác là gì,màu xám,màu đen,COLOR,0.0,0.5
+màu của các chuyến tàu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu đen,màu trắng,COLOR,0.0,0.5
 màu sắc của những mảnh vụn là gì,màu xanh dương,màu xám,COLOR,0.0,0.4
-màu của giỏ hàng là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
+màu của giỏ hàng là gì,màu vàng,màu vàng,COLOR,1.0,1.0
 màu sắc của boong tàu là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của áo là gì,màu xám,màu xám,OBJECT,1.0,1.0
+màu của áo là gì,màu xám,màu xám,COLOR,1.0,1.0
 màu sắc của bức ảnh là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của bảng là gì,màu đỏ,màu nâu,OBJECT,0.0,0.5
-màu của chiếc ô là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của khăn là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của gấu là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của phòng tắm là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con chim là gì,màu nâu,màu cam,OBJECT,0.0,0.5
+màu của bảng là gì,màu đỏ,màu nâu,COLOR,0.0,0.5
+màu của chiếc ô là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của khăn là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của gấu là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của phòng tắm là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con chim là gì,màu nâu,màu cam,COLOR,0.0,0.5
 màu sắc của trái cây là gì,màu cam,màu cam,COLOR,1.0,1.0
-màu của gấu là gì,màu nâu màu nâu,màu nâu,OBJECT,0.0,0.6666666666666666
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của gấu bông là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của cà vạt là gì,màu trắng,màu đỏ,OBJECT,0.0,0.5
-màu của máy tính là gì,màu trắng,màu đỏ,OBJECT,0.0,0.5
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của gấu bông là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của cà vạt là gì,màu trắng,màu đỏ,COLOR,0.0,0.5
+màu của máy tính là gì,màu trắng,màu đỏ,COLOR,0.0,0.5
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của bộ đồ là gì,màu đen,màu đen,COLOR,1.0,1.0
-màu của tường là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của lều là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của máy tính là gì,màu cam,màu đỏ,OBJECT,0.0,0.5
-màu của chiếc ô là gì,màu đen,màu đen,OBJECT,1.0,1.0
+màu của tường là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của lều là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của máy tính là gì,màu cam,màu đỏ,COLOR,0.0,0.5
+màu của chiếc ô là gì,màu đen,màu đen,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của động cơ là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu vàng,OBJECT,0.0,0.5
-màu của chiếc bình là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của đài phun nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của cổ áo là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của con bò là gì,màu xám,màu nâu,OBJECT,0.0,0.5
-màu của bàn chải đánh răng là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của con bò là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu cam,màu trắng,OBJECT,0.0,0.5
+màu của động cơ là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu vàng,COLOR,0.0,0.5
+màu của chiếc bình là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của đài phun nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của cổ áo là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của con bò là gì,màu xám,màu nâu,COLOR,0.0,0.5
+màu của bàn chải đánh răng là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của áo là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của con bò là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu cam,màu trắng,COLOR,0.0,0.5
 màu sắc của sự bình yên là gì,màu xám,màu xám,COLOR,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu nâu,màu xanh dương,OBJECT,0.0,0.4
-màu của đèn là gì,màu vàng,màu xanh lá,OBJECT,0.0,0.4
-màu của các chuyến tàu là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu tóc là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của xe là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của xe máy là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của giấy là gì,màu cam,màu đỏ,OBJECT,0.0,0.5
-màu của dĩa nhựa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của con cừu là gì,màu đen,màu đen,OBJECT,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu nâu,màu xanh dương,COLOR,0.0,0.4
+màu của đèn là gì,màu vàng,màu xanh lá,COLOR,0.0,0.4
+màu của các chuyến tàu là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu tóc là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của xe là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của xe máy là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của giấy là gì,màu cam,màu đỏ,COLOR,0.0,0.5
+màu của dĩa nhựa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của con cừu là gì,màu đen,màu đen,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
-màu của con mèo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chữ là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của bảng là gì,màu nâu,màu đen,OBJECT,0.0,0.5
-màu của con mèo là gì,màu xám,màu xanh dương,OBJECT,0.0,0.4
-màu của áo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của con mèo là gì,màu xám,màu nâu,OBJECT,0.0,0.5
+màu của con mèo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chữ là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của bảng là gì,màu nâu,màu đen,COLOR,0.0,0.5
+màu của con mèo là gì,màu xám,màu xanh dương,COLOR,0.0,0.4
+màu của áo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của con mèo là gì,màu xám,màu nâu,COLOR,0.0,0.5
 màu sắc của những con chó là gì,màu trắng,màu nâu,COLOR,0.0,0.5
-màu của phòng tắm là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc mũ là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của tăm là gì,màu trắng,màu vàng,OBJECT,0.0,0.5
-màu của trạm là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con mèo là gì,màu nâu,màu xám,OBJECT,0.0,0.5
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của lửa là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc giường là gì,màu trắng,màu đen,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của bông hoa là gì,màu xanh lá,màu vàng,OBJECT,0.0,0.4
-màu của chiếc hộp là gì,màu cam,màu đen,OBJECT,0.0,0.5
-màu của ánh sáng là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của bông hoa là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu vàng,màu cam,OBJECT,0.0,0.5
-màu của băng ghế là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chăn là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của xe tải là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của nhà là gì,màu xám,màu nâu,OBJECT,0.0,0.5
+màu của phòng tắm là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc mũ là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của tăm là gì,màu trắng,màu vàng,COLOR,0.0,0.5
+màu của trạm là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con mèo là gì,màu nâu,màu xám,COLOR,0.0,0.5
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của lửa là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc giường là gì,màu trắng,màu đen,COLOR,0.0,0.5
+màu của xe buýt là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của bông hoa là gì,màu xanh lá,màu vàng,COLOR,0.0,0.4
+màu của chiếc hộp là gì,màu cam,màu đen,COLOR,0.0,0.5
+màu của ánh sáng là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của bông hoa là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của áo khoác là gì,màu vàng,màu cam,COLOR,0.0,0.5
+màu của băng ghế là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chăn là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của xe tải là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của nhà là gì,màu xám,màu nâu,COLOR,0.0,0.5
 màu sắc của bông hoa là gì,màu cam,màu đỏ,COLOR,0.0,0.5
-màu của áo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của điểm dừng là gì,màu xanh dương,màu xanh lá,OBJECT,0.0,0.6666666666666666
-màu của tủ lạnh là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của bìa là gì,màu cam,màu cam,OBJECT,1.0,1.0
+màu của áo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của điểm dừng là gì,màu xanh dương,màu xanh lá,COLOR,0.0,0.6666666666666666
+màu của tủ lạnh là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của bìa là gì,màu cam,màu cam,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu tía,màu tía,COLOR,1.0,1.0
-màu của áo là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của bánh rán là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của bảng là gì,màu cam,màu nâu,OBJECT,0.0,0.5
-màu của xe tải nhỏ là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu xám,màu đỏ,OBJECT,0.0,0.5
-màu của gấu là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
+màu của áo là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của bánh rán là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của bảng là gì,màu cam,màu nâu,COLOR,0.0,0.5
+màu của xe tải nhỏ là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của vòi nước là gì,màu xám,màu đỏ,COLOR,0.0,0.5
+màu của gấu là gì,màu trắng,màu trắng,COLOR,1.0,1.0
 màu sắc của cây cột là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
 màu sắc của sự sắp xếp là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của cà vạt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của cà vạt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của hành lý là gì,màu đen,màu đen,COLOR,1.0,1.0
-màu của con bò là gì,màu đen,màu trắng,OBJECT,0.0,0.5
-màu của dấu chấm là gì,màu cam,màu vàng,OBJECT,0.0,0.5
+màu của con bò là gì,màu đen,màu trắng,COLOR,0.0,0.5
+màu của dấu chấm là gì,màu cam,màu vàng,COLOR,0.0,0.5
 màu sắc của chiếc váy là gì,màu đen,màu đen,COLOR,1.0,1.0
-màu của con chó là gì,màu nâu,màu trắng,OBJECT,0.0,0.5
-màu của chiếc giường là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của chiếc ghế dài là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của ô liu là gì,màu đen,màu đen,OBJECT,1.0,1.0
+màu của con chó là gì,màu nâu,màu trắng,COLOR,0.0,0.5
+màu của chiếc giường là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của chiếc ghế dài là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của ô liu là gì,màu đen,màu đen,COLOR,1.0,1.0
 màu sắc của ớt là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của gấu là gì,màu nâu màu nâu,màu nâu,OBJECT,0.0,0.6666666666666666
-màu của chiếc bình là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của đèn là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của không khí là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của áo là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của áo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chiếc ghế dài là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của sườn đồi là gì,màu trắng,màu xanh lá,OBJECT,0.0,0.4
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của đèn là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của không khí là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của áo là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của áo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chiếc ghế dài là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của sườn đồi là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
 màu sắc của các khối là gì,màu cam,màu đỏ,COLOR,0.0,0.5
-màu của bánh là gì,màu nâu,màu trắng,OBJECT,0.0,0.5
-màu của tín hiệu là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của xe máy là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của sàn là gì,màu nâu,màu vàng,OBJECT,0.0,0.5
-màu của nhà là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của con mèo là gì,màu đen,màu xám,OBJECT,0.0,0.5
-màu của con chó là gì,màu nâu,màu đen,OBJECT,0.0,0.5
-màu của lá là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh lá,màu đen,OBJECT,0.0,0.4
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của tủ lạnh là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của xe tải là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của xe là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu màu,màu nâu,OBJECT,0.0,0.8
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của ván trượt là gì,màu trắng,màu tía,OBJECT,0.0,0.5
-màu của cam là gì,màu xanh lá,màu tía,OBJECT,0.0,0.4
-màu của chiếc mũ là gì,màu đen,màu cam,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của pizza là gì,màu vàng,màu xanh lá,OBJECT,0.0,0.4
-màu của tường là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của cái ghế là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của cái tủ là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của gấu bông là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của cây là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của băng ghế là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chiếc ghế dài là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của bánh là gì,màu nâu,màu trắng,COLOR,0.0,0.5
+màu của tín hiệu là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của xe máy là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của sàn là gì,màu nâu,màu vàng,COLOR,0.0,0.5
+màu của nhà là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của con mèo là gì,màu đen,màu xám,COLOR,0.0,0.5
+màu của con chó là gì,màu nâu,màu đen,COLOR,0.0,0.5
+màu của lá là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của áo là gì,màu xanh lá,màu đen,COLOR,0.0,0.4
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của tủ lạnh là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của xe tải là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của xe là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của ván trượt là gì,màu trắng,màu tía,COLOR,0.0,0.5
+màu của cam là gì,màu xanh lá,màu tía,COLOR,0.0,0.4
+màu của chiếc mũ là gì,màu đen,màu cam,COLOR,0.0,0.5
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của pizza là gì,màu vàng,màu xanh lá,COLOR,0.0,0.4
+màu của tường là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của cái ghế là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của cái tủ là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của gấu bông là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của cây là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của băng ghế là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chiếc ghế dài là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
 màu sắc của tấm là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
-màu của con chim là gì,màu nâu,màu đỏ,OBJECT,0.0,0.5
-màu của rừng là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của lửa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của rau là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của con mèo là gì,màu cam,màu vàng,OBJECT,0.0,0.5
-màu của lửa là gì,màu đỏ,màu vàng,OBJECT,0.0,0.5
-màu của xe buýt là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của cỏ là gì,màu đỏ,màu xanh lá,OBJECT,0.0,0.4
+màu của con chim là gì,màu nâu,màu đỏ,COLOR,0.0,0.5
+màu của rừng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của lửa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của rau là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của con mèo là gì,màu cam,màu vàng,COLOR,0.0,0.5
+màu của lửa là gì,màu đỏ,màu vàng,COLOR,0.0,0.5
+màu của xe buýt là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của cỏ là gì,màu đỏ,màu xanh lá,COLOR,0.0,0.4
 màu sắc của trang phục là gì,màu đỏ,màu tía,COLOR,0.0,0.5
-màu của vòi nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con chó là gì,màu đen,màu nâu,OBJECT,0.0,0.5
-màu của chuối là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con quạ là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu mắt là gì,màu xanh lá,màu tía,OBJECT,0.0,0.4
-màu của bồn tắm là gì,màu xanh lá,màu trắng,OBJECT,0.0,0.4
-màu của lá là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con chim là gì,màu đen,màu xám,OBJECT,0.0,0.5
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của gấu bông là gì,màu nâu màu nâu,màu nâu,OBJECT,0.0,0.6666666666666666
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của phòng tắm là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của chăn là gì,màu tía,màu đỏ,OBJECT,0.0,0.5
-màu của gấu bông là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của tấm thảm là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của vòi nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con chó là gì,màu đen,màu nâu,COLOR,0.0,0.5
+màu của chuối là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con quạ là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu mắt là gì,màu xanh lá,màu tía,COLOR,0.0,0.4
+màu của bồn tắm là gì,màu xanh lá,màu trắng,COLOR,0.0,0.4
+màu của lá là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con chim là gì,màu đen,màu xám,COLOR,0.0,0.5
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của áo là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của gấu bông là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của phòng tắm là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của chăn là gì,màu tía,màu đỏ,COLOR,0.0,0.5
+màu của gấu bông là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của tấm thảm là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của con dê là gì,màu xám,màu xám,COLOR,1.0,1.0
-màu của phòng tắm là gì,màu xanh lá,màu trắng,OBJECT,0.0,0.4
-màu của áo là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của đèn là gì,màu đỏ,màu vàng,OBJECT,0.0,0.5
-màu của hoa tulip là gì,màu cam,màu đỏ,OBJECT,0.0,0.5
-màu của gấu bông là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu đen,màu xanh dương,OBJECT,0.0,0.4
+màu của phòng tắm là gì,màu xanh lá,màu trắng,COLOR,0.0,0.4
+màu của áo là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của đèn là gì,màu đỏ,màu vàng,COLOR,0.0,0.5
+màu của hoa tulip là gì,màu cam,màu đỏ,COLOR,0.0,0.5
+màu của gấu bông là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu đen,màu xanh dương,COLOR,0.0,0.4
 màu sắc của chơi là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
-màu của nho là gì,màu đen,màu đỏ,OBJECT,0.0,0.5
-màu của áo là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của áo là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của nhà là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của phòng tắm là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của xe tải là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của nho là gì,màu đen,màu đỏ,COLOR,0.0,0.5
+màu của áo là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của áo là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của nhà là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của phòng tắm là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của xe tải là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của thực phẩm là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của ghế là gì,màu xanh dương,màu xanh lá,OBJECT,0.0,0.6666666666666666
-màu của chiếc tàu là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu xanh lá,màu trắng,OBJECT,0.0,0.4
-màu của gấu là gì,màu đen,màu nâu,OBJECT,0.0,0.5
-màu của đậu là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của ghế là gì,màu xanh dương,màu xanh lá,COLOR,0.0,0.6666666666666666
+màu của chiếc tàu là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu xanh lá,màu trắng,COLOR,0.0,0.4
+màu của gấu là gì,màu đen,màu nâu,COLOR,0.0,0.5
+màu của đậu là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
 màu sắc của áo phông là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của máy bay là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của mảnh là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con mèo là gì,màu đen,màu xám,OBJECT,0.0,0.5
-màu của gấu là gì,màu nâu màu nâu,màu nâu,OBJECT,0.0,0.6666666666666666
+màu của đồng cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con ngựa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của máy bay là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của mảnh là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con mèo là gì,màu đen,màu xám,COLOR,0.0,0.5
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của ớt là gì,màu đen,màu xanh lá,COLOR,0.0,0.4
-màu của đĩa là gì,màu vàng,màu xanh lá,OBJECT,0.0,0.4
-màu của ghế là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu màu,màu nâu,OBJECT,0.0,0.8
-màu của sườn đồi là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của lửa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của áo là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của chiếc dĩa nhựa là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của gấu là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của bên ngoài là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu xanh dương,màu vàng,OBJECT,0.0,0.4
+màu của đĩa là gì,màu vàng,màu xanh lá,COLOR,0.0,0.4
+màu của ghế là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của sườn đồi là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của lửa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của áo là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của chiếc dĩa nhựa là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của gấu là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của bên ngoài là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu xanh dương,màu vàng,COLOR,0.0,0.4
 màu sắc của bông hoa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của chiếc tàu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của điện thoại là gì,màu tía,màu tía,OBJECT,1.0,1.0
+màu của chiếc tàu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của điện thoại là gì,màu tía,màu tía,COLOR,1.0,1.0
 màu sắc của hành khách là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu tía,màu tía,COLOR,1.0,1.0
-màu của rượu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của kính bảo hộ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của rượu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của kính bảo hộ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của cánh đồng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của chiếc thuyền là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của nước ép là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh lá,màu vàng,OBJECT,0.0,0.4
-màu của nhà vệ sinh là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của nón là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con chó là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của khói là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của nền sân là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của lá là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của chiếc thuyền là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của nước ép là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của áo là gì,màu xanh lá,màu vàng,COLOR,0.0,0.4
+màu của nhà vệ sinh là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của nón là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con chó là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của khói là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của nền sân là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của lá là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu tía,màu đỏ,COLOR,0.0,0.5
 màu sắc của các thiết bị là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của xe máy là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của bộ đồ là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của cái tủ là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của gấu là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu vàng,màu đỏ,OBJECT,0.0,0.5
-màu của dĩa nhựa là gì,màu vàng,màu tía,OBJECT,0.0,0.5
-màu của khoảng không là gì,màu đỏ,màu cam,OBJECT,0.0,0.5
-màu của con mèo là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của con chó là gì,màu nâu,màu đen,OBJECT,0.0,0.5
-màu của tóc giả là gì,màu đỏ,màu cam,OBJECT,0.0,0.5
-màu của con cừu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu đỏ,màu xanh lá,OBJECT,0.0,0.4
-màu của dĩa nhựa là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của hình ảnh là gì,màu vàng,màu trắng,OBJECT,0.0,0.5
-màu của phòng tắm là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của xe máy là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của bộ đồ là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của cái tủ là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của gấu là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của xe buýt là gì,màu vàng,màu đỏ,COLOR,0.0,0.5
+màu của dĩa nhựa là gì,màu vàng,màu tía,COLOR,0.0,0.5
+màu của khoảng không là gì,màu đỏ,màu cam,COLOR,0.0,0.5
+màu của con mèo là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của con chó là gì,màu nâu,màu đen,COLOR,0.0,0.5
+màu của tóc giả là gì,màu đỏ,màu cam,COLOR,0.0,0.5
+màu của con cừu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu đỏ,màu xanh lá,COLOR,0.0,0.4
+màu của dĩa nhựa là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của hình ảnh là gì,màu vàng,màu trắng,COLOR,0.0,0.5
+màu của phòng tắm là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của những con bướm là gì,màu tía,màu tía,COLOR,1.0,1.0
-màu của vòi nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con chó là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu trắng,OBJECT,0.0,0.5
-màu của ánh sáng là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của quả là gì,màu xanh lá,màu vàng,OBJECT,0.0,0.4
-màu của xe tải là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của pizza là gì,màu trắng,màu xanh lá,OBJECT,0.0,0.4
-màu của chiếc giường là gì,màu cam,màu trắng,OBJECT,0.0,0.5
-màu mắt là gì,màu nâu,màu xanh dương,OBJECT,0.0,0.4
+màu của vòi nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con chó là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu trắng,COLOR,0.0,0.5
+màu của ánh sáng là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của quả là gì,màu xanh lá,màu vàng,COLOR,0.0,0.4
+màu của xe tải là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của pizza là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
+màu của chiếc giường là gì,màu cam,màu trắng,COLOR,0.0,0.5
+màu mắt là gì,màu nâu,màu xanh dương,COLOR,0.0,0.4
 màu sắc của viên đá là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của đá phiến là gì,màu đỏ,màu xám,COLOR,0.0,0.5
-màu của con ngựa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của mũ bảo hiểm là gì,màu đỏ,màu xanh dương,OBJECT,0.0,0.4
-màu của lớp lót là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu sắc của trang phục là gì,màu tía màu,màu tía,COLOR,0.0,0.8
-màu của hình là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của nhà vệ sinh là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của con ngựa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của mũ bảo hiểm là gì,màu đỏ,màu xanh dương,COLOR,0.0,0.4
+màu của lớp lót là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu sắc của trang phục là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của hình là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của nhà vệ sinh là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của các dấu hiệu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của nhà vệ sinh là gì,màu trắng,màu nâu,OBJECT,0.0,0.5
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của nhà vệ sinh là gì,màu trắng,màu nâu,COLOR,0.0,0.5
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của xe buýt là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của sơ đồ là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
 màu sắc của các dấu hiệu là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của bông hoa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của rừng là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của dấu hiệu là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của đồng hồ là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của lò vi sóng là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của ghế là gì,màu xanh lá,màu nâu,OBJECT,0.0,0.4
-màu của kính là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của vịt là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu nước là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của vùng đất là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của cốc là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của con chó là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của cổ áo là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của bông hoa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của rừng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của dấu hiệu là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của đồng hồ là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của lò vi sóng là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của ghế là gì,màu xanh lá,màu nâu,COLOR,0.0,0.4
+màu của kính là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của vịt là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu nước là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của vùng đất là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của cốc là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của con chó là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của cổ áo là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của quần vợt là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của con chó là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
+màu của con chó là gì,màu trắng,màu trắng,COLOR,1.0,1.0
 màu sắc của đồ chơi là gì,màu vàng,màu cam,COLOR,0.0,0.5
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu tía,màu tía,OBJECT,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu tía,màu tía,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu tía,màu vàng,COLOR,0.0,0.5
-màu của đầu là gì,màu cam,màu đen,OBJECT,0.0,0.5
-màu của chiếc đĩa là gì,màu nâu,màu trắng,OBJECT,0.0,0.5
-màu của tường là gì,màu trắng,màu vàng,OBJECT,0.0,0.5
-màu của dĩa nhựa là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của xe máy là gì,màu vàng,màu xanh lá,OBJECT,0.0,0.4
-màu của con mèo là gì,màu xám,màu xám,OBJECT,1.0,1.0
+màu của đầu là gì,màu cam,màu đen,COLOR,0.0,0.5
+màu của chiếc đĩa là gì,màu nâu,màu trắng,COLOR,0.0,0.5
+màu của tường là gì,màu trắng,màu vàng,COLOR,0.0,0.5
+màu của dĩa nhựa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của xe máy là gì,màu vàng,màu xanh lá,COLOR,0.0,0.4
+màu của con mèo là gì,màu xám,màu xám,COLOR,1.0,1.0
 màu sắc của chiếc váy là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
-màu của vòi nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của con bò là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc thuyền là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của bức tượng là gì,màu nâu,màu xám,OBJECT,0.0,0.5
-màu của nhà là gì,màu trắng,màu nâu,OBJECT,0.0,0.5
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc bình là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của dĩa nhựa là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc ô là gì,màu đen,màu đen,OBJECT,1.0,1.0
+màu của vòi nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của con bò là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc thuyền là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của bức tượng là gì,màu nâu,màu xám,COLOR,0.0,0.5
+màu của nhà là gì,màu trắng,màu nâu,COLOR,0.0,0.5
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc bình là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của dĩa nhựa là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc ô là gì,màu đen,màu đen,COLOR,1.0,1.0
 màu sắc của sự phát triển là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc mèo là gì,màu nâu,màu xám,COLOR,0.0,0.5
-màu của đồ uống là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con chó là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của lồng là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của nhà vệ sinh là gì,màu xanh lá,màu xanh dương,OBJECT,0.0,0.6666666666666666
-màu của gấu là gì,màu nâu màu nâu,màu nâu,OBJECT,0.0,0.6666666666666666
-màu của chiếc đĩa là gì,màu xanh dương,màu trắng,OBJECT,0.0,0.4
+màu của đồ uống là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của áo khoác là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của xe buýt là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con chó là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của vòi nước là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của lồng là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của nhà vệ sinh là gì,màu xanh lá,màu xanh dương,COLOR,0.0,0.6666666666666666
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu xanh dương,màu trắng,COLOR,0.0,0.4
 màu sắc của người đó là gì,màu đen,màu tía,COLOR,0.0,0.5
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của xe tải là gì,màu cam,màu vàng,OBJECT,0.0,0.5
-màu của con ngựa là gì,màu nâu,màu đen,OBJECT,0.0,0.5
-màu của bộ đồ là gì,màu xanh dương,màu vàng,OBJECT,0.0,0.4
-màu của dĩa nhựa là gì,màu xanh lá,màu cam,OBJECT,0.0,0.4
-màu của màn hình là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của khung là gì,màu xanh dương,màu đỏ,OBJECT,0.0,0.4
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của chiếc hộp là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của xe tải là gì,màu cam,màu vàng,COLOR,0.0,0.5
+màu của con ngựa là gì,màu nâu,màu đen,COLOR,0.0,0.5
+màu của bộ đồ là gì,màu xanh dương,màu vàng,COLOR,0.0,0.4
+màu của dĩa nhựa là gì,màu xanh lá,màu cam,COLOR,0.0,0.4
+màu của màn hình là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của khung là gì,màu xanh dương,màu đỏ,COLOR,0.0,0.4
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của chiếc hộp là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của giao thông là gì,màu đen,màu đỏ,COLOR,0.0,0.5
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
 màu sắc của bóng đá là gì,màu xanh lá,màu xanh dương,COLOR,0.0,0.6666666666666666
-màu của lốp xe là gì,màu đỏ,màu đen,OBJECT,0.0,0.5
-màu của chiếc bình là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của áo khoác là gì,màu xanh dương,màu đen,OBJECT,0.0,0.4
-màu của áo là gì,màu đen,màu xanh dương,OBJECT,0.0,0.4
-màu của sự kiểm soát là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của trải giường là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của con mèo là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của áo là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của lốp xe là gì,màu đỏ,màu đen,COLOR,0.0,0.5
+màu của chiếc bình là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của vòi nước là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của áo khoác là gì,màu xanh dương,màu đen,COLOR,0.0,0.4
+màu của áo là gì,màu đen,màu xanh dương,COLOR,0.0,0.4
+màu của sự kiểm soát là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của trải giường là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của con mèo là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của áo là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của các dấu hiệu là gì,màu cam,màu xanh lá,COLOR,0.0,0.4
-màu của cà vạt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của cà vạt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của đôi giày là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của đôi bốt là gì,màu đen,màu nâu,COLOR,0.0,0.5
-màu của bầu trời là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của máy bay là gì,màu xám,màu xám,OBJECT,1.0,1.0
+màu của bầu trời là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của máy bay là gì,màu xám,màu xám,COLOR,1.0,1.0
 màu sắc của những con chó là gì,màu nâu,màu nâu,COLOR,1.0,1.0
-màu của mũ bảo hiểm là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của án là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của vỉa hè là gì,màu xanh lá,màu vàng,OBJECT,0.0,0.4
-màu của con mèo là gì,màu cam,màu vàng,OBJECT,0.0,0.5
-màu của ánh sáng là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của mũ bảo hiểm là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của án là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của vỉa hè là gì,màu xanh lá,màu vàng,COLOR,0.0,0.4
+màu của con mèo là gì,màu cam,màu vàng,COLOR,0.0,0.5
+màu của ánh sáng là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của chiếc ghế dài là gì,màu nâu,màu vàng,OBJECT,0.0,0.5
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu đen,màu nâu,OBJECT,0.0,0.5
-màu của hình ảnh là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của đồng bằng là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của đèn là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của chiếc đĩa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của xe máy là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của bầu trời là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của vòi nước là gì,màu cam,màu cam,OBJECT,1.0,1.0
-màu của chiếc tàu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
+màu của chiếc ghế dài là gì,màu nâu,màu vàng,COLOR,0.0,0.5
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của con ngựa là gì,màu đen,màu nâu,COLOR,0.0,0.5
+màu của hình ảnh là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của đồng bằng là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của đèn là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của chiếc đĩa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của xe máy là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của bầu trời là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của vòi nước là gì,màu cam,màu cam,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
 màu sắc của thảm thực vật là gì,màu trắng,màu xanh lá,COLOR,0.0,0.4
-màu của ghế là gì,màu xám,màu xám,OBJECT,1.0,1.0
-màu của xe ngựa là gì,màu trắng,màu trắng,OBJECT,1.0,1.0
-màu của con ngựa là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
+màu của ghế là gì,màu xám,màu xám,COLOR,1.0,1.0
+màu của xe ngựa là gì,màu trắng,màu trắng,COLOR,1.0,1.0
+màu của con ngựa là gì,màu nâu,màu nâu,COLOR,1.0,1.0
 màu sắc của cây là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
-màu của vali là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của ghế là gì,màu cam,màu xanh lá,OBJECT,0.0,0.4
+màu của vali là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của xe buýt là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của xe buýt là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của ghế là gì,màu cam,màu xanh lá,COLOR,0.0,0.4
 màu sắc của người phụ nữ là gì,màu vàng,màu đen,COLOR,0.0,0.5
-màu của áo là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
+màu của áo là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
 màu sắc của đồ chơi là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của tường là gì,màu trắng,màu xám,OBJECT,0.0,0.5
+màu của tường là gì,màu trắng,màu xám,COLOR,0.0,0.5
 màu sắc của trang phục là gì,màu đen,màu đen,COLOR,1.0,1.0
-màu của ghế là gì,màu cam,màu cam,OBJECT,1.0,1.0
+màu của ghế là gì,màu cam,màu cam,COLOR,1.0,1.0
 màu sắc của chăn thả là gì,màu xanh lá,màu nâu,COLOR,0.0,0.4
-màu của gấu là gì,màu nâu,màu nâu,OBJECT,1.0,1.0
-màu của phòng tắm là gì,màu xanh dương,màu xanh dương,OBJECT,1.0,1.0
-màu của cỏ là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của sắt là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của người lướt sóng là gì,màu đen,màu đen,OBJECT,1.0,1.0
-màu của bếp là gì,màu cam,màu đen,OBJECT,0.0,0.5
+màu của gấu là gì,màu nâu,màu nâu,COLOR,1.0,1.0
+màu của phòng tắm là gì,màu xanh dương,màu xanh dương,COLOR,1.0,1.0
+màu của cỏ là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của sắt là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của người lướt sóng là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của bếp là gì,màu cam,màu đen,COLOR,0.0,0.5
 màu sắc của tấm là gì,màu trắng,màu trắng,COLOR,1.0,1.0
-màu của xe buýt là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của xe buýt là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của táo là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
-màu của ghế sofa là gì,màu tía,màu tía,OBJECT,1.0,1.0
-màu của cà vạt là gì,màu xanh lá,màu tía,OBJECT,0.0,0.4
-màu của ván lướt là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của gấu là gì,màu đen màu đen,màu đen,OBJECT,0.0,0.6666666666666666
-màu của chiếc tàu là gì,màu vàng,màu vàng,OBJECT,1.0,1.0
-màu của đồ uống là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của xe buýt là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của xe buýt là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của táo là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
+màu của ghế sofa là gì,màu tía,màu tía,COLOR,1.0,1.0
+màu của cà vạt là gì,màu xanh lá,màu tía,COLOR,0.0,0.4
+màu của ván lướt là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của gấu là gì,màu đen,màu đen,COLOR,1.0,1.0
+màu của chiếc tàu là gì,màu vàng,màu vàng,COLOR,1.0,1.0
+màu của đồ uống là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 màu sắc của bông hoa là gì,màu vàng,màu vàng,COLOR,1.0,1.0
-màu của lửa là gì,màu đỏ,màu đỏ,OBJECT,1.0,1.0
-màu của lá là gì,màu xanh lá,màu xanh lá,OBJECT,1.0,1.0
+màu của lửa là gì,màu đỏ,màu đỏ,COLOR,1.0,1.0
+màu của lá là gì,màu xanh lá,màu xanh lá,COLOR,1.0,1.0
 cậu bé đang làm thủ thuật ván trượt ở đâu,đường phố,đường phố,LOCATION,1.0,1.0
 hai cô gái đang chơi một trò chơi điện tử ở đâu,phòng,phòng,LOCATION,1.0,1.0
 con mèo thư giãn ở đâu,chiếc ô,giường,LOCATION,0.0,0.0
@@ -665,7 +665,7 @@ gấu bông hồng đang ngồi ở đâu,máy sấy khô,máy sấy khô,LOCATI
 một số hươu cao cổ nằm ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
 ở đâu có rất nhiều được chuối nhìn thấy,cửa hàng,cái rổ,LOCATION,0.0,0.0
 đoàn tàu trống ở đâu,trạm,trạm,LOCATION,1.0,1.0
-con chó trắng đang ngồi ở đâu,cái ghế cái ghế,cái ghế,LOCATION,0.0,0.6666666666666666
+con chó trắng đang ngồi ở đâu,cái ghế nhà,cái ghế,LOCATION,0.0,0.8
 hỗn hợp của rau được nấu ở đâu,chảo,chảo,LOCATION,1.0,1.0
 mọi người đang thưởng thức đồ uống ở đâu dưới ánh nến,phòng,quán bar,LOCATION,0.0,0.0
 bồn tắm đặt ở đâu,nhà ở,phòng tắm,LOCATION,0.0,0.0
@@ -701,7 +701,7 @@ người phụ nữ đang chụp ảnh của cô ấy ở đâu,gương,gương,
 những bông hoa trắng ở đâu,lọ cắm hoa,lọ cắm hoa,LOCATION,1.0,1.0
 con ngựa kéo một chiếc xe đẩy ở đâu,đường,đường phố,LOCATION,0.0,0.6666666666666666
 người đàn ông điều chỉnh một cái gì đó trên một thiết bị cơ khí ở đâu,phòng,áo vest,LOCATION,0.0,0.0
-người đàn ông đang ăn hotdog ở đâu,cái ghế cái ghế cái,cái ghế,LOCATION,0.0,0.5714285714285715
+người đàn ông đang ăn hotdog ở đâu,cái ghế xe đẩy,cái ghế,LOCATION,0.0,0.6666666666666666
 người đàn ông đứng ở đâu,xe tải,đường phố,LOCATION,0.0,0.0
 những con chó nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 khu vực chuẩn bị được dự trữ tốt được tổ chức tốt ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
@@ -722,7 +722,7 @@ bồn cầu trắng ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 người đàn ông đeo mặt nạ da và còng cổ tay nằm ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 người đàn ông làm một chiêu trò trượt ván ở đâu,bát,bát,LOCATION,1.0,1.0
 người đàn ông và ba con chó đang ở đâu,con thuyền,con thuyền,LOCATION,1.0,1.0
-con gấu đang ngồi ở đâu,cái ghế cái ghế,cái ghế,LOCATION,0.0,0.6666666666666666
+con gấu đang ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 kéo và các công cụ khác ở đâu,cây kéo,thùng chứa,LOCATION,0.0,0.0
 con mèo đen trắng nằm ở đâu,cái túi,vali,LOCATION,0.0,0.0
 chuối và các thành phần khác ở đâu,máy xay,cái nồi,LOCATION,0.0,0.0
@@ -751,7 +751,7 @@ người phụ nữ đang kiểm tra điện thoại di động ở đâu,phòng
 đứa trẻ đang mỉm cười ở đâu,vali,vali,LOCATION,1.0,1.0
 cầu thang nằm ở đâu,phòng,nhà ở,LOCATION,0.0,0.0
 người đàn ông ngồi ở đâu trong khi sử dụng máy tính xách tay,xe ô tô,xe ô tô,LOCATION,1.0,1.0
-những người đàn ông và một người đang đội mũ trắng đang ngồi ở đâu,ván lướt sóng,con thuyền,LOCATION,0.0,0.0
+những người đàn ông và một người đang đội mũ trắng đang ngồi ở đâu,con thuyền,con thuyền,LOCATION,1.0,1.0
 căn phòng được trang trí độc đáo ở đâu,phòng,nhà ở,LOCATION,0.0,0.0
 ánh sáng trên đâu,phòng ngủ,phòng ngủ,LOCATION,1.0,1.0
 người phụ nữ uống bia ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
@@ -768,7 +768,7 @@ xe lớn cũ kĩ ở đâu,gương,gương,LOCATION,1.0,1.0
 người phụ nữ với mái tóc đỏ tươi và hình xăm ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 người đàn ông đứng ở đâu trong khi câu cá,con thuyền,con thuyền,LOCATION,1.0,1.0
 vận động viên trượt ván đang làm trò ở đâu,bát,đường ống,LOCATION,0.0,0.0
-những loại trái cây khác nhau ở đâu,bát bát,bát,LOCATION,0.0,0.6666666666666666
+những loại trái cây khác nhau ở đâu,bát,bát,LOCATION,1.0,1.0
 pizza kích thước lớn ở đâu với một lát bị mất,hộp,hộp,LOCATION,1.0,1.0
 nơi nào có một vài hươu cao cổ,chuồng,chuồng,LOCATION,1.0,1.0
 con mèo đang ngủ trưa ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
@@ -780,10 +780,10 @@ người trượt ván đang đi trên ván trượt của mình ở đâu,đư�
 hai con mèo ngủ trưa ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 người đang ngồi đi văng ở đâu,phòng,phòng,LOCATION,1.0,1.0
 một chiếc ghế dài màu be và gối màu cam ở đâu,phòng,phòng,LOCATION,1.0,1.0
-chiếc bánh pizza được xếp ở đâu,hộp hộp hộp,hộp,LOCATION,0.0,0.5
+chiếc bánh pizza được xếp ở đâu,hộp,hộp,LOCATION,1.0,1.0
 người đàn ông chuẩn bị thức ăn ở đâu trong khi đứng,phòng bếp,phòng bếp,LOCATION,1.0,1.0
 ba con hươu cao cổ của họ trông ở đâu,chuồng,rào chắn,LOCATION,0.0,0.0
-người phụ nữ đang chải tóc ở đâu,cái ghế cái ghế cái,cái ghế,LOCATION,0.0,0.5714285714285715
+người phụ nữ đang chải tóc ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 người đàn ông và một người phụ nữ chơi trò chơi ở đâu,phòng,nhà,LOCATION,0.0,0.0
 đầu bếp phục vụ một người ở đâu,lò vi sóng,cái lều,LOCATION,0.0,0.0
 nấu bánh pizza ở đâu,lò vi sóng,lò vi sóng,LOCATION,1.0,1.0
@@ -811,7 +811,7 @@ con mèo nằm ở đâu,vali,vali,LOCATION,1.0,1.0
 người đàn ông đang ở đâu,phòng bếp,ô cửa,LOCATION,0.0,0.0
 hành lý đi vòng quanh đâu,sân bay,trạm,LOCATION,0.0,0.0
 "mèo đen ngồi ở đâu,",cái ghế,cái ghế,LOCATION,1.0,1.0
-con mèo đang ngồi ở đâu,cái ghế cái ghế,cái ghế,LOCATION,0.0,0.6666666666666666
+con mèo đang ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 giường và tủ đầu giường nằm ở đâu,phòng ngủ,phòng ngủ,LOCATION,1.0,1.0
 một số bánh rán khác nhau được đặt ở đâu,hộp,hộp,LOCATION,1.0,1.0
 bông hoa màu đỏ đang nằm ở đâu,lọ cắm hoa,lọ cắm hoa,LOCATION,1.0,1.0
@@ -837,7 +837,7 @@ gấu teddy nhìn xuống một cái lỗ ở đâu,sàn nhà,sàn nhà,LOCATION
 người phụ nữ đang gọt chuối đâu,phòng bếp,nhà ở,LOCATION,0.0,0.0
 người đàn ông đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 ô tô dừng ở đâu,đường phố,đường phố,LOCATION,1.0,1.0
-con chó đang nhìn ở đâu,gương gương,gương,LOCATION,0.0,0.6666666666666666
+con chó đang nhìn ở đâu,gương nhà ở,gương,LOCATION,0.0,0.5
 xe màu đỏ dừng ở đâu,đường phố,đường phố,LOCATION,1.0,1.0
 pizza bị ăn một phần nằm ở đâu,hộp,hộp,LOCATION,1.0,1.0
 người đàn ông đặt máy tính xách tay ở đâu,cái ghế,cái túi,LOCATION,0.0,0.5
@@ -902,7 +902,7 @@ ghế vệ sinh làm bằng gỗ ở đâu,phòng tắm,phòng tắm,LOCATION,1.
 người đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 người đàn ông với một cái loa đang đi bộ ở đâu,đường phố,đường phố,LOCATION,1.0,1.0
 một bàn chải đánh răng điện được rửa sạch ở đâu,phòng tắm,chậu,LOCATION,0.0,0.0
-hai con mèo đen trắng đang ở đâu,cửa sổ cửa sổ,cửa sổ,LOCATION,0.0,0.6666666666666666
+hai con mèo đen trắng đang ở đâu,cửa sổrào chắn,cửa sổ,LOCATION,0.0,0.4
 người đàn ông với một chiếc ô đứng ở đâu,đường phố,đường phố,LOCATION,1.0,1.0
 một người đàn ông đang ở đâu,con thuyền,con thuyền,LOCATION,1.0,1.0
 diều đầy màu sắc ở đâu,cửa sổ nhà ở,cửa sổ,LOCATION,0.0,0.6666666666666666
@@ -915,16 +915,16 @@ người phụ nữ chụp một bức ảnh của mình từ đâu,gương,gư�
 hai gấu bắc cực trắng đang ở đâu,trượt tuyết,chuồng,LOCATION,0.0,0.0
 bát và thìa ở đâu,chậu,chậu,LOCATION,1.0,1.0
 xe đạp đậu ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
-con mèo đang đi lang thang ở đâu,cái ghế cái ghế cái,cái ghế,LOCATION,0.0,0.5714285714285715
+con mèo đang đi lang thang ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 xe cổ điển đang đỗ ở đâu,đường phố,ga-ra,LOCATION,0.0,0.0
-đầu bếp giữ một con dao ở đâu,phòng bếp phòng,phòng bếp,LOCATION,0.0,0.8
+đầu bếp giữ một con dao ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
 một giường và một cửa sổ nằm ở đâu,phòng,phòng,LOCATION,1.0,1.0
 gấu bắc cực trắng đang ở đâu,vườn bách thú,chuồng,LOCATION,0.0,0.0
 lực lượng quân sự vũ trang đang ở đâu,xe tải,xe tải,LOCATION,1.0,1.0
 con mèo đang ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 người đàn ông lái xe ở đâu,xe đẩy,xe,LOCATION,0.0,0.6666666666666666
 vài con ngựa vằn đang đứng ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
-đi văng nằm ở đâu,phòng cái ghế,phòng,LOCATION,0.0,0.5
+đi văng nằm ở đâu,phòng,phòng,LOCATION,1.0,1.0
 em bé đang ngồi ở đâu,găng tay,găng tay,LOCATION,1.0,1.0
 người phụ nữ chụp một bức ảnh của mình ở đâu,gương,gương,LOCATION,1.0,1.0
 lò vi sóng đã gắn kết bên trong của một bức tường đặt ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
@@ -936,13 +936,13 @@ giường ngồi ở đâu,phòng,phòng ngủ,LOCATION,0.0,0.6666666666666666
 băng ghế được sơn ở đâu,cửa hàng,thư viện,LOCATION,0.0,0.0
 "nơi để đồ cho trẻ mới biết đi và đeo ván trượt, mỉm cười trước ống kính ở đâu",trượt tuyết,trượt tuyết,LOCATION,1.0,1.0
 con mèo đang nhìn ở đâu,gương,gương,LOCATION,1.0,1.0
-nhà vệ sinh trắng ở đâu,phòng tắm phòng,phòng tắm,LOCATION,0.0,0.8
+nhà vệ sinh trắng ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 hai con hươu cao cổ đứng cạnh nhau ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
 đâu là nơi một vài con hươu cao cổ đứng,vườn bách thú,chuồng,LOCATION,0.0,0.0
 xe tải dường như ở đâu,gương,gương,LOCATION,1.0,1.0
 nơi nào để bàn trang điểm và bộ đồ trong phòng tắm và cửa mở để chỉ hai chiếc giường,tường,phòng ngủ,LOCATION,0.0,0.0
 những trái cam được đặt ở đâu,chậu,cái rổ,LOCATION,0.0,0.0
-người đang chơi trò trượt ván ở đâu,gương gương,đường,LOCATION,0.0,0.0
+người đang chơi trò trượt ván ở đâu,gương,đường,LOCATION,0.0,0.0
 cậu bé đang ở đâu,cửa hàng,xe đẩy,LOCATION,0.0,0.0
 nhóm người đang ở đâu,phòng,phòng,LOCATION,1.0,1.0
 phòng khách và phòng ăn nằm ở đâu,nhà ở,nhà ở,LOCATION,1.0,1.0
@@ -966,7 +966,7 @@ bông hoa hồng ở đâu,lọ cắm hoa,lọ cắm hoa,LOCATION,1.0,1.0
 người được phản chiếu ở đâu,phòng tắm,gương,LOCATION,0.0,0.0
 nhà vệ sinh trắng và bồn tắm ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 bồn rửa được đặt ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
-donuts đang đặt cạnh nhau ở đâu,hộp hộp,hộp,LOCATION,0.0,0.6666666666666666
+donuts đang đặt cạnh nhau ở đâu,hộp nhà ở,hộp,LOCATION,0.0,0.5
 tàu đang kéo lên ở đâu,trạm,trạm,LOCATION,1.0,1.0
 một số ít người làm nhiều công việc khác nhau ở đâu,văn phòng,văn phòng,LOCATION,1.0,1.0
 bộ thang leo ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
@@ -991,14 +991,14 @@ bánh mì được chứa ở đâu,thùng chứa,hộp,LOCATION,0.0,0.0
 nơi có rất nhiều động vật và gấu bông,gấu,phòng,OBJECT,0.0,0.0
 nhà vệ sinh trắng đang đặt ở đâu,phòng tắm,nhà vệ sinh,LOCATION,0.0,0.0
 người đàn ông nhật bản đang chuẩn bị thức ăn ở đâu,phòng bếp nhà ở,quán ăn,LOCATION,0.0,0.0
-thịt nướng thổ nhĩ kỳ ở đâu,lò vi sóng lò vi sóng,lò vi sóng,LOCATION,0.0,0.6666666666666666
-trẻ mới biết đi ở đâu,giường giường,giường,LOCATION,0.0,0.6666666666666666
+thịt nướng thổ nhĩ kỳ ở đâu,lò vi sóng phòng bếp,lò vi sóng,LOCATION,0.0,0.7499999999999999
+trẻ mới biết đi ở đâu,giường,giường,LOCATION,1.0,1.0
 người đàn ông đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 "những người đang ngồi và đứng ở đâu,",xe điện ngầm,xe ô tô,LOCATION,0.0,0.3333333333333333
-nhóm người đứng ở đâu,hồ bơiván l,hồ bơi,LOCATION,0.0,0.4
+nhóm người đứng ở đâu,hồ bơi,hồ bơi,LOCATION,1.0,1.0
 tay cầm điện thoại di động và chụp ảnh ở đâu,gương,gương,LOCATION,1.0,1.0
 người đàn ông mặc một chiếc áo len trắng đang ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
-người đàn ông dừng lại ở đâu,xe lăn xe lăn,xe lăn,LOCATION,0.0,0.6666666666666666
+người đàn ông dừng lại ở đâu,xe lăn cái ghế,xe lăn,LOCATION,0.0,0.6666666666666666
 người phụ nữ trẻ mỉm cười sử dụng máy tính ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
 con mèo đen màu ngồi ở đâu,cái ghế,sân vườn,LOCATION,0.0,0.0
 học sinh vận hành máy tính xách tay ở đâu,thư viện,lớp học,LOCATION,0.0,0.0
@@ -1006,19 +1006,19 @@ một số sơn đổ và một số đồ vật treo ở đâu,phòng tắm,kho
 bồn cầu ngồi xổm đặt ở đâu,chậu,sàn nhà,LOCATION,0.0,0.0
 người đàn ông đang chụp ảnh mình ở đâu,gương,gương,LOCATION,1.0,1.0
 hai con chó đang chơi ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
-con chó nằm ở đâu,giường cái ghế,giường,LOCATION,0.0,0.5
+con chó nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 nhóm phương tiện trong công viên màu sắc khác nhau ở đâu,trạm,trạm,LOCATION,1.0,1.0
-pizza nhiều topping ở đâu,lò vi sóng lò vi sóng,lò vi sóng,LOCATION,0.0,0.6666666666666666
+pizza nhiều topping ở đâu,lò vi sóng máy xay,lò vi sóng,LOCATION,0.0,0.7499999999999999
 những người làm việc ở đâu,thư viện,thư viện,LOCATION,1.0,1.0
 hành khách đang ở đâu,tàu,tàu,LOCATION,1.0,1.0
 con dao và nĩa nằm bên cạnh một vài lát pizza ở đâu,lò vi sóng,món ăn,LOCATION,0.0,0.0
 con mèo màu cam sáng đang ngủ ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 mặt hàng nổi bật nhất là hành tây ở đâu,pizza,món ăn,LOCATION,0.0,0.0
-điêu khắc của một con chim đang ngồi ở đâu,cửa sổ cửa sổ,cửa sổ,LOCATION,0.0,0.6666666666666666
+điêu khắc của một con chim đang ngồi ở đâu,cửa sổ,cửa sổ,LOCATION,1.0,1.0
 con mèo đang nằm ở đâu,chậu,chậu,LOCATION,1.0,1.0
 người đàn ông ở đâu với một khuôn mặt đỏ và trắng,đường bộ,đường phố,LOCATION,0.0,0.5
 người phụ nữ mặc một chiếc áo màu hồng ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
-người phụ nữ dẫn một con ngựa từ đâu,gương,chuồng,LOCATION,0.0,0.0
+người phụ nữ dẫn một con ngựa từ đâu,áo vest,chuồng,LOCATION,0.0,0.0
 người đàn ông ngồi ở đâu,cái ghế,phòng tắm,LOCATION,0.0,0.0
 bồn vệ sinh với gạch màu xanh ở đâu,phòng tắm,nhà vệ sinh,LOCATION,0.0,0.0
 người đàn ông trên một con ngựa đối mặt một con bò đực ở đâu,chuồng,sân vận động,LOCATION,0.0,0.0
@@ -1066,9 +1066,9 @@ con mèo nằm ở đâu,bát,chậu,LOCATION,0.0,0.0
 cậu bé ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 sự phản chiếu được nhìn thấy ở đâu,gương,gương,LOCATION,1.0,1.0
 một số người nói chuyện ở đâu,ga-ra,ga-ra,LOCATION,1.0,1.0
-cô gái đang ngồi ở đâu,cái ghế cái ghế,cái ghế,LOCATION,0.0,0.6666666666666666
+cô gái đang ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 nhà vệ sinh trắng ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
-người phụ nữ đang chụp ảnh mình ở đâu và con chó của mình ở đâu,gương gương,gương,LOCATION,0.0,0.6666666666666666
+người phụ nữ đang chụp ảnh mình ở đâu và con chó của mình ở đâu,gương nhà vệ,gương,LOCATION,0.0,0.5
 nải chuối ở đâu,cái rổ,xe đẩy,LOCATION,0.0,0.0
 người phụ nữ đặt đầu cô ấy ở đâu,lò vi sóng,lò vi sóng,LOCATION,1.0,1.0
 "mặt phẳng trắng, cam và đỏ còn lại ở đâu",ga-ra,sân bay,LOCATION,0.0,0.0
@@ -1101,22 +1101,22 @@ cừu và dê ăn thức ăn ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
 biển báo đường phố nằm ở đâu,đường phố,vạch kẻ đường,LOCATION,0.0,0.4
 cậu bé đang đọc một cuốn sách ở đâu,giường,giường,LOCATION,1.0,1.0
 hai người đàn ông xem con hươu cao cổ ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
-cặp vợ chồng đang ngồi ở đâu,ca nô,con thuyền,LOCATION,0.0,0.0
+cặp vợ chồng đang ngồi ở đâu,con thuyền,con thuyền,LOCATION,1.0,1.0
 một số chuối xanh treo ở đâu,cửa tiệm,nhà,LOCATION,0.0,0.0
 đĩa trái cây ngon nằm ở đâu,bát,bát,LOCATION,1.0,1.0
 cậu bé ăn một ít thức ăn ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 tủ lạnh trắng cũ ngồi ở đâu,phòng,phòng bếp,LOCATION,0.0,0.6666666666666666
-hình ảnh người phụ nữ phản ánh ở đâu,gương gương,gương,LOCATION,0.0,0.6666666666666666
+hình ảnh người phụ nữ phản ánh ở đâu,gương,gương,LOCATION,1.0,1.0
 động cơ hơi nước kiểu cũ đậu ở đâu,trạm,trạm,LOCATION,1.0,1.0
 một người đàn ông lớn tuổi đang ngồi ở đâu trên vỉa hè,xe lăn,xe lăn,LOCATION,1.0,1.0
 một loại gấu nhồi bông nằm ở đâu,cửa hàng,cửa hàng,LOCATION,1.0,1.0
 người đàn ông đang ăn bánh rán ở đâu,giường,giường,LOCATION,1.0,1.0
-con chó canh gác đang ngồi ở đâu và chạy đi,con thuyền con thuyền,ca nô,LOCATION,0.0,0.0
+con chó canh gác đang ngồi ở đâu và chạy đi,con thuyền,ca nô,LOCATION,0.0,0.0
 đứa trẻ rửa nho ở đâu,chậu,chậu,LOCATION,1.0,1.0
 hai người đang chơi trò chơi video ở đâu,phòng,phòng,LOCATION,1.0,1.0
 người đàn ông ngồi với gia đình ở đâu,phòng,xe lăn,LOCATION,0.0,0.0
 hươu cao cổ ở đâu,vườn bách thú,chuồng,LOCATION,0.0,0.0
-gấu lớn ngồi ở đâu,cái ghế cái ghế cái,cái ghế,LOCATION,0.0,0.5714285714285715
+gấu lớn ngồi ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
 giường tầng đang đặt ở đâu,phòng ngủ,phòng,LOCATION,0.0,0.6666666666666666
 hai người ở đâu với một con ngựa kéo họ đi trên một con đường,xe,xe,LOCATION,1.0,1.0
 con vật màu hồng ở đâu,giường,giường,LOCATION,1.0,1.0
@@ -1128,14 +1128,14 @@ nhà vệ sinh trắng đang đặt ở đâu,phòng tắm,chuồng,LOCATION,0.0
 tranh treo ở đâu,gương,phòng tắm,LOCATION,0.0,0.0
 khu vườn nhỏ bao quanh ở đâu,sân vườn,sân,LOCATION,0.0,0.6666666666666666
 đàn ngựa tập hợp ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
-người đàn ông đang chụp ảnh tự sướng ở đâu,gương gương,gương,LOCATION,0.0,0.6666666666666666
+người đàn ông đang chụp ảnh tự sướng ở đâu,gương,gương,LOCATION,1.0,1.0
 người phụ nữ đang đánh răng ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 con mèo đang ngủ trưa ở đâu,vali,vali,LOCATION,1.0,1.0
 bánh pizza nhỏ ở đâu,lò vi sóng,lò vi sóng,LOCATION,1.0,1.0
 hai đầu bếp đang chuẩn bị thức ăn ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
 món ngon được phục vụ ở đâu,bát,bát,LOCATION,1.0,1.0
 người phụ nữ đang đứng ở đâu,sân bay,bảo tàng,LOCATION,0.0,0.0
-con mèo đang ngồi ở đâu,cửa sổ cửa,cửa sổ,LOCATION,0.0,0.8
+con mèo đang ngồi ở đâu,cửa sổ,cửa sổ,LOCATION,1.0,1.0
 nơi nào những bông hoa màu tím tô điểm thêm cho một chiếc bàn có cái lắc và cái nĩa,lọ cắm hoa,lọ cắm hoa,LOCATION,1.0,1.0
 hoa héo nằm ở đâu,lọ cắm hoa,cái lọ,LOCATION,0.0,0.4
 gấu bắc cực ăn cà rốt ở đâu?,vườn bách thú,vườn bách thú,LOCATION,1.0,1.0
@@ -1153,7 +1153,7 @@ người phụ nữ đang ngồi ở đâu,cái ghế,phòng,LOCATION,0.0,0.0
 con hươu cao cổ đi bộ ở đâu,vườn bách thú,chuồng,LOCATION,0.0,0.0
 người đang chụp ảnh flash ở đâu,phòng tắm,gương,LOCATION,0.0,0.0
 đứa trẻ đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
-của táo ở đâu,bát bát,bát,LOCATION,0.0,0.6666666666666666
+của táo ở đâu,bát,bát,LOCATION,1.0,1.0
 căn phòng trống rỗng và sạch sẽ nằm ở đâu,nhà ở,nhà ở,LOCATION,1.0,1.0
 nhà vệ sinh trắng ở đâu,phòng tắm,vòi hoa sen,LOCATION,0.0,0.0
 ván trượt cậu bé đã ở đâu,chậu,hồ bơi,LOCATION,0.0,0.0
@@ -1171,9 +1171,9 @@ một con vật đang đi bộ ở đâu,vườn bách thú,vườn bách thú,L
 con chó đen đang đứng ở đâu,phòng,phòng,LOCATION,1.0,1.0
 con mèo tóc dài đang ngồi ở đâu,cái túi,vali,LOCATION,0.0,0.0
 cặp chim đứng ở đâu,chậu,chậu,LOCATION,1.0,1.0
-gương phản chiếu đồng hồ ở đâu,gương gương,phòng bếp,LOCATION,0.0,0.0
+gương phản chiếu đồng hồ ở đâu,gương,phòng bếp,LOCATION,0.0,0.0
 giường lớn ở đâu,phòng,phòng ngủ,LOCATION,0.0,0.6666666666666666
-người chơi tennis nữ đang ở đâu,xe lăn xe lăn xe,cái ghế,LOCATION,0.0,0.0
+người chơi tennis nữ đang ở đâu,xe lăn,cái ghế,LOCATION,0.0,0.0
 người đi xe đạp của họ ở đâu,đường phố,đường,LOCATION,0.0,0.6666666666666666
 bóng chày ở đâu,găng tay,găng tay,LOCATION,1.0,1.0
 người đàn ông cưỡi ván trượt ở đâu,đường phố,ga-ra,LOCATION,0.0,0.0
@@ -1188,7 +1188,7 @@ cặp vợ chồng ngựa vằn đang ở đâu,chuồng,chuồng,LOCATION,1.0,1
 nhà vệ sinh và một thùng rác màu xanh ở đâu,phòng tắm,phòng tắm,LOCATION,1.0,1.0
 cặp vợ chồng nấu ăn ở đâu,phòng bếp,phòng,LOCATION,0.0,0.6666666666666666
 cái cây đang ở đâu,cái nồi,thùng chứa,LOCATION,0.0,0.0
-con mèo đen trắng đang ngồi ở đâu,ô cửa,cửa,LOCATION,0.0,0.6666666666666666
+con mèo đen trắng đang ngồi ở đâu,cửa sổ,cửa,LOCATION,0.0,0.6666666666666666
 hai bồn tiểu ở đâu trên sàn và một người đàn ông đang chụp ảnh,phòng tắm,gương,LOCATION,0.0,0.0
 người đàn ông nằm ở đâu trong khi một con mèo leo lên anh ta,giường,giường,LOCATION,1.0,1.0
 người đàn ông mặc đồng phục bóng chày sọc cầm gậy ở đâu,sân vận động,chuồng,LOCATION,0.0,0.0
@@ -1208,7 +1208,7 @@ bốn người bạn đang chơi wii ở đâu,phòng,phòng,LOCATION,1.0,1.0
 tàu cao tốc dừng ở đâu,trạm,trạm,LOCATION,1.0,1.0
 con chó lớn ở đâu,xe tải,xe tải,LOCATION,1.0,1.0
 đang tre ở đâu hiển thị các mặt hàng thực phẩm khác nhau,quán ăn,quán ăn,LOCATION,1.0,1.0
-người đàn ông và phụ nữ ở đâu,phòng nhà ở,phòng bếp,LOCATION,0.0,0.4
+người đàn ông và phụ nữ ở đâu,phòng,phòng bếp,LOCATION,0.0,0.6666666666666666
 người phụ nữ sẽ lau một nắp trong,phòng bếp,phòng bếp,OBJECT,1.0,1.0
 cậu bé đang nhìn ở đâu,phòng tắm,gương,LOCATION,0.0,0.0
 con mèo nhiều màu ở đâu,cái ghế,cái ghế,LOCATION,1.0,1.0
@@ -1224,7 +1224,7 @@ người phụ nữ đứng ở đâu,xe tải,xe tải,LOCATION,1.0,1.0
 ngựa vằn và tê giác ăn ở đâu,chuồng,chuồng,LOCATION,1.0,1.0
 con gà được trình bày ở đâu,bát,món ăn,LOCATION,0.0,0.0
 người ngồi ở đâu,hộp,phòng,LOCATION,0.0,0.0
-đứa trẻ đang tập đánh bóng ở đâu,lồng l,lồng,LOCATION,0.0,0.6666666666666666
+đứa trẻ đang tập đánh bóng ở đâu,lồng,lồng,LOCATION,1.0,1.0
 ghế và ghế bập bênh ở đâu,phòng,phòng,LOCATION,1.0,1.0
 hai chiếc xe tay ga đỗ ở đâu,cửa sổ,cửa sổ,LOCATION,1.0,1.0
 chuối đang ăn dở đang ở đâu,tách,tách,LOCATION,1.0,1.0
@@ -1235,7 +1235,7 @@ tàu trung chuyển ở đâu,trạm,trạm,LOCATION,1.0,1.0
 cái lỗ nằm ở đâu,phòng tắm,tường,LOCATION,0.0,0.0
 người đang nằm ở đâu,phòng,phòng ngủ,LOCATION,0.0,0.6666666666666666
 người lính đang giữ một chiếc xe đạp màu xanh ở đâu,phòng,văn phòng,LOCATION,0.0,0.6666666666666666
-chuối nằm ở đâu,bát bát,bát,LOCATION,0.0,0.6666666666666666
+chuối nằm ở đâu,bát,bát,LOCATION,1.0,1.0
 những người kinh doanh cười ở đâu để chia sẻ một trò chơi,cửa hàng,cửa hàng,LOCATION,1.0,1.0
 em bé đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 người phụ nữ rửa bát ở đâu,chậu,chậu,LOCATION,1.0,1.0
@@ -1255,7 +1255,7 @@ rèm tắm đầy màu sắc nhìn thấy ở đâu,phòng tắm,phòng tắm,LO
 xe tải trắng kéo theo một chiếc xe màu đen ở đâu,đường đi bộ,đường phố,LOCATION,0.0,0.4
 hai đứa trẻ đang nằm ở đâu,giường,giường,LOCATION,1.0,1.0
 các loại trái cây trưng bày ở đâu,bát,bát,LOCATION,1.0,1.0
-cô bé đang ngồi ở đâu,vali vali vali,vali,LOCATION,0.0,0.5
+cô bé đang ngồi ở đâu,vali,vali,LOCATION,1.0,1.0
 con chó đang ngồi ở đâu trong khi mọi người đang ngồi ở bàn,cửa sổ,ô cửa,LOCATION,0.0,0.5
 người đàn ông đang tìm ở đâu,gương,gương,LOCATION,1.0,1.0
 người phụ nữ nấu ăn ở đâu,phòng bếp,phòng bếp,LOCATION,1.0,1.0
@@ -1318,7 +1318,7 @@ cái gì kiểm tra tảng đá trong bao vây của nó,hươu cao cổ,hươu 
 điều gì đang di chuyển xuống các đường ray tàu,tàu,tàu,OBJECT,1.0,1.0
 những gì được trang trí bằng động vật nhựa và sương giá xanh cho cỏ và một bức tranh,bánh,bánh,OBJECT,1.0,1.0
 cái gì cao ngất trên một thành phố,đồng hồ,đồng hồ,OBJECT,1.0,1.0
-những gì được bao phủ bởi các công cụ và đồng hồ,cửa nhà,tường,OBJECT,0.0,0.0
+những gì được bao phủ bởi các công cụ và đồng hồ,cửa,tường,OBJECT,0.0,0.0
 những gì đang đi xung quanh cái lồng của nó,gấu,gấu,OBJECT,1.0,1.0
 những người đang ngồi ở bàn là gì và ăn,bữa ăn,bữa ăn tối,LOCATION,0.0,0.8
 ngồi cạnh nhau với ngọn của họ là gì,laptop,laptop,OBJECT,1.0,1.0
@@ -1347,7 +1347,7 @@ những gì vừa ra khỏi lò,pizza,pizza,OBJECT,1.0,1.0
 những gì đỗ ở bên đường,xe buýt,xe buýt,LOCATION,1.0,1.0
 những gì bị trói trong bến cảng lớn,con thuyền,con thuyền,OBJECT,1.0,1.0
 cái gì đậu ở bãi đậu xe bên cạnh cái cây,xe máy,xe máy,OBJECT,1.0,1.0
-những gì đầy phòng khách trang trí theo phong cách hiện đại,nhà ở nhà ở,mặt trời,OBJECT,0.0,0.0
+những gì đầy phòng khách trang trí theo phong cách hiện đại,nhà ở,mặt trời,OBJECT,0.0,0.0
 những gì được giấu một phần trong đám cây và thò cổ ra ngoài,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
 nhóm người giơ lên bầu trời cái gì,điện thoại,điện thoại,OBJECT,1.0,1.0
 người phụ nữ cưỡi một chiếc xe đạp giữ những gì,xe đạp,chiếc ô,OBJECT,0.0,0.0
@@ -1360,10 +1360,10 @@ những gì giữ một vài bông hoa đầy màu sắc,lọ cắm hoa,lọ c�
 cái gì bên cạnh một đống gỗ,ngựa rằn,ngựa rằn,OBJECT,1.0,1.0
 con ngựa kéo những gì trong một thành phố dừng lại để nghỉ ngơi,xe,xe,OBJECT,1.0,1.0
 những gì ăn lá qua một hàng rào dây,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
-những gì trên bậc thang vểnh tai lên,con chó con chó con,con chó,OBJECT,0.0,0.5714285714285715
+những gì trên bậc thang vểnh tai lên,con chó,con chó,OBJECT,1.0,1.0
 cái gì đang đỗ bên cạnh nhà,xe tải,xe tải,OBJECT,1.0,1.0
 những gì bên ngoài vào ngày nắng,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
-những gì đậu trên cành trước tháp đồng hồ,con chim con chim,con chim,OBJECT,0.0,0.6666666666666666
+những gì đậu trên cành trước tháp đồng hồ,con chim,con chim,OBJECT,1.0,1.0
 những gì bao quanh bởi các hộp và rác,tủ đông,tủ đá,OBJECT,0.0,0.5
 những gì tỏa sáng rực rỡ khi một chiếc máy bay lái xuống đường băng,mặt trời,mặt trời,OBJECT,1.0,1.0
 những gì đang bay trên bãi biển gần một đại dương,diều,diều,OBJECT,1.0,1.0
@@ -1399,7 +1399,7 @@ những gì ngồi xuống trong khi ăn một số thức ăn,con khỉ,con kh�
 cái gì đang ngồi trên cành cây,gấu trúc,gấu trúc,OBJECT,1.0,1.0
 những gì đang bên cạnh danh sách,đồng hồ,đồng hồ,OBJECT,1.0,1.0
 những gì đang cưỡi ở phía sau của một chiếc xe hơi,con chó,con chó,LOCATION,1.0,1.0
-những gì được cắt thành vỏ bọc,sandwich sandwich,sandwich,OBJECT,0.0,0.6666666666666666
+những gì được cắt thành vỏ bọc,sandwich,sandwich,OBJECT,1.0,1.0
 người đó giữ cái gì,tách,ly,OBJECT,0.0,0.0
 tất cả những gì xếp hàng trong hàng,máy bay,máy bay,OBJECT,1.0,1.0
 đĩa trắng giữ cái gì,rau,món ăn,OBJECT,0.0,0.0
@@ -1411,7 +1411,7 @@ những gì bên cạnh hoa bên cạnh một bãi đậu xe,xe ô tô,vòi,OBJE
 bốn người cưỡi những gì trên một ngọn núi,núi,ván trượt tuyết,OBJECT,0.0,0.0
 những gì chuyến tàu đi xuống đường đua trong một khu vườn,tàu,đồ chơi,OBJECT,0.0,0.0
 những gì chăn thả trên cỏ trong khi một con chó nhìn vào,con chó,con ngựa,OBJECT,0.0,0.5
-những gì đang ngồi trên đỉnh của một cánh đồng phủ cỏ,băng ghế băng,băng ghế,OBJECT,0.0,0.8
+những gì đang ngồi trên đỉnh của một cánh đồng phủ cỏ,băng ghế,băng ghế,OBJECT,1.0,1.0
 giường ngồi dưới một bức màn được bao phủ là gì,giường,cửa sổ,OBJECT,0.0,0.0
 có gì cùng với những hành lý khác,vali,hành lý,OBJECT,0.0,0.0
 những gì tập hợp lại với nhau bởi nước,con voi,con voi,OBJECT,1.0,1.0
@@ -1442,7 +1442,7 @@ những gì bên cạnh nhau,xe buýt,xe buýt,OBJECT,1.0,1.0
 cái gì dựa vào bức tường,nhà vệ sinh,nhà vệ sinh,OBJECT,1.0,1.0
 người đàn ông trên ván trượt tuyết rơi xuống cái gì,núi,núi,OBJECT,1.0,1.0
 cái gì treo từ giá đỡ chuối trên mặt quầy,chuối,chuối,OBJECT,1.0,1.0
-những gì đang bay trong không khí với nhau bởi đại dương,con chim con chi,con chim,OBJECT,0.0,0.6666666666666666
+những gì đang bay trong không khí với nhau bởi đại dương,con chim,con chim,OBJECT,1.0,1.0
 "người đàn ông, ngồi trong xe, ăn màu hồng",donut,donut,OBJECT,1.0,1.0
 những gì đứng cạnh đường trải nhựa ở đất nước,gia súc,con bò,OBJECT,0.0,0.0
 những hình ảnh của một người phụ nữ một nhà vệ sinh và một bồn rửa,phòng tắm,phòng tắm,OBJECT,1.0,1.0
@@ -1536,19 +1536,19 @@ những gì được xếp hàng để được đổ rác,hộp,tủ lạnh,OBJ
 thư giãn trên chiếc giường trắng nguyên sơ,con mèo,con mèo,OBJECT,1.0,1.0
 hồ lớn được bao quanh bởi cây đẹp bao phủ những gì,cầu,núi,OBJECT,0.0,0.0
 những gì được trang trí với hộp sọ đang ngồi trên bàn gỗ bên cạnh đồng hồ và cuốn sách,đèn để bàn,đèn để bàn,OBJECT,1.0,1.0
-những gì đậu trên mảnh gỗ trôi gần đại dương,con chim con chim,hải âu,OBJECT,0.0,0.0
+những gì đậu trên mảnh gỗ trôi gần đại dương,con chim,hải âu,OBJECT,0.0,0.0
 một chiếc máy bay trắng và xanh 787 tại những gì,sân bay,sân bay,OBJECT,1.0,1.0
 những thứ nhiều màu trong bộ đồ ông già noel đã làm gì,gấu,gấu,OBJECT,1.0,1.0
-cái gì gần cửa trong phòng tắm,nhà vệ sinh,nhà vệ sinh,OBJECT,1.0,1.0
+cái gì gần cửa trong phòng tắm,tường,nhà vệ sinh,OBJECT,0.0,0.0
 tàu chở khách đi xuống bên cạnh một con đường là gì,xe buýt,đường ray,OBJECT,0.0,0.0
 có gì đỗ trong một nhà để xe,xe tải,xe tải,OBJECT,1.0,1.0
-bộ sưu tập là gì cho một bộ sưu tập lớn các mối quan hệ và mũ đầy màu sắc,đồng hồ,tường,COLOR,0.0,0.0
+bộ sưu tập là gì cho một bộ sưu tập lớn các mối quan hệ và mũ đầy màu sắc,cửa,tường,COLOR,0.0,0.0
 những gì giữ một chiếc bánh pizza trên bàn ăn,đĩa ăn,đĩa ăn,OBJECT,1.0,1.0
 cái gì đang đứng trên cành,con chim,con chim,OBJECT,1.0,1.0
 cái gì đang đỗ trên cánh đồng cỏ,máy bay,máy bay,OBJECT,1.0,1.0
 những gì đang được chuyển vào ngôi nhà mới được xây dựng,tủ đá,tủ đá,OBJECT,1.0,1.0
 những gì đặt cạnh nhau với bánh pizza mới làm sẵn trong chúng đã sẵn sàng để nấu,pizza,chảo,OBJECT,0.0,0.0
-cái gì bên cạnh một con đường rợp bóng cây,băng ghế băng,băng ghế,OBJECT,0.0,0.8
+cái gì bên cạnh một con đường rợp bóng cây,băng ghế,băng ghế,OBJECT,1.0,1.0
 cặp vợ chồng mới cưới cắt bỏ những gì,bánh,bánh,OBJECT,1.0,1.0
 những gì bên cạnh bàn với máy tính xách tay và điện thoại đang ngồi trên đó,cái ghế,cái ghế,OBJECT,1.0,1.0
 những gì được lót bằng cây xanh bên cạnh băng ghế công viên,cây,lối đi,OBJECT,0.0,0.0
@@ -1569,7 +1569,7 @@ những gì đặt trên bàn dưới một đồng hồ thời gian,máy vi tí
 những nguồn cung cấp nào đã được nhóm lại với nhau,cây kéo,văn phòng,OBJECT,0.0,0.0
 những gì đi qua đám đông người trên vỉa hè,xe buýt,xe buýt,OBJECT,1.0,1.0
 người đàn ông đang giữ và đánh bóng tại một trò chơi là gì,quả bóng,gậy,OBJECT,0.0,0.0
-những gì đang ngồi trên một vài nhật ký,gấu trúc gấu,gấu trúc,OBJECT,0.0,0.8
+những gì đang ngồi trên một vài nhật ký,gấu trúc chim,gấu trúc,OBJECT,0.0,0.8
 những người đàn ông đang đi bộ và cưỡi trên đường phố là gì,con voi,con voi,OBJECT,1.0,1.0
 đứa trẻ nhỏ bị tee,quả bóng,quả bóng,OBJECT,1.0,1.0
 người đó giữ bầu vú của con bò bằng cái gì,con bò,cỗ máy,OBJECT,0.0,0.0
@@ -1640,7 +1640,7 @@ cái gì đang ngồi bên cạnh một đoàn tàu màu xanh lá cây,xe ô tô
 người phụ nữ mặc áo khoác đứng sau hàng rào là gì,con ngựa,con cừu,OBJECT,0.0,0.5
 người đàn ông đang bay cái gì,diều,diều,OBJECT,1.0,1.0
 những gì đang hiển thị trong năm nằm bên cạnh một ngọn nến thắp sáng,bánh,bánh,OBJECT,1.0,1.0
-nơi con hươu cao cổ đang chạy và băng qua là gì,đường bộ bộ,đường bộ,OBJECT,0.0,0.8
+nơi con hươu cao cổ đang chạy và băng qua là gì,đường bộ,đường bộ,OBJECT,1.0,1.0
 chàng trai trẻ đang sử dụng những gì trên bàn với một cô gái trẻ bên cạnh anh ta,laptop,laptop,OBJECT,1.0,1.0
 những gì đang bơi qua nước gần hoàng hôn,con vịt,con vịt,OBJECT,1.0,1.0
 cách tiếp cận xe buýt,xe buýt,đường đi bộ,OBJECT,0.0,0.0
@@ -1718,7 +1718,7 @@ con vật gì đang đứng cạnh người phụ nữ,con voi,con voi,OBJECT,1.
 hình con gấu bông trên bàn gỗ,gấu,bánh,OBJECT,0.0,0.0
 người đàn ông đang ăn gì,donut,donut,OBJECT,1.0,1.0
 người đang lên tuyết bao phủ những gì,núi,núi,OBJECT,1.0,1.0
-cái gì chất đống cao với thịt và rau,sandwich sandwich,sandwich,OBJECT,0.0,0.6666666666666666
+cái gì chất đống cao với thịt và rau,sandwich,sandwich,OBJECT,1.0,1.0
 những gì đi qua những ngôi nhà bằng đường ray xe lửa,tàu,tàu,OBJECT,1.0,1.0
 những gì đặt bên cạnh bánh sandwich,sandwich,hươu cao cổ,OBJECT,0.0,0.0
 thứ to lớn kia là gì,tháp,tháp,OBJECT,1.0,1.0
@@ -1750,7 +1750,7 @@ những gì đang lái xe trên đường ray trong thành phố,tàu,tàu,OBJEC
 những gì đang vận chuyển xe đến một địa điểm khác,xe ô tô,xe tải,OBJECT,0.0,0.4
 những gì chứa đầy hai bông hoa màu tím,lọ cắm hoa,lọ cắm hoa,OBJECT,1.0,1.0
 những gì đang bay xuyên qua bầu trời,máy bay,máy bay,OBJECT,1.0,1.0
-những gì có hình dạng như gấu bông,bánh gấu g,bánh,OBJECT,0.0,0.5
+những gì có hình dạng như gấu bông,bánh món ăn gấu,bánh,OBJECT,0.0,0.4
 những gì đang đứng nguy hiểm gần với con bò,con chim,con vịt,OBJECT,0.0,0.5
 những gì đỗ ở bên đường,xe máy,xe máy,LOCATION,1.0,1.0
 những gì có vẻ như nó có một phạm vi ma trên đỉnh của nó,đĩa ăn,bánh,OBJECT,0.0,0.0
@@ -1786,7 +1786,7 @@ những gì được hiển thị dưới cửa sổ với hai bộ rèm cửa,g
 cặp ngựa kéo cái gì,xe,xe,OBJECT,1.0,1.0
 đang ăn cỏ trên cánh đồng,con ngựa,con ngựa,OBJECT,1.0,1.0
 kích thước trung bình trong một khối nước lớn đã làm gì,diều,con thuyền,OBJECT,0.0,0.0
-màu đỏ chống đỡ cái gì đang lăn xuống đường băng,máy bay trực thăng,máy bay,OBJECT,0.0,0.6666666666666666
+màu đỏ chống đỡ cái gì đang lăn xuống đường băng,máy bay trực thăng,máy bay,COLOR,0.0,0.6666666666666666
 những gì chúng ta là lưỡi dài của anh ta nhô ra,gấu,gấu,OBJECT,1.0,1.0
 có gì nằm trên cỏ,con bò,con bò,OBJECT,1.0,1.0
 những gì đỗ trước cửa hàng volvo,xe buýt,xe buýt,OBJECT,1.0,1.0
@@ -1966,7 +1966,7 @@ những gì đậu trên đỉnh cây đầy lá,con chim,con chim,OBJECT,1.0,1.
 những gì được lật mở tiết lộ tin nhắn,điện thoại,điện thoại,OBJECT,1.0,1.0
 những gì đang thư giãn trên một tay cầm xe đạp,con chim,con chim,OBJECT,1.0,1.0
 người phụ nữ bán trên đường là gì,chiếc ô,chiếc ô,OBJECT,1.0,1.0
-thiếu nữ trang điểm cầm cái gì,sandwich sandwich sandwich,sandwich,OBJECT,0.0,0.5
+thiếu nữ trang điểm cầm cái gì,sandwich bánh pizza,sandwich,OBJECT,0.0,0.5
 cái gì đang ngồi ở ghế sau của một chiếc ô tô,con chó,con chó,LOCATION,1.0,1.0
 những gì nằm trong góc của phòng tắm,nhà vệ sinh,nhà vệ sinh,OBJECT,1.0,1.0
 những gì đang vui vẻ đi trên cánh đồng cỏ,con cừu,con cừu,OBJECT,1.0,1.0
@@ -1982,7 +1982,7 @@ những gì đang đi bộ bởi các phương tiện đang đỗ,hươu cao c�
 những gì nằm trên gờ cửa sổ đầy nắng,con mèo,con mèo,OBJECT,1.0,1.0
 những gì đầy pizza với thịt gà và rau trên nó,đĩa ăn,đĩa ăn,OBJECT,1.0,1.0
 vợ chồng mới cho ăn gì khi nhiếp ảnh gia chụp ảnh,bánh,bánh,OBJECT,1.0,1.0
-"thứ gì nằm trên hai quả chanh, tất cả đều nằm trong một cái bát xù",quả cam quả,quả cam,OBJECT,0.0,0.8
+"thứ gì nằm trên hai quả chanh, tất cả đều nằm trong một cái bát xù",quả cam,quả cam,OBJECT,1.0,1.0
 những gì nằm trên tấm trắng với các sọc màu tối,sandwich,sandwich,OBJECT,1.0,1.0
 những gì trên các ô vuông đầy màu sắc trong một cánh đồng xanh,chiếc ô,chiếc ô,COLOR,1.0,1.0
 anh ấy đậu cái gì vậy,ván trượt,ván trượt,OBJECT,1.0,1.0
@@ -2015,7 +2015,7 @@ cái gì đậu sau hàng rào với mọi người đang nhìn nó,máy bay,má
 máy bay màu vàng bay trên đầu cái gì,máy bay,cây,OBJECT,0.0,0.0
 những gì giữ hai khay nướng thực phẩm,lò vi sóng,lò vi sóng,OBJECT,1.0,1.0
 những gì xe kiểu cách lái xe trên một con phố,xe đẩy,xe đẩy,OBJECT,1.0,1.0
-người phụ nữ cầm gì bằng hai tay,donut donut,donut,OBJECT,0.0,0.6666666666666666
+người phụ nữ cầm gì bằng hai tay,donut,donut,OBJECT,1.0,1.0
 những gì dừng lại trong ga tàu,tàu,đầu máy,OBJECT,0.0,0.0
 những gì trông giống như mờ khi nó tăng tốc,xe ô tô,xe ô tô,OBJECT,1.0,1.0
 những gì đang đi qua một ngã tư đường phố với các nhà văn phòng trong nền,xe ô tô,xe ô tô,OBJECT,1.0,1.0
@@ -2105,18 +2105,18 @@ cái gì được kéo lên bờ sông,con thuyền,con thuyền,OBJECT,1.0,1.0
 những gì đang đứng trong bóng râm bởi một đống đá,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
 cái gì đang khô trên mặt trên,tủ đá,chén đĩa,OBJECT,0.0,0.0
 những gì ngồi cạnh nhau tại một trạm,xe lửa,xe lửa,OBJECT,1.0,1.0
-nhiều thứ gì với con chim đậu trên đế,con chim con chi,đồng hồ,OBJECT,0.0,0.0
+nhiều thứ gì với con chim đậu trên đế,con chim,đồng hồ,OBJECT,0.0,0.0
 người đàn ông mặc những gì đang đong đưa vào một quả bóng,quả bóng,mũ lưỡi trai,OBJECT,0.0,0.0
 những gì đang bay trên mây và đi du lịch cùng nhau,diều,diều,OBJECT,1.0,1.0
 người mẹ voi và ba người đi qua,đường bộ,đường ray,OBJECT,0.0,0.5
 dãy toa tàu màu xanh và trắng có dòng chữ `` stobart what. '',xe ô tô,đường sắt,OBJECT,0.0,0.0
 những gì được hiển thị với con dao quân đội thụy sĩ,dao,màu cam,OBJECT,0.0,0.0
-cái gì ngồi một mình trên băng ghế công viên,cái ví cái ví cái ví,cái ví,OBJECT,0.0,0.5
+cái gì ngồi một mình trên băng ghế công viên,cái ví,cái ví,OBJECT,1.0,1.0
 những gì đang đứng trên một con đường sỏi trông đính kèm,ngựa vằn,ngựa vằn,OBJECT,1.0,1.0
 những gì di chuyển về một môi trường sống kín được bao quanh bởi một hàng rào,con voi,con voi,OBJECT,1.0,1.0
 những gì được đặt ra bên dưới những chiếc ô nhỏ đầy màu sắc,gấu,gấu,COLOR,1.0,1.0
 nhóm người cưỡi trên bãi biển là gì,con ngựa,con ngựa,OBJECT,1.0,1.0
-con gấu nào đang cố gắng ăn từ gói,gấu trúc gấ,gấu trúc,OBJECT,0.0,0.8
+con gấu nào đang cố gắng ăn từ gói,gấu trúc,gấu trúc,OBJECT,1.0,1.0
 con gì gặm cỏ trên cây cùng với hươu gặm cỏ trên đất,hươu cao cổ,ngựa rằn,OBJECT,0.0,0.0
 những gì trồng trong chai bia,bông hoa,bông hoa,OBJECT,1.0,1.0
 những gì đỗ ở bên đường,xe buýt,xe buýt,LOCATION,1.0,1.0
@@ -2147,7 +2147,7 @@ cái gì bị chôn vùi trong tuyết,quả bóng,vòi,OBJECT,0.0,0.0
 những gì bị bắt trên một lan can tầng trên,chiếc ô,chiếc ô,OBJECT,1.0,1.0
 những gì thư giãn và ngủ trên giường mèo treo trên một bộ tản nhiệt,con mèo,con mèo,OBJECT,1.0,1.0
 cái gì húc vào đầu của một con bò khác đang đứng cạnh nó,con bò,con bò,OBJECT,1.0,1.0
-cái gì đang ngồi trước một cây đầy trái,băng ghế băng,băng ghế,OBJECT,0.0,0.8
+cái gì đang ngồi trước một cây đầy trái,băng ghế,băng ghế,OBJECT,1.0,1.0
 trên bàn màu xanh có cái gì phủ trên bánh pizza,pizza,đĩa ăn,OBJECT,0.0,0.0
 những gì đang đi qua trước một nhà,xe buýt,xe buýt,OBJECT,1.0,1.0
 cái gì có nhiều cà rốt,cà rốt,cái rổ,OBJECT,0.0,0.0
@@ -2167,7 +2167,7 @@ những người đang cưỡi ngựa kéo cái gì ở một lễ hội ngoài 
 những gì đang bị cạo bởi nông dân nam,con cừu,con cừu,OBJECT,1.0,1.0
 tay cho hươu cao cổ ăn cái gì,cà rốt,cà rốt,OBJECT,1.0,1.0
 những gì đang đứng trên đồng bằng châu phi,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
-những gì đậu trên gờ đá với một con đường phía sau nó,chim bồ câu chim,chim bồ câu,LOCATION,0.0,0.8571428571428571
+những gì đậu trên gờ đá với một con đường phía sau nó,chim bồ câu con,chim bồ câu,LOCATION,0.0,0.8571428571428571
 ba người đàn ông đã chém gì với một nhóm lớn đàn ông đằng sau họ,bánh,bánh,OBJECT,1.0,1.0
 những gì đứng trước một số cây cọ,cờ,tháp,OBJECT,0.0,0.0
 những gì đang được kéo trên đường băng,xe ô tô,máy bay,OBJECT,0.0,0.0
@@ -2199,7 +2199,7 @@ những gì được trang bị hai giường lớn,phòng,phòng ngủ,OBJECT,0
 những gì đang đi vào đường cao tốc qua một đoạn đường nối,tàu,xe tải,OBJECT,0.0,0.0
 người đàn ông với một con chó mặc áo phao đang ở trên cái gì,áo khoác,ca nô,OBJECT,0.0,0.0
 những gì di chuyển xuống đường ray xuyên qua khu rừng,tàu,động cơ,OBJECT,0.0,0.0
-những gì chất chồng cao với rau tốt cho sức,sandwich sandwich,sandwich,OBJECT,0.0,0.6666666666666666
+những gì chất chồng cao với rau tốt cho sức,sandwich,sandwich,OBJECT,1.0,1.0
 ngồi trên đỉnh giường là gì,con chó,con chó,OBJECT,1.0,1.0
 những gì đứng trong nước nông và đổ bóng,con chim,con vịt,OBJECT,0.0,0.5
 những gì tràn ngập sự sắp xếp hoa màu đỏ và màu vàng trước một cây cột gạch,tường,lọ cắm hoa,OBJECT,0.0,0.0
@@ -2212,7 +2212,7 @@ những gì đậu trên gương của xe,con chim,con chim,OBJECT,1.0,1.0
 những gì đỗ trên bến tàu gần những chiếc thuyền trong nước,xe đạp,xe đạp,OBJECT,1.0,1.0
 có gì đi về phía con đường này,ngựa rằn,ngựa vằn,OBJECT,0.0,0.5
 điều gì đang lái xe xuống một con đường rợp bóng cây,xe đẩy,xe đẩy,OBJECT,1.0,1.0
-người đang cưỡi trên một con phố với những chiếc ô tô đang đậu,ván trượt ván,ván trượt,OBJECT,0.0,0.8
+người đang cưỡi trên một con phố với những chiếc ô tô đang đậu,ván trượt,ván trượt,OBJECT,1.0,1.0
 xe cứu đi qua cánh đồng bằng gì,con ngựa,con ngựa,OBJECT,1.0,1.0
 những gì đỗ trên đường phố bên cạnh đồi,xe máy,xe máy,OBJECT,1.0,1.0
 người đàn ông mang một chiếc ván trượt,xe ô tô,cái túi,OBJECT,0.0,0.0
@@ -2253,7 +2253,7 @@ những gì nằm ở rìa của một bến rất nhỏ,băng ghế,băng ghế
 những gì đang trong một phòng khách,cây,truyền hình,OBJECT,0.0,0.0
 các thùng trượt tuyết xuống tuyết bao phủ những gì ở tốc độ đáng kinh ngạc,cây,núi,OBJECT,0.0,0.0
 những gì được gọi là big ben,tháp,tháp,OBJECT,1.0,1.0
-những gì chứa đầy salad rau,bát bát bát,bát,OBJECT,0.0,0.5
+những gì chứa đầy salad rau,bát,bát,OBJECT,1.0,1.0
 những gì sơn màu xanh lá cây với thiết kế đậu bởi các phương tiện khác,xe tải,xe tải,OBJECT,1.0,1.0
 hai người giữ những gì tạo dáng cho một hình ảnh,ván trượt,ba lan,OBJECT,0.0,0.0
 những gì được thực hiện để trông giống như đoàn tàu đầy màu sắc,bánh,bánh,COLOR,1.0,1.0
@@ -2315,12 +2315,12 @@ người phụ nữ đang chơi với một con chó là gì,con chó,dĩa nhự
 những gì đang đi xe ngựa qua đường phố,con ngựa,con ngựa,OBJECT,1.0,1.0
 những gì được dừng lại ở đèn giao thông trong khi mặt trời lặn,xe ô tô,xe ô tô,OBJECT,1.0,1.0
 những gì đang đứng một mình trong cỏ,cừu,cừu,OBJECT,1.0,1.0
-những gì chứa đầy các mặt hàng thực phẩm bóc vỏ,đĩa ăn cái mâ,chảo,OBJECT,0.0,0.0
+những gì chứa đầy các mặt hàng thực phẩm bóc vỏ,đĩa ăn,chảo,OBJECT,0.0,0.0
 hai cô gái đang ăn gì trong một cuộc thi,con chó,con chó,OBJECT,1.0,1.0
 ngựa vằn ăn gì,bãi cỏ,cỏ,OBJECT,0.0,0.6666666666666666
 những gì đang đứng trong một bao vây trong sở thú,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
 những gì đang treo trên một chiếc giường trong một phòng ngủ,con mèo,con mèo,OBJECT,1.0,1.0
-những gì nằm bên cạnh cỏ xanh,băng ghế băng,băng ghế,OBJECT,0.0,0.8
+những gì nằm bên cạnh cỏ xanh,băng ghế,băng ghế,OBJECT,1.0,1.0
 những gì đang đậu cạnh nhau,xe máy,xe máy,OBJECT,1.0,1.0
 điều gì đang chứa một chiếc bánh rán và cà phê,cái mâm,cái mâm,OBJECT,1.0,1.0
 "những gì bao gồm rau, một dưa chua, hành tây chiên và khoai tây",đĩa ăn,bữa ăn,OBJECT,0.0,0.5
@@ -2334,7 +2334,7 @@ người đàn ông trẻ trong bộ đồ đang giữ gì,máy ảnh,máy ảnh
 những gì giữ một số hoa màu đỏ với lá,lọ cắm hoa,lọ cắm hoa,OBJECT,1.0,1.0
 những gì bên cạnh nhau,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
 cô ấy đang uống gì với bánh sandwich,sandwich,nước,OBJECT,0.0,0.0
-những gì gấu đang đứng trên cỏ,gấu trúc gấ,gấu trúc,OBJECT,0.0,0.8
+những gì gấu đang đứng trên cỏ,gấu trúc,gấu trúc,OBJECT,1.0,1.0
 "những gì đang ngồi trên những con ngựa có một màn hình, bàn phím và chuột",máy vi tính,cái bàn,OBJECT,0.0,0.0
 những gì được trang trí với một số trang trí đầy màu sắc,vòi,vòi,COLOR,1.0,1.0
 con gấu nào đang ngồi trong bao vây,gấu trúc,gấu trúc,OBJECT,1.0,1.0
@@ -2342,7 +2342,7 @@ cái gì đang đứng ngay dưới gốc cây,hươu cao cổ,hươu cao cổ,O
 người đang rót gì vào ly rượu,nến,rượu,OBJECT,0.0,0.0
 những gì đang đứng gần cây trong tự nhiên,ngựa vằn,ngựa vằn,OBJECT,1.0,1.0
 thứ chứa đầy những mối quan hệ của đàn ông xếp chồng lên nhau cao sáu tầng,hộp,cái kệ,OBJECT,0.0,0.0
-những gì đang đứng cùng nhau trong một công viên ngoài trời,hươu cao cổ hư,hươu cao cổ,OBJECT,0.0,0.8571428571428571
+những gì đang đứng cùng nhau trong một công viên ngoài trời,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
 cái gì đang ngồi bên cạnh một chiếc máy kéo màu vàng,xe tải,xe tải,OBJECT,1.0,1.0
 những gì đỗ trên con đường sỏi gần một công viên,xe máy,xe máy,OBJECT,1.0,1.0
 những gì đang đứng trên tất cả bốn chân và chạm vào cổ và đầu ăn một cây treo từ trên cao,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
@@ -2351,11 +2351,11 @@ người phụ nữ cầm gì trong phòng tắm,bàn chải,bàn chải,OBJECT,
 những gì được hiển thị trên hộp màn hình với các điện thoại khác,điện thoại,điện thoại,OBJECT,1.0,1.0
 cái gì đậu trước cửa hàng với một cái giỏ,xe đạp,xe đạp,OBJECT,1.0,1.0
 những nơi bên cạnh một dấu hiệu,đồng hồ,đồng hồ,OBJECT,1.0,1.0
-những gì được trang trí với các loại hoa,bánh bánh,bánh,OBJECT,0.0,0.6666666666666666
+những gì được trang trí với các loại hoa,bánh,bánh,OBJECT,1.0,1.0
 những gì đang nằm trên giường với một bộ an ủi màu đỏ,con chó,con chó,OBJECT,1.0,1.0
 những gì được phân tách bằng tường kính,nhà vệ sinh,bồn tiểu,OBJECT,0.0,0.0
 những gì đứng một mình bên ngoài trên cỏ,hươu cao cổ,hươu cao cổ,OBJECT,1.0,1.0
-những gì chứa đầy thịt và mù tạt. trong đầu một tấm,sandwich sandwich,sandwich,OBJECT,0.0,0.6666666666666666
+những gì chứa đầy thịt và mù tạt. trong đầu một tấm,sandwich,sandwich,OBJECT,1.0,1.0
 những gì đang được nấu chín trên lửa bên ngoài,con chó,con chó,OBJECT,1.0,1.0
 những gì nằm ngay dưới dấu hiệu,băng ghế,băng ghế,OBJECT,1.0,1.0
 những gì nằm trên cỏ bên trong hàng rào,con bò,con bò,OBJECT,1.0,1.0
@@ -2409,7 +2409,7 @@ những gì bên cạnh hàng rào dây,con bò,con bò,OBJECT,1.0,1.0
 chiếc xe cũ quảng cáo những gì,ván lướt sóng,quán ăn,OBJECT,0.0,0.0
 cái gì đang đậu trên đường lái xe,xe tải,xe tải,OBJECT,1.0,1.0
 người chơi tennis tấn công mạnh mẽ những gì,quần short,quả bóng,OBJECT,0.0,0.0
-những gì nằm trên cây gậy giữa một số lá,con chim con,con chim,OBJECT,0.0,0.8
+những gì nằm trên cây gậy giữa một số lá,con chim,con chim,OBJECT,1.0,1.0
 những gì đỗ trước một công viên đẹp,xe đạp,xe đạp,OBJECT,1.0,1.0
 người đàn ông cưỡi những gì đang đứng trong tư thế chiến thắng,ván trượt,ván trượt,OBJECT,1.0,1.0
 người trẻ đang mặc gì,cà vạt,cà vạt,OBJECT,1.0,1.0
@@ -2440,7 +2440,7 @@ mèo con nhỏ uống chai gì,cà rốt,sữa,OBJECT,0.0,0.0
 một người đàn ông châu á mặc những gì đi bộ và nói chuyện trên điện thoại di động,nón,nón,OBJECT,1.0,1.0
 những gì đứng xung quanh trong một khu vực kín,con voi,con voi,OBJECT,1.0,1.0
 những gì đỗ bên cạnh xe máy khác trong một bãi đậu xe,xe máy,xe máy,OBJECT,1.0,1.0
-những gì được tích hợp vào mặt quầy,bếp bếp,bếp,OBJECT,0.0,0.6666666666666666
+những gì được tích hợp vào mặt quầy,bếp,bếp,OBJECT,1.0,1.0
 người đàn ông trên bờ sơn những gì,con thuyền,con thuyền,OBJECT,1.0,1.0
 cái gì đang ăn cỏ trong một đồng cỏ khô trong tự nhiên,ngựa rằn,ngựa vằn,OBJECT,0.0,0.5
 những gì ngồi xếp chồng lên nhau trên đầu kia,vali,vali,OBJECT,1.0,1.0
@@ -2488,7 +2488,7 @@ những gì đang nằm trên một chiếc chăn sọc ngựa vằn chải chu�
 cái gì đậu dọc đường trước một vườn nho,xe máy,xe máy,OBJECT,1.0,1.0
 những gì đi bộ gần lỗ tưới nước,con voi,con voi,OBJECT,1.0,1.0
 người phụ nữ có mũ dùng gì,mặt trời,chiếc ô,OBJECT,0.0,0.0
-điều gì đang di chuyển nhật ký từ nơi này sang nơi khác,con voi con voi,con voi,OBJECT,0.0,0.6666666666666666
+điều gì đang di chuyển nhật ký từ nơi này sang nơi khác,con voi hươu,con voi,OBJECT,0.0,0.8
 người phụ nữ mặc áo khoác màu xanh lá cây và mang những gì từ starbucks đang đi bộ với hành lý,áo khoác,cà phê,OBJECT,0.0,0.0
 những gì chứa đầy hoa và chanh trên bàn,lọ cắm hoa,lọ cắm hoa,OBJECT,1.0,1.0
 bến câu cá có gì bên cạnh một ngọn hải đăng,con thuyền,con thuyền,OBJECT,1.0,1.0
@@ -2695,7 +2695,7 @@ có bao nhiêu người đàn ông đứng trên một tháp đồng hồ rất 
 có bao nhiêu con ngựa đang chạy trên cánh đồng mùa đông,hai,hai,COUNT,1.0,1.0
 bình màu nâu có bao nhiêu con ngựa đen,ba,bốn,COUNT,0.0,0.0
 đồng hồ có bao nhiêu mặt ở mỗi mặt của một quầy thông tin,một,bốn,COUNT,0.0,0.0
-có bao nhiêu con chim đang đi trên bờ với một con bay trên nó,một một,một,COUNT,0.0,0.6666666666666666
+có bao nhiêu con chim đang đi trên bờ với một con bay trên nó,một,một,COUNT,1.0,1.0
 có bao nhiêu người đàn ông mỗi người cầm điện thoại di động về phía thứ gì đó,ba,ba,COUNT,1.0,1.0
 có bao nhiêu người trượt tuyết trên những ngọn núi và sườn núi phủ tuyết,ba,bốn,COUNT,0.0,0.0
 có bao nhiêu con kangaroo bằng kim loại trên mặt đất và một con đang nằm trên băng ghế,một,một,COUNT,1.0,1.0
@@ -2709,7 +2709,7 @@ có bao nhiêu người đàn ông đang ngồi trước cửa sổ quay lưng l
 có bao nhiêu trang trình bày bánh pizza trên đĩa giấy ngồi gần nhau,ba,ba,COUNT,1.0,1.0
 có bao nhiêu thang máy khác nhau bên cạnh một chiếc đồng hồ treo lớn,hai,hai,COUNT,1.0,1.0
 có bao nhiêu con hươu cao cổ đứng bên trong một cái bao vây,bốn,bốn,COUNT,1.0,1.0
-có bao nhiêu con hươu cao cổ đứng dưới bóng cây,hai hai,hai,COUNT,0.0,0.6666666666666666
+có bao nhiêu con hươu cao cổ đứng dưới bóng cây,hai,hai,COUNT,1.0,1.0
 có bao nhiêu chiếc bánh rán phủ đường trên đĩa,ba,ba,COUNT,1.0,1.0
 "có bao nhiêu cậu bé đang ngồi trên bãi cỏ của công viên, một người cầm đĩa ném.",hai,ba,COUNT,0.0,0.0
 có bao nhiêu cây gậy bóng chày gỗ xếp trên bàn,năm,năm,COUNT,1.0,1.0
@@ -2993,7 +2993,7 @@ có bao nhiêu chiếc thuyền trống cập bến bờ,bốn,bảy,COUNT,0.0,0
 có bao nhiêu người đàn ông trên xe ngựa được kéo bởi một con ngựa,hai,hai,COUNT,1.0,1.0
 có bao nhiêu chiếc ghế dài công viên bằng gỗ vuông góc với nhau trong một khu vườn,hai,hai,COUNT,1.0,1.0
 có bao nhiêu phụ nữ đứng trước tấm ván lướt sóng trên đại dương,hai,hai,COUNT,1.0,1.0
-có bao nhiêu người đàn ông mặc vest sẫm màu đứng cạnh nhau,năm bốn,năm,COUNT,0.0,0.6666666666666666
+có bao nhiêu người đàn ông mặc vest sẫm màu đứng cạnh nhau,năm,năm,COUNT,1.0,1.0
 có bao nhiêu chàng trai mặc quần áo giống nhau nhưng màu sắc khác nhau đang giải trí,hai,hai,COUNT,1.0,1.0
 có bao nhiêu người trên một chiếc ca nô trên đại dương,bốn,bốn,COUNT,1.0,1.0
 có bao nhiêu người cưỡi ngựa xuống bãi biển đầy cát lúc hoàng hôn,hai,hai,COUNT,1.0,1.0

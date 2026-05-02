@@ -9,3 +9,4 @@ matplotlib>=3.8.0
 tqdm>=4.66.0
 sentencepiece>=0.1.99
 protobuf>=3.20.0
+rouge-score>=0.1.2
