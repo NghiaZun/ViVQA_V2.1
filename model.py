@@ -1534,12 +1534,23 @@ class DeterministicVQA(nn.Module):
                     logits = base_logits
 
                 # Repetition penalty: divide positive logits, multiply negative logits
+                # Special tokens (BOS/EOS/PAD/decoder_start) are excluded because
+                # decoder_start_token_id == eos_token_id in BART/BARTpho — penalizing
+                # EOS from step 0 would prevent the model from ever stopping.
                 if repetition_penalty != 1.0:
-                    logits_2d = logits[:, 0, :]  # [B*beams, V]
+                    logits_2d = logits[:, 0, :].clone()  # [B*beams, V]
                     flat_seqs = beam_seqs.reshape(batch_size * num_beams, -1)  # [B*beams, L]
+                    # Build mask: True = special token (skip penalty)
+                    sp_mask = torch.zeros_like(flat_seqs, dtype=torch.bool)
+                    for _attr in ('bos_token_id', 'eos_token_id', 'pad_token_id', 'decoder_start_token_id'):
+                        _sid = getattr(self.config, _attr, None)
+                        if _sid is not None:
+                            sp_mask = sp_mask | (flat_seqs == _sid)
                     prev_scores = torch.gather(logits_2d, 1, flat_seqs)
                     penalized = torch.where(prev_scores < 0, prev_scores * repetition_penalty, prev_scores / repetition_penalty)
-                    logits = logits_2d.scatter(1, flat_seqs, penalized).unsqueeze(1)
+                    penalized = torch.where(sp_mask, prev_scores, penalized)  # restore special tokens
+                    logits_2d.scatter_(1, flat_seqs, penalized)
+                    logits = logits_2d.unsqueeze(1)
 
                 log_probs   = torch.log_softmax(logits[:, 0, :], dim=-1)           # [B*beams, V]
                 log_probs   = log_probs.reshape(batch_size, num_beams, -1)         # [B, beams, V]
@@ -1623,12 +1634,19 @@ class DeterministicVQA(nn.Module):
                 else:
                     logits = base_logits
 
-                # Repetition penalty
+                # Repetition penalty (same special-token exclusion as beam search)
                 if repetition_penalty != 1.0:
-                    logits_2d = logits[:, 0, :]  # [B, V]
+                    logits_2d = logits[:, 0, :].clone()  # [B, V]
+                    sp_mask = torch.zeros_like(generated_ids, dtype=torch.bool)
+                    for _attr in ('bos_token_id', 'eos_token_id', 'pad_token_id', 'decoder_start_token_id'):
+                        _sid = getattr(self.config, _attr, None)
+                        if _sid is not None:
+                            sp_mask = sp_mask | (generated_ids == _sid)
                     prev_scores = torch.gather(logits_2d, 1, generated_ids)
                     penalized = torch.where(prev_scores < 0, prev_scores * repetition_penalty, prev_scores / repetition_penalty)
-                    logits = logits_2d.scatter(1, generated_ids, penalized).unsqueeze(1)
+                    penalized = torch.where(sp_mask, prev_scores, penalized)
+                    logits_2d.scatter_(1, generated_ids, penalized)
+                    logits = logits_2d.unsqueeze(1)
 
                 next_tokens = torch.argmax(logits[:, 0, :], dim=-1, keepdim=True)  # [B, 1]
 
