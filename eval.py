@@ -62,98 +62,118 @@ def detect_question_type(question_text: str) -> str:
     return _TYPE_NAMES[_detect_type_int(question_text)]
 
 
-def evaluate(model, dataloader, device, tokenizer):
+def evaluate(model, dataloader, device, tokenizer, num_beams=3):
     model.eval()
-    
+
+    _INT_TO_TYPE = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
+
     all_predictions = []
     all_ground_truths = []
     all_questions = []
     all_question_types = []
-    
+
     total_loss = 0.0
     num_batches = 0
-    
+
     exact_matches = []
     f1_scores = []
-    
+
     # Per-type tracking
     type_exact_matches = defaultdict(list)
     type_f1_scores = defaultdict(list)
-    
+
+    # Type prediction accuracy tracking (only when model has type_head)
+    type_pred_correct = []
+    type_pred_per_type = defaultdict(list)  # ground_type → [correct/incorrect]
+
+    has_type_head = getattr(model, 'use_type_task', False) and model.type_head is not None
+
     with torch.no_grad():
         pbar = tqdm(dataloader, desc="Evaluating")
-        
+
         for batch in pbar:
             pixel_values = batch['pixel_values'].to(device)
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
-            
-            # Forward pass
+
+            # Forward pass (for loss)
             outputs = model(
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 labels=labels
             )
-            
+
             if outputs.total_loss is not None:
                 total_loss += outputs.total_loss.item()
                 num_batches += 1
-            
+
             # Generate
             predictions = model.generate(
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10,
-                num_beams=3
+                num_beams=num_beams
             )
-            
-            # Decode questions and detect types
+
+            # Decode questions + detect types via regex (ground-truth type)
+            batch_gt_types = []
             for inp in input_ids:
                 question_text = tokenizer.decode(inp, skip_special_tokens=True)
                 all_questions.append(question_text)
                 q_type = detect_question_type(question_text)
                 all_question_types.append(q_type)
-            
+                batch_gt_types.append(q_type)
+
+            # Type prediction accuracy: compare model's predicted type vs regex type
+            if has_type_head:
+                text_enc = model.encoder(input_ids=input_ids, attention_mask=attention_mask)
+                text_cls = text_enc.last_hidden_state[:, 0, :]
+                type_logits = model.type_head(text_cls)
+                pred_type_ids = torch.argmax(type_logits, dim=-1).cpu().tolist()
+                pred_type_names = [_INT_TO_TYPE[t] for t in pred_type_ids]
+                for pred_t, gt_t in zip(pred_type_names, batch_gt_types):
+                    correct = int(pred_t == gt_t)
+                    type_pred_correct.append(correct)
+                    type_pred_per_type[gt_t].append(correct)
+
             # Decode ground truths
             for label in labels:
                 label_tokens = label[label != -100].cpu().tolist()
                 gt_text = _decode_gt(tokenizer, label_tokens)
                 all_ground_truths.append(gt_text)
-            
+
             all_predictions.extend(predictions)
-            
+
             # Metrics (overall and per-type)
             batch_start_idx = len(all_ground_truths) - len(predictions)
             for i, (pred, gt) in enumerate(zip(predictions, all_ground_truths[-len(predictions):])):
                 em = compute_exact_match(pred, gt)
                 f1 = compute_f1_score(pred, gt)
                 q_type = all_question_types[batch_start_idx + i]
-                
+
                 exact_matches.append(em)
                 f1_scores.append(f1)
-                
-                # Track per-type
+
                 type_exact_matches[q_type].append(em)
                 type_f1_scores[q_type].append(f1)
-            
-            # Progress
+
             current_em = sum(exact_matches) / len(exact_matches) * 100
             current_f1 = sum(f1_scores) / len(f1_scores) * 100
-            
+
             pbar.set_postfix({
                 'loss': f"{total_loss/num_batches:.3f}",
                 'EM': f"{current_em:.1f}%",
                 'F1': f"{current_f1:.1f}%"
             })
-    
+
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     exact_match_acc = sum(exact_matches) / len(exact_matches) * 100
     f1_score_avg = sum(f1_scores) / len(f1_scores) * 100
-    
-    # Compute per-type metrics
+
+    # Per-type metrics
     per_type_results = {}
     for q_type in sorted(type_exact_matches.keys()):
         type_em = sum(type_exact_matches[q_type]) / len(type_exact_matches[q_type]) * 100 if type_exact_matches[q_type] else 0
@@ -163,12 +183,23 @@ def evaluate(model, dataloader, device, tokenizer):
             'f1_score': type_f1,
             'count': len(type_exact_matches[q_type])
         }
-    
+
+    # Type prediction accuracy (if model has type_head)
+    type_pred_accuracy = None
+    if type_pred_correct:
+        overall_acc = sum(type_pred_correct) / len(type_pred_correct) * 100
+        per_type_acc = {
+            t: sum(v) / len(v) * 100
+            for t, v in type_pred_per_type.items() if v
+        }
+        type_pred_accuracy = {'overall': overall_acc, 'per_type': per_type_acc}
+
     return {
         'loss': avg_loss,
         'exact_match': exact_match_acc,
         'f1_score': f1_score_avg,
         'per_type': per_type_results,
+        'type_pred_accuracy': type_pred_accuracy,
         'predictions': all_predictions,
         'ground_truths': all_ground_truths,
         'questions': all_questions,
@@ -186,6 +217,8 @@ def main():
                        choices=['text2vision', 'vision2text', 'bidirectional'],
                        help='Fusion type (default: auto-detect from checkpoint args)')
     parser.add_argument('--batch_size', type=int, default=16)
+    parser.add_argument('--num_beams', type=int, default=3,
+                        help='Beam search width (default: 3, try 5 for +0.5-1%% EM)')
     parser.add_argument('--output_csv', type=str, default=None)
     args = parser.parse_args()
 
@@ -309,8 +342,8 @@ def main():
     print(f"Loaded weights from epoch {checkpoint.get('epoch', 'N/A')}")
     
     # Evaluate
-    print(f"\nEvaluating...")
-    results = evaluate(model, dataloader, device, model.tokenizer)
+    print(f"\nEvaluating... (num_beams={args.num_beams})")
+    results = evaluate(model, dataloader, device, model.tokenizer, num_beams=args.num_beams)
     
     print("\n" + "="*80)
     print("RESULTS")
@@ -327,7 +360,17 @@ def main():
         for q_type in sorted(results['per_type'].keys()):
             type_data = results['per_type'][q_type]
             print(f"  {q_type:<12} {type_data['exact_match']:<8.2f} {type_data['f1_score']:<8.2f} {type_data['count']:<8}")
-    
+
+    # Type prediction accuracy (TCVG quality indicator)
+    if results.get('type_pred_accuracy'):
+        tpa = results['type_pred_accuracy']
+        print(f"\nType Prediction Accuracy (TypePredictionHead → TCVG quality):")
+        print(f"  Overall: {tpa['overall']:.2f}%")
+        print(f"  {'Type':<12} {'Acc':<8}")
+        print(f"  {'-'*20}")
+        for t in sorted(tpa['per_type'].keys()):
+            print(f"  {t:<12} {tpa['per_type'][t]:<8.2f}")
+
     print("="*80)
     
     # Save CSV
