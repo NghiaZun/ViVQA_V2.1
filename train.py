@@ -409,7 +409,7 @@ def run_one_epoch_deterministic(
         dict with metrics: loss, answer_loss, type_loss
     """
     model.train() if is_training else model.eval()
-    _amp_on = amp_dtype in (torch.float16, torch.bfloat16)
+    _amp_on = is_training and amp_dtype in (torch.float16, torch.bfloat16)
 
     total_loss = 0.0
     total_answer_loss = 0.0
@@ -973,17 +973,13 @@ def main():
     # (CUDNN_STATUS_NOT_INITIALIZED on H100 MIG). benchmark=False is enough
     # to reduce cross-run variance for conv-heavy vision encoders.
     torch.backends.cudnn.benchmark = False
-    # Flash Attention is non-deterministic on CUDA but fast (H100 HBM3 optimised).
-    # Re-enable for speed; use warn_only so any other non-det op surfaces as a
-    # warning rather than crashing.  Reproducibility is maintained via fixed seeds
-    # + CUBLAS_WORKSPACE_CONFIG + PYTHONHASHSEED — the residual flash-attn variance
-    # is ~1e-7 and does not affect ablation comparisons.
-    # To restore full bit-exact reproducibility: set all three to False/False/True
-    # and change warn_only to False.
-    torch.backends.cuda.enable_flash_sdp(True)
-    torch.backends.cuda.enable_mem_efficient_sdp(True)
+    torch.backends.cudnn.deterministic = True
+    # Disable Flash/MemEfficient SDPA — both are non-deterministic on CUDA.
+    # Math SDPA is deterministic and still faster than pure PyTorch on Ampere+.
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
     torch.backends.cuda.enable_math_sdp(True)
-    torch.use_deterministic_algorithms(True, warn_only=True)
+    torch.use_deterministic_algorithms(True, warn_only=False)
     
     # ========================================================================
     # CONFIG (from args)
@@ -1328,25 +1324,18 @@ def main():
         eps=1e-10
     )
     
-    # Mixed precision: prefer bfloat16 (no GradScaler needed, same range as float32)
-    # Fall back to float16 + GradScaler on older GPUs (pre-Ampere)
-    _bf16_ok = use_amp and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-    amp_dtype = torch.bfloat16 if _bf16_ok else torch.float16
+    # Mixed precision: float16 + GradScaler (proven reproducible)
+    amp_dtype = torch.float16 if use_amp else torch.float32
 
     if use_amp:
-        if _bf16_ok:
-            scaler = None  # bfloat16 has float32 dynamic range — no loss scaling needed
-            print(f"[AMP] bfloat16 — GradScaler disabled")
-        else:
-            try:
-                from torch.amp import GradScaler as NewGradScaler
-                scaler = NewGradScaler('cuda')
-            except (ImportError, AttributeError):
-                scaler = GradScaler()
-            print(f"[AMP] float16 + GradScaler (GPU does not support bfloat16)")
+        try:
+            from torch.amp import GradScaler as NewGradScaler
+            scaler = NewGradScaler('cuda')
+        except (ImportError, AttributeError):
+            scaler = GradScaler()
+        print(f"[AMP] float16 + GradScaler")
     else:
         scaler = None
-        amp_dtype = torch.float32
     
     # 🔥 LR Scheduler
     scheduler = None
