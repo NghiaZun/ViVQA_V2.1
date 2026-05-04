@@ -405,6 +405,7 @@ class DeterministicVQAOutput:
     vision_kd_loss: Optional[torch.Tensor] = None  # kept for compat (unused)
     text_kd_loss: Optional[torch.Tensor] = None    # kept for compat (unused)
     contrastive_loss: Optional[torch.Tensor] = None  # 🔥 Cross-modal contrastive loss
+    divergence_loss: Optional[torch.Tensor] = None   # Inter-type gate divergence loss
 
 
 # ============================================================================
@@ -429,6 +430,7 @@ class DeterministicVQA(nn.Module):
         self,
         vision_model_name: str = 'google/siglip-base-patch16-224',  # 🔥 CHANGED: DINOv2 → SigLIP
         bartpho_model_name: str = 'vinai/bartpho-syllable',
+        bartpho_revision: str = None,  # Pin commit hash to reproduce exact results
         num_fusion_layers: int = 4,  # 🔥 INCREASED: 2→4 for deeper vision-text reasoning
         num_heads: int = 8,
         dropout: float = 0.1,
@@ -461,6 +463,8 @@ class DeterministicVQA(nn.Module):
         use_contrastive: bool = False,   # Enable InfoNCE vision↔text alignment
         contrastive_lambda: float = 0.1, # λ_c weight (recommended: 0.05–0.15)
         contrastive_temp: float = 0.07,  # Temperature τ (0.07 = SimCLR default)
+        use_gate_divergence: bool = False,    # Inter-type gate divergence loss
+        gate_divergence_lambda: float = 0.05, # λ_div weight (recommended: 0.03–0.1)
         label_smoothing: float = 0.1
     ):
         super().__init__()
@@ -482,6 +486,9 @@ class DeterministicVQA(nn.Module):
         self.use_contrastive = use_contrastive
         self.contrastive_lambda = contrastive_lambda
         self.contrastive_temp = contrastive_temp
+        # Inter-type gate divergence config
+        self.use_gate_divergence = use_gate_divergence
+        self.gate_divergence_lambda = gate_divergence_lambda
         self.label_smoothing = label_smoothing
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
@@ -553,10 +560,25 @@ class DeterministicVQA(nn.Module):
             print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
         
         # Language model
-        bartpho_full = MBartForConditionalGeneration.from_pretrained(bartpho_model_name)
+        bartpho_full = MBartForConditionalGeneration.from_pretrained(
+            bartpho_model_name, revision=bartpho_revision
+        )
         bartpho_full.config.use_cache = False
-        
-        self.tokenizer = BartphoTokenizer.from_pretrained(bartpho_model_name)
+
+        # Untie encoder/decoder embeddings so they can specialize independently.
+        # Older transformers versions stored these as separate Parameter objects
+        # (+82M params). Newer versions tie them to model.shared, which hurts VQA
+        # because question embeddings (encoder) and answer embeddings (decoder)
+        # have very different distributions.
+        shared_w = bartpho_full.model.shared.weight
+        if bartpho_full.model.encoder.embed_tokens.weight is shared_w:
+            bartpho_full.model.encoder.embed_tokens.weight = nn.Parameter(shared_w.clone())
+        if bartpho_full.model.decoder.embed_tokens.weight is shared_w:
+            bartpho_full.model.decoder.embed_tokens.weight = nn.Parameter(shared_w.clone())
+
+        self.tokenizer = BartphoTokenizer.from_pretrained(
+            bartpho_model_name, revision=bartpho_revision
+        )
         bart_hidden_dim = bartpho_full.config.d_model
         print(f"  📊 BARTpho d_model: {bart_hidden_dim}")
         
@@ -1174,6 +1196,41 @@ class DeterministicVQA(nn.Module):
 
         return (loss_v2t + loss_t2v) / 2.0
 
+    def compute_gate_divergence_loss(
+        self,
+        gate_values: torch.Tensor,  # [B, P] — alpha per patch from VisionGating
+        type_ids: torch.Tensor,     # [B]    — question type per sample
+        num_types: int = 4,
+    ) -> torch.Tensor:
+        """
+        Inter-type gate divergence loss.
+
+        Forces VisionGating to produce different alpha distributions for different
+        question types. Requires no human assumptions about which type should be
+        sparse or dense — the CE loss guides WHAT each type attends to, this loss
+        only enforces that types DO attend differently.
+
+        Method: compute per-type centroid of alpha [K, num_patches] → mean → [num_patches],
+        then maximize variance across type centroids (= minimize negative variance).
+
+        Needs at least 2 types present in the batch. With PK sampling (P=4), this
+        is always satisfied.
+
+        Returns scalar loss (negative inter-type variance).
+        """
+        centroids = []
+        for t in range(num_types):
+            mask = (type_ids == t)
+            if mask.sum() > 0:
+                centroids.append(gate_values[mask].mean(dim=0))  # [num_patches]
+
+        if len(centroids) < 2:
+            return torch.tensor(0.0, device=gate_values.device)
+
+        stacked = torch.stack(centroids)           # [T, num_patches]
+        inter_type_var = stacked.var(dim=0).mean() # scalar — variance across types per patch
+        return -inter_type_var                     # minimize → maximize variance
+
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -1350,12 +1407,13 @@ class DeterministicVQA(nn.Module):
         else:
             answer_logits = base_answer_logits
         
-        # 7. 🔥 MULTI-TASK LOSS: CE + Type + Contrastive
+        # 7. 🔥 MULTI-TASK LOSS: CE + Type + Contrastive + Gate Divergence
         answer_loss = None
         total_loss = None
         vision_kd_loss = None
         text_kd_loss = None
         contrastive_loss = None
+        divergence_loss = None
 
         if labels is not None:
             # (A) Answer generation loss (weighted CE + label smoothing)
@@ -1378,18 +1436,28 @@ class DeterministicVQA(nn.Module):
                     labels=labels                     # for false-negative masking
                 )
 
-            # (C) Multi-task total loss: Answer + Type (aux) + Contrastive (aux)
+            # (C) Inter-type gate divergence loss
+            # Forces VisionGating to produce different alpha patterns per question type.
+            # No-op when use_vision_gate=False, question_types absent, or <2 types in batch.
+            if (self.use_gate_divergence
+                    and gate_stats is not None       # vision gate was active
+                    and question_types is not None): # type labels available (training with PK)
+                divergence_loss = self.compute_gate_divergence_loss(
+                    gate_values=gate_values,
+                    type_ids=question_types,
+                )
+
+            # (D) Multi-task total loss: Answer + Type (aux) + Contrastive (aux) + Divergence (aux)
             total_loss = answer_loss
 
             if type_loss is not None:
-                # λ_type = 0.2: type head is auxiliary — keep it secondary
                 total_loss = total_loss + 0.2 * type_loss
 
             if contrastive_loss is not None:
-                # λ_c (default 0.1): contrastive is auxiliary alignment signal.
-                # Scale is chosen so that at epoch 0 (contrastive ≈ log(B) ≈ 3.4 for B=32)
-                # the term contributes ~0.34 vs CE ≈ 3–5, i.e. ~7–10% of total loss.
                 total_loss = total_loss + self.contrastive_lambda * contrastive_loss
+
+            if divergence_loss is not None:
+                total_loss = total_loss + self.gate_divergence_lambda * divergence_loss
 
         return DeterministicVQAOutput(
             answer_logits=answer_logits,
@@ -1400,7 +1468,8 @@ class DeterministicVQA(nn.Module):
             gate_stats=gate_stats,
             vision_kd_loss=vision_kd_loss,    # always None (KD removed)
             text_kd_loss=text_kd_loss,         # always None (KD removed)
-            contrastive_loss=contrastive_loss  # 🔥 new
+            contrastive_loss=contrastive_loss,
+            divergence_loss=divergence_loss    # inter-type gate divergence
         )
     
     def _decode_seq(self, token_ids) -> str:

@@ -390,7 +390,7 @@ def run_one_epoch_deterministic(
     is_training=True, max_norm=1.0, stage=3, gradient_accumulation_steps=1,
     answer_weights=None, use_type_loss=False, vision_dropout_rate=0.10,
     use_scst=False, scst_start_epoch=5, scst_lambda=0.1,
-    scst_sample_temp=1.0, current_epoch=0,
+    scst_sample_temp=1.0, current_epoch=0, amp_dtype=torch.float16,
 ):
     """
     Run one epoch for deterministic model (no KL diagnostics needed!)
@@ -409,7 +409,8 @@ def run_one_epoch_deterministic(
         dict with metrics: loss, answer_loss, type_loss
     """
     model.train() if is_training else model.eval()
-    
+    _amp_on = amp_dtype in (torch.float16, torch.bfloat16)
+
     total_loss = 0.0
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
@@ -457,7 +458,7 @@ def run_one_epoch_deterministic(
                 raw_questions = batch['raw_question']  # List[str], keep on CPU
             
             # Forward pass with mixed precision
-            with autocast('cuda', enabled=(scaler is not None)):
+            with autocast('cuda', enabled=_amp_on, dtype=amp_dtype):
                 outputs = model(
                     pixel_values=pixel_values,
                     input_ids=input_ids,
@@ -511,7 +512,7 @@ def run_one_epoch_deterministic(
                         )
                         _sample_ids = _sample_enc['input_ids'].to(device)
                         _sample_ids[_sample_ids == model.tokenizer.pad_token_id] = -100
-                        with autocast('cuda', enabled=(scaler is not None)):
+                        with autocast('cuda', enabled=_amp_on, dtype=amp_dtype):
                             _log_prob = model.compute_seq_logprob(_pv, input_ids, attention_mask, _sample_ids)
                             _masked_adv = (_advantage * _pos_mask.float()).detach()
                             _scst_loss = -(_masked_adv * _log_prob).mean()
@@ -575,6 +576,8 @@ def run_one_epoch_deterministic(
                 # 🔥 Contrastive loss display
                 if outputs.contrastive_loss is not None:
                     postfix['ctr'] = f"{outputs.contrastive_loss.item():.3f}"
+                if outputs.divergence_loss is not None:
+                    postfix['div'] = f"{outputs.divergence_loss.item():.4f}"
                 if outputs.gate_stats is not None:
                     stats = outputs.gate_stats
                     postfix.update({
@@ -639,7 +642,8 @@ def evaluate_full_val(model, dataloader, tokenizer, device):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10,
-                num_beams=3
+                num_beams=3,
+                repetition_penalty=1.3,
             )
 
             for idx, (pred, label) in enumerate(zip(predictions, labels)):
@@ -705,7 +709,8 @@ def sample_predictions(model, dataloader, tokenizer, device, num_samples=10, com
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=10,
-                num_beams=3
+                num_beams=3,
+                repetition_penalty=1.3,
             )
 
             # Decode labels — use _decode_gt for consistency with evaluate_full_val
@@ -792,6 +797,8 @@ def main():
     parser.add_argument('--vision_model', type=str, default='google/siglip-base-patch16-224', 
                        help='Vision encoder model (default: SigLIP-base)')
     parser.add_argument('--bartpho_model', type=str, default='vinai/bartpho-syllable', help='BARTpho model')
+    parser.add_argument('--bartpho_revision', type=str, default=None,
+                       help='Specific commit hash for BARTpho model (e.g. adf951dd to pin old weights)')
     parser.add_argument('--num_fusion_layers', type=int, default=2, help='Number of Flamingo fusion layers')
     parser.add_argument('--fusion_type', type=str, default='text2vision', 
                        choices=['text2vision', 'vision2text', 'bidirectional'],
@@ -901,6 +908,13 @@ def main():
                        help='Weight λ_c for contrastive loss (default: 0.1, range: 0.05–0.15)')
     parser.add_argument('--contrastive_temp', type=float, default=0.07,
                        help='Temperature τ for InfoNCE (default: 0.07, SimCLR standard)')
+    parser.add_argument('--use_gate_divergence', action='store_true',
+                       help='Enable inter-type gate divergence loss. Forces VisionGating to produce '
+                            'different alpha patterns per question type (data-driven, no manual targets). '
+                            'Requires --use_vision_gate and --pk_sampling. '
+                            'Recommended: --gate_divergence_lambda 0.05')
+    parser.add_argument('--gate_divergence_lambda', type=float, default=0.05,
+                       help='Weight λ_div for inter-type gate divergence loss (default: 0.05, range: 0.03–0.1)')
     
     # Curriculum Learning
     parser.add_argument('--curriculum', action='store_true',
@@ -1029,6 +1043,8 @@ def main():
         print(f"  🔥 Type-conditional loss: 1.5x counting, 1.4x location, 1.3x color")
     if args.use_contrastive:
         print(f"  🔥 Contrastive alignment: λ={args.contrastive_lambda}, τ={args.contrastive_temp}")
+    if args.use_gate_divergence:
+        print(f"  🔥 Gate divergence: λ={args.gate_divergence_lambda}")
     print(f"  Output dir: {output_dir}")
     print(f"  Random seed: {args.seed}")
     print("="*80 + "\n")
@@ -1226,6 +1242,7 @@ def main():
     model = DeterministicVQA(
         vision_model_name=vision_model,
         bartpho_model_name=bartpho_model,
+        bartpho_revision=args.bartpho_revision,
         num_fusion_layers=num_fusion_layers,
         fusion_type=args.fusion_type,  # 🔥 NEW: Fusion direction
         num_heads=args.num_heads,
@@ -1256,7 +1273,9 @@ def main():
         distill_alpha=args.distill_alpha,  # 🔥🔥🔥
         use_contrastive=args.use_contrastive,          # 🔥 Cross-modal contrastive
         contrastive_lambda=args.contrastive_lambda,    # 🔥
-        contrastive_temp=args.contrastive_temp         # 🔥
+        contrastive_temp=args.contrastive_temp,        # 🔥
+        use_gate_divergence=args.use_gate_divergence,          # Inter-type gate divergence
+        gate_divergence_lambda=args.gate_divergence_lambda,    # λ_div
     ).to(device)
     
     model.freeze_pretrained(
@@ -1309,16 +1328,25 @@ def main():
         eps=1e-10
     )
     
-    # Mixed precision scaler (use new API to avoid deprecation warning)
+    # Mixed precision: prefer bfloat16 (no GradScaler needed, same range as float32)
+    # Fall back to float16 + GradScaler on older GPUs (pre-Ampere)
+    _bf16_ok = use_amp and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    amp_dtype = torch.bfloat16 if _bf16_ok else torch.float16
+
     if use_amp:
-        try:
-            from torch.amp import GradScaler as NewGradScaler
-            scaler = NewGradScaler('cuda')
-        except (ImportError, AttributeError):
-            # Fallback to old API for older PyTorch versions
-            scaler = GradScaler()
+        if _bf16_ok:
+            scaler = None  # bfloat16 has float32 dynamic range — no loss scaling needed
+            print(f"[AMP] bfloat16 — GradScaler disabled")
+        else:
+            try:
+                from torch.amp import GradScaler as NewGradScaler
+                scaler = NewGradScaler('cuda')
+            except (ImportError, AttributeError):
+                scaler = GradScaler()
+            print(f"[AMP] float16 + GradScaler (GPU does not support bfloat16)")
     else:
         scaler = None
+        amp_dtype = torch.float32
     
     # 🔥 LR Scheduler
     scheduler = None
@@ -1465,6 +1493,7 @@ def main():
             scst_lambda=args.scst_lambda,
             scst_sample_temp=args.scst_sample_temp,
             current_epoch=epoch,
+            amp_dtype=amp_dtype,
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
@@ -1478,9 +1507,10 @@ def main():
             device=device,
             is_training=False,
             stage=stage,
-            answer_weights=answer_weights_tensor,  # 🔥 Pass answer weights
-            use_type_loss=args.use_type_loss,      # 🔥 Pass type loss flag
-            vision_dropout_rate=0.0                # val: không dropout
+            answer_weights=answer_weights_tensor,
+            use_type_loss=args.use_type_loss,
+            vision_dropout_rate=0.0,
+            amp_dtype=amp_dtype,
         )
         
         print(f"  VAL   -> Loss: {val_metrics['loss']:.4f} | Answer: {val_metrics['answer_loss']:.4f}")
