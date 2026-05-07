@@ -516,7 +516,7 @@ class DeterministicVQA(nn.Module):
         
         # Vision encoder (SigLIP or DINOv2)
         # For SigLIP, load full model first, then extract vision_model
-        full_vision_model = AutoModel.from_pretrained(vision_model_name)
+        full_vision_model = AutoModel.from_pretrained(vision_model_name, attn_implementation='eager')
         
         # Extract vision-only component if it's a multi-modal model (like SigLIP)
         if hasattr(full_vision_model, 'vision_model'):
@@ -560,28 +560,32 @@ class DeterministicVQA(nn.Module):
             print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
         
         # Language model
+        # attn_implementation='eager' forces the pre-4.45 manual bmm+softmax attention,
+        # matching the numerical behavior that produced the 70.38% baseline.
+        # transformers 4.45+ switched MBart to attention_interface (SDPA/Flash) by default,
+        # which changes the optimization landscape enough to hurt convergence.
         bartpho_full = MBartForConditionalGeneration.from_pretrained(
-            bartpho_model_name, revision=bartpho_revision
+            bartpho_model_name, revision=bartpho_revision,
+            attn_implementation='eager'
         )
         bartpho_full.config.use_cache = False
 
-        # Untie encoder/decoder embeddings so they can specialize independently.
-        # Older transformers versions stored these as separate Parameter objects
-        # (+82M params). Newer versions tie them to model.shared, which hurts VQA
-        # because question embeddings (encoder) and answer embeddings (decoder)
-        # have very different distributions.
+        # Untie encoder embeddings from the shared weight so the encoder can
+        # specialize for question tokens independently of answer generation.
+        # decoder.embed_tokens and lm_head stay tied to model.shared — this
+        # preserves the pre-trained decoder language model prior and avoids
+        # the lm_head/decoder-embedding misalignment that degrades generation.
         shared_w = bartpho_full.model.shared.weight
         if bartpho_full.model.encoder.embed_tokens.weight is shared_w:
             bartpho_full.model.encoder.embed_tokens.weight = nn.Parameter(shared_w.clone())
-        if bartpho_full.model.decoder.embed_tokens.weight is shared_w:
-            bartpho_full.model.decoder.embed_tokens.weight = nn.Parameter(shared_w.clone())
+            print(f"  📊 Encoder embed_tokens untied from shared (+{shared_w.numel()/1e6:.1f}M params)")
 
         self.tokenizer = BartphoTokenizer.from_pretrained(
             bartpho_model_name, revision=bartpho_revision
         )
         bart_hidden_dim = bartpho_full.config.d_model
         print(f"  📊 BARTpho d_model: {bart_hidden_dim}")
-        
+
         self.encoder = bartpho_full.model.encoder
         self.decoder = bartpho_full.model.decoder
         self.lm_head = bartpho_full.lm_head
