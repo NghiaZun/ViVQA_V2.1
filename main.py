@@ -71,6 +71,12 @@ def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
         f'--answer_weights {CFG["answer_weights"]}',
         f'--seed {seed}',
     ]
+    if CFG.get('pk_sampling'):
+        parts += [
+            '--pk_sampling',
+            f'--pk_p {CFG["pk_p"]}',
+            f'--pk_k {CFG["pk_k"]}',
+        ]
     if CFG.get('use_text_lora'):
         parts += [
             '--use_text_lora',
@@ -199,6 +205,7 @@ def main():
     if current_ckpt is None:
         print('⚠️  Không tìm thấy checkpoint sau loop 0, thoát.')
         sys.exit(1)
+    best_ckpt = current_ckpt
     print(f'✓ Baseline checkpoint: {current_ckpt}')
 
     # ── Loops 1…max_loops ─────────────────────────────────────────
@@ -227,6 +234,13 @@ def main():
 
         history.append({'loop': loop - 1, 'overall': overall, 'per_type': per_type})
 
+        # Track best checkpoint xuyên loop theo EM
+        if per_type and overall['EM'] > best_em:
+            best_em   = overall['EM']
+            best_ckpt = current_ckpt
+            best_loop = loop - 1
+            print(f'  ★ New best EM={best_em:.2f}% tại loop {best_loop} → {best_ckpt}')
+
         # B: Stop check
         if per_type and should_stop(overall, per_type, prev_overall_em):
             print(f'\n✅ Tất cả điều kiện EM đạt. Dừng loop tại loop {loop-1}.')
@@ -235,10 +249,10 @@ def main():
         if per_type:
             prev_overall_em = overall['EM']
 
-        # C: Generation plan
+        # C: Generation plan — đọc result.csv để target answer hay sai
         print(f'\n[{loop}C] Computing generation plan...')
-        per_type_for_plan = per_type if per_type else {t: {'EM': 50.0, 'F1': 50.0} for t in TYPES}
-        plan = compute_generation_plan(per_type_for_plan)
+        result_csv = os.path.join(CFG['work_dir'], f'result_loop{loop-1}.csv')
+        plan = compute_generation_plan(result_csv=result_csv, train_csv=current_train_csv)
         print_plan(plan)
 
         # D: Generate
@@ -313,9 +327,10 @@ def main():
     print('\n' + '=' * 65)
     print('FINAL EVAL')
     print('=' * 65)
+    print(f'Best checkpoint: loop {best_loop}, EM={best_em:.2f}% → {best_ckpt}')
 
     final_result_csv = os.path.join(CFG['work_dir'], 'result_final.csv')
-    overall_final, per_type_final = run_eval(current_ckpt, final_result_csv)
+    overall_final, per_type_final = run_eval(best_ckpt, final_result_csv)
 
     print('\n' + '=' * 75)
     print('RESULTS SUMMARY')
@@ -353,7 +368,7 @@ def main():
 
     print('\n' + '=' * 65)
     print('PIPELINE COMPLETE')
-    print(f'Best checkpoint: {current_ckpt}')
+    print(f'Best checkpoint (loop {best_loop}, EM={best_em:.2f}%): {best_ckpt}')
     print('=' * 65)
 
 

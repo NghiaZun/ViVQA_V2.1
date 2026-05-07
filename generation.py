@@ -17,84 +17,133 @@ _flux_pipe = None
 
 # ── Budget + style planning ───────────────────────────────────────
 
-def compute_generation_plan(per_type):
+def compute_generation_plan(result_csv, train_csv):
     """
-    Budget tỉ lệ nghịch với EM (type yếu → nhiều ảnh hơn).
-    Type có EM >= gen_skip_em → skip generation, giữ performance (tránh forgetting).
-    Budget bị skip sẽ được tái phân bổ cho các type còn lại.
+    Đọc result.csv (output của eval) để tìm câu hỏi/answer hay sai nhất.
+    Budget được phân bổ theo số lần sai thực tế thay vì aggregate EM.
 
-    Style theo gap = F1 - EM (chỉ dùng để chẩn đoán loại lỗi, không phải decision):
-      gap < 1  → unambiguous   (sai hoàn toàn — cần ảnh rõ ràng)
-      gap < 5  → paraphrase    (gần đúng — cần đa dạng cách diễn đạt)
-      gap >= 5 → hard_cases    (đoán đúng phần lớn — cần edge cases)
+    Với mỗi type:
+      - Tính error_count = số lần model sai với ground_truth đó
+      - Chỉ target answer có error_rate >= gen_min_error_rate
+      - Budget mỗi answer tỉ lệ với error_count
+      - Cap tổng budget của type theo gen_max_type_share
     """
-    skip_threshold = CFG.get('gen_skip_em', 70.0)
+    skip_threshold   = CFG.get('gen_skip_em', 70.0)
+    max_share        = CFG.get('gen_max_type_share', 0.25)
+    min_error_rate   = CFG.get('gen_min_error_rate', 0.3)   # chỉ gen nếu sai >= 30%
+    total_budget     = CFG['gen_budget_total']
+    budget_min       = CFG['gen_budget_min']
+    budget_max       = CFG['gen_budget_max']
 
-    active = {t for t in TYPES if t in per_type and per_type[t]['EM'] < skip_threshold}
-    deficits = {t: (100.0 - per_type[t]['EM']) for t in active}
-    total_deficit = sum(deficits.values()) or 1.0
+    res  = pd.read_csv(result_csv)
+    tdf  = pd.read_csv(train_csv)
+    total_train = len(tdf)
+    train_col   = 'type' if 'type' in tdf.columns else 'question_type'
+
+    # Tên cột type trong result.csv
+    res_type_col = 'question_type' if 'question_type' in res.columns else 'type'
 
     plan = {}
     for t in TYPES:
-        if t not in per_type:
+        type_int  = TYPE_INT_MAP[t]
+        sub       = res[res[res_type_col] == t]
+        train_sub = tdf[tdf[train_col] == type_int]
+
+        if sub.empty:
             continue
 
-        f1  = per_type[t]['F1']
-        em  = per_type[t]['EM']
-        gap = f1 - em
+        type_em = sub['exact_match'].mean() * 100
 
-        if t not in active:
+        if type_em >= skip_threshold:
             plan[t] = {
-                'n_images'    : 0,
-                'style'       : 'skip',
-                'augmentation': 'none',
-                'f1'          : f1,
-                'em'          : em,
-                'gap'         : gap,
-                'note'        : f'EM={em:.1f} >= {skip_threshold} → skip để giữ performance',
+                'n_images'      : 0,
+                'target_answers': [],
+                'em'            : type_em,
+                'note'          : f'EM={type_em:.1f}% >= {skip_threshold} → skip',
             }
             continue
 
-        raw_budget = int((deficits[t] / total_deficit) * CFG['gen_budget_total'])
-        budget = max(CFG['gen_budget_min'], min(CFG['gen_budget_max'], raw_budget))
+        # Tính error stats per answer
+        wrong = sub[sub['exact_match'] == 0]
+        ans_stats = []
+        for ans, grp in sub.groupby('ground_truth'):
+            total = len(grp)
+            errors = (grp['exact_match'] == 0).sum()
+            error_rate = errors / total
+            # Chỉ target answer có trong train (mới có thể gen được câu hỏi)
+            in_train = (train_sub['answer'] == ans).any()
+            if error_rate >= min_error_rate and in_train:
+                ans_stats.append({'answer': ans, 'errors': errors,
+                                  'total': total, 'error_rate': error_rate})
 
-        if gap < 1.0:
-            style, augmentation = 'unambiguous', 'minimal'
-            note = 'gap≈0 → sai hoàn toàn, sinh ảnh rõ ràng không mơ hồ'
-        elif gap < 5.0:
-            style, augmentation = 'paraphrase', 'spatial'
-            note = 'gap nhỏ → partial match, sinh đa dạng cách diễn đạt'
-        else:
-            style, augmentation = 'hard_cases', 'color_jitter'
-            note = 'gap lớn → đã khá tốt, sinh edge cases'
+        if not ans_stats:
+            plan[t] = {
+                'n_images'      : 0,
+                'target_answers': [],
+                'em'            : type_em,
+                'note'          : 'không có answer nào đạt ngưỡng lỗi',
+            }
+            continue
+
+        # Phân bổ budget theo tỉ lệ error_count
+        total_errors  = sum(a['errors'] for a in ans_stats)
+        current_count = int((tdf[train_col] == type_int).sum())
+
+        # Cap tổng budget của type theo share
+        max_budget = int((max_share * total_train - current_count) / (1 - max_share))
+        type_budget = max(budget_min, min(budget_max, total_errors * 2))
+        type_budget = max(0, min(type_budget, max_budget))
+
+        # Phân budget xuống từng answer
+        for a in ans_stats:
+            a['budget'] = max(1, int(a['errors'] / total_errors * type_budget))
 
         plan[t] = {
-            'n_images'    : budget,
-            'style'       : style,
-            'augmentation': augmentation,
-            'f1'          : f1,
-            'em'          : em,
-            'gap'         : gap,
-            'note'        : note,
+            'n_images'      : type_budget,
+            'target_answers': ans_stats,
+            'em'            : type_em,
+            'note'          : f'{len(ans_stats)} answers cần gen | {total_errors} lần sai',
         }
 
     return plan
 
 
 def print_plan(plan):
-    print(f'\n  {"Type":<12} {"F1":>6} {"EM":>6} {"Gap":>6} {"Budget":>8}  Style')
+    print(f'\n  {"Type":<12} {"EM":>6} {"Budget":>8}  Note')
     print(f'  {"-"*65}')
     for t, p in plan.items():
-        print(
-            f'  {t:<12} {p["f1"]:>6.2f} {p["em"]:>6.2f} '
-            f'{p["gap"]:>6.2f} {p["n_images"]:>8}  '
-            f'[{p["style"]}] {p["note"]}'
-        )
+        print(f'  {t:<12} {p["em"]:>6.1f} {p["n_images"]:>8}  {p["note"]}')
+        for a in p.get('target_answers', [])[:5]:
+            print(f'    └ {a["answer"]:<25} sai {a["errors"]}/{a["total"]} '
+                  f'({a["error_rate"]*100:.0f}%) → gen {a["budget"]}')
+        if len(p.get('target_answers', [])) > 5:
+            print(f'    └ ... +{len(p["target_answers"])-5} answers khác')
 
 
 # ── Prompt builders ───────────────────────────────────────────────
 
-def _build_count_sample(answer):
+# COCO-style prompt suffix: ảnh candid ngoài đời, không studio
+_COCO_SUFFIX = (
+    'candid photograph, real-world scene, natural lighting, '
+    'amateur snapshot, slightly cluttered background, '
+    'no text, no watermark, no border'
+)
+
+_COCO_CONTEXTS = [
+    'in a park',
+    'on a city street',
+    'inside a home',
+    'in a kitchen',
+    'at a market',
+    'in a living room',
+    'outdoors on grass',
+    'near a road',
+    'in a backyard',
+    'at a zoo',
+]
+
+
+def _build_count_sample(answer, question):
     ans = str(answer).strip().lower()
     count = VN_NUM_MAP.get(ans)
     if count is None:
@@ -102,69 +151,57 @@ def _build_count_sample(answer):
         except: count = random.randint(1, 5)
     count = max(0, min(count, 10))
     obj   = random.choice(COUNT_OBJECTS)
-    scene = random.choice(COUNT_SCENES)
+    ctx   = random.choice(_COCO_CONTEXTS)
     prompt = (
-        f"exactly {EN_NUM.get(count, str(count))} {obj} {scene}, "
-        f"photorealistic DSLR photo, sharp focus, natural lighting, "
-        f"clearly visible and well-separated, no text, no watermark"
+        f"exactly {EN_NUM.get(count, str(count))} {obj} {ctx}, "
+        f"clearly visible and countable, {_COCO_SUFFIX}"
     )
     return {'prompt': prompt,
-            'question': f'Có bao nhiêu {obj} trong ảnh?',
+            'question': question,
             'answer': VN_NUM_WORD.get(count, str(count))}
 
 
-def _build_color_sample(answer):
+def _build_color_sample(answer, question):
     ans      = answer.strip().lower()
     color_en = VN_COLOR_EN.get(ans, ans)
     obj      = random.choice(COLOR_OBJECTS)
-    scenes   = [
-        f'a {color_en} {obj} on a white table, studio lighting, sharp focus',
-        f'a bright {color_en} {obj} in a park, natural daylight',
-        f'a vivid {color_en} {obj} in an urban setting, clean background',
-        f'close-up of a {color_en} {obj}, minimalist background',
-    ]
-    return {'prompt': random.choice(scenes) + ', photorealistic, no text, no watermark',
-            'question': f'Màu sắc của {obj} trong ảnh là gì?',
+    ctx      = random.choice(_COCO_CONTEXTS)
+    prompt   = (
+        f"a {color_en} {obj} {ctx}, "
+        f"color clearly visible, {_COCO_SUFFIX}"
+    )
+    return {'prompt': prompt,
+            'question': question,
             'answer': answer}
 
 
-def _build_location_sample(answer):
+def _build_location_sample(answer, question):
     ans     = answer.strip().lower()
-    prep_en, matched = None, None
+    prep_en = None
     for vn_key, en_val in VN_LOC_EN.items():
         if vn_key in ans:
-            prep_en, matched = en_val, vn_key
+            prep_en = en_val
             break
     subj, anchor = random.choice(LOC_ANCHORS)
     if prep_en is None:
-        prompt  = (f'a {subj} and a {anchor} with clear spatial relationship, '
-                   f'photorealistic, natural lighting, uncluttered scene')
-        ans_out = answer
+        prompt = f'a {subj} and a {anchor} in the same scene, {_COCO_SUFFIX}'
     else:
-        prompt  = (f'a {subj} {prep_en} a {anchor}, clear spatial composition, '
-                   f'photorealistic DSLR photo, natural lighting, no text')
-        ans_out = matched
+        prompt = f'a {subj} {prep_en} a {anchor}, {_COCO_SUFFIX}'
     return {'prompt': prompt,
-            'question': f'Con {subj} đang ở đâu so với {anchor}?',
-            'answer': ans_out}
+            'question': question,
+            'answer': answer}
 
 
 def _build_object_sample(answer, question):
-    scenes = [
-        'in a natural outdoor setting, photorealistic',
-        'on a white background, studio photo',
-        'in a Vietnamese street market scene',
-        'in a home environment, natural lighting',
-        'in an urban setting, daytime, sharp focus',
-    ]
-    return {'prompt': f'{answer}, {random.choice(scenes)}, DSLR photo, no text',
-            'question': question, 'answer': answer}
+    ctx = random.choice(_COCO_CONTEXTS)
+    prompt = f'{answer} {ctx}, {_COCO_SUFFIX}'
+    return {'prompt': prompt, 'question': question, 'answer': answer}
 
 
 def _build_sample(type_name, answer, question):
-    if type_name == 'COUNT':      return _build_count_sample(answer)
-    elif type_name == 'COLOR':    return _build_color_sample(answer)
-    elif type_name == 'LOCATION': return _build_location_sample(answer)
+    if type_name == 'COUNT':      return _build_count_sample(answer, question)
+    elif type_name == 'COLOR':    return _build_color_sample(answer, question)
+    elif type_name == 'LOCATION': return _build_location_sample(answer, question)
     else:                         return _build_object_sample(answer, question)
 
 
@@ -175,17 +212,37 @@ def _generate_flux_batch(prompts: list, seeds: list) -> list:
     if _flux_pipe is None:
         raise RuntimeError('FLUX pipe chưa load — gọi load_generation_models() trước')
 
-    results = _flux_pipe(
-        prompt=prompts,
-        num_inference_steps=CFG['flux_steps'],
-        guidance_scale=0.0,
-        width=512,
-        height=512,
-        max_sequence_length=256,
-        generator=torch.Generator('cpu').manual_seed(seeds[0]),
-        output_type='pil',
-    )
-    return results.images
+    # COCO: 72.5% landscape (~572x482), 22.5% portrait, 5% square
+    # Dùng multiples of 64 gần nhất
+    def _pick_wh():
+        r = random.random()
+        if r < 0.72:  return 576, 448   # landscape
+        elif r < 0.94: return 448, 576   # portrait
+        else:          return 512, 512   # square
+
+    # Mỗi ảnh dùng seed riêng — tránh batch ra ảnh giống nhau
+    generators = [torch.Generator('cpu').manual_seed(s) for s in seeds]
+
+    # schnell: guidance_scale=0.0 (distilled, fixed)
+    # dev:     guidance_scale=3.5 (CFG-enabled, prompt adherence tốt hơn)
+    is_dev = 'dev' in CFG['flux_model']
+    guidance = 3.5 if is_dev else 0.0
+
+    images = []
+    for prompt, gen in zip(prompts, generators):
+        w, h = _pick_wh()
+        result = _flux_pipe(
+            prompt=prompt,
+            num_inference_steps=CFG['flux_steps'],
+            guidance_scale=guidance,
+            width=w,
+            height=h,
+            max_sequence_length=256,
+            generator=gen,
+            output_type='pil',
+        )
+        images.append(result.images[0])
+    return images
 
 
 # ── Qwen2-VL verifier ─────────────────────────────────────────────
@@ -292,35 +349,50 @@ def generate_images_for_type(type_name, plan_entry, current_train_csv, models, l
     os.makedirs(loop_img_dir, exist_ok=True)
     B            = CFG['flux_batch_size']
 
-    df   = pd.read_csv(current_train_csv)
-    pool = df[df['type'] == type_int].copy()
-
     if plan_entry['n_images'] == 0:
         print(f'  [{type_name}] skip (EM cao, giữ nguyên).')
         return []
+
+    target_answers = plan_entry.get('target_answers', [])
+    if not target_answers:
+        print(f'  [{type_name}] không có target answers, skip.')
+        return []
+
+    df   = pd.read_csv(current_train_csv)
+    pool = df[df['type'] == type_int].copy()
 
     if pool.empty:
         print(f'  [{type_name}] pool rỗng, skip.')
         return []
 
-    answer_pool  = pool['answer'].dropna().tolist()
+    # Build weighted sample pool dựa trên target answers + budget từng answer
+    # Mỗi answer được chọn theo budget của nó (tỉ lệ errors)
+    target_map = {a['answer']: a for a in target_answers}
+    pool = pool[pool['answer'].isin(target_map)].copy()
+    if pool.empty:
+        print(f'  [{type_name}] target answers không có trong train pool, skip.')
+        return []
+
+    ans_budgets = pool['answer'].map(lambda a: target_map[a]['budget'])
+    ans_weights = ans_budgets.values.astype(float)
+    ans_weights = ans_weights / ans_weights.sum()
+
     new_rows     = []
     generated    = 0
     attempts     = 0
     max_attempts = n * 3
 
-    print(f'  [{type_name}] n={n} | pool={len(pool)} | batch={B} | model=FLUX.1-schnell')
+    print(f'  [{type_name}] n={n} | target_ans={len(target_answers)} | pool={len(pool)} | batch={B}')
 
     while generated < n and attempts < max_attempts:
 
         batch_samples = []
         for _ in range(B):
-            base_ans = random.choice(answer_pool)
-            base_q   = (pool[pool['answer'] == base_ans]['question'].iloc[0]
-                        if (pool['answer'] == base_ans).any()
-                        else pool['question'].iloc[0])
+            row      = pool.sample(1, weights=ans_weights).iloc[0]
+            base_ans = row['answer']
+            base_q   = row['question']
             try:
-                batch_samples.append(_build_sample(type_name, base_ans, base_q))
+                batch_samples.append(_build_sample(type_name, str(base_ans), str(base_q)))
             except Exception:
                 pass
 

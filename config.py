@@ -70,6 +70,13 @@ CFG = {
     'fusion_type'       : 'text2vision',
     'num_fusion_layers' : 2,
 
+    # ── Batch sampling ────────────────────────────────────────────
+    # PK sampling tắt: hard-cap K/type sẽ under-train OBJECT (41.6% test)
+    # Thay bằng share cap trong compute_generation_plan
+    'pk_sampling' : False,
+    'pk_p'        : 4,
+    'pk_k'        : 8,
+
     # ── LoRA (text encoder) ───────────────────────────────────────
     'use_text_lora'   : True,
     'text_lora_r'     : 16,
@@ -87,8 +94,8 @@ CFG = {
     # ── Generation — FLUX.1-schnell ───────────────────────────────
     # H100 80GB: FLUX (~23GB) + Qwen (~4GB) = ~27GB, load full lên GPU
     # P100 16GB: cpu_offload để fit 16GB
-    'flux_model'      : 'black-forest-labs/FLUX.1-schnell',
-    'flux_steps'      : 4,
+    'flux_model'      : 'black-forest-labs/FLUX.1-dev',
+    'flux_steps'      : 20,  # dev: 20=good, 28=best quality
     'flux_batch_size' : _FLUX_BATCH,
     'flux_cpu_offload': _CPU_OFFLOAD,
     'flux_compile'    : _COMPILE,     # torch.compile ~30% throughput on Ampere+
@@ -100,7 +107,11 @@ CFG = {
     'gen_budget_min'  : 80,
     'gen_budget_max'  : 400,
     # Type có EM >= ngưỡng này → bỏ qua generation, giữ performance
-    'gen_skip_em'     : 70.0,
+    'gen_skip_em'       : 70.0,
+    # Chỉ gen cho answer có error_rate >= ngưỡng này
+    'gen_min_error_rate': 0.3,
+    # Share tối đa của mỗi type sau khi aug (so với total dataset)
+    'gen_max_type_share': 0.25,
 
     # ── Stop condition ────────────────────────────────────────────
     'stop_em_variance': 8.0,

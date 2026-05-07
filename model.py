@@ -570,16 +570,6 @@ class DeterministicVQA(nn.Module):
         )
         bartpho_full.config.use_cache = False
 
-        # Untie encoder embeddings from the shared weight so the encoder can
-        # specialize for question tokens independently of answer generation.
-        # decoder.embed_tokens and lm_head stay tied to model.shared — this
-        # preserves the pre-trained decoder language model prior and avoids
-        # the lm_head/decoder-embedding misalignment that degrades generation.
-        shared_w = bartpho_full.model.shared.weight
-        if bartpho_full.model.encoder.embed_tokens.weight is shared_w:
-            bartpho_full.model.encoder.embed_tokens.weight = nn.Parameter(shared_w.clone())
-            print(f"  📊 Encoder embed_tokens untied from shared (+{shared_w.numel()/1e6:.1f}M params)")
-
         self.tokenizer = BartphoTokenizer.from_pretrained(
             bartpho_model_name, revision=bartpho_revision
         )
