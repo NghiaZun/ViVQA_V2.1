@@ -122,25 +122,34 @@ def print_plan(plan):
 
 # ── Prompt builders ───────────────────────────────────────────────
 
-# COCO-style prompt suffix: ảnh candid ngoài đời, không studio
+# COCO-style suffix: photography style gần với ảnh thật COCO
 _COCO_SUFFIX = (
-    'candid photograph, real-world scene, natural lighting, '
-    'amateur snapshot, slightly cluttered background, '
-    'no text, no watermark, no border'
+    'DSLR 35mm photo, f/2.8 aperture, natural lighting, '
+    'real-world scene, multiple objects visible, '
+    'no text, no watermark, no border, no frame'
 )
 
-_COCO_CONTEXTS = [
-    'in a park',
-    'on a city street',
-    'inside a home',
-    'in a kitchen',
-    'at a market',
-    'in a living room',
-    'outdoors on grass',
-    'near a road',
-    'in a backyard',
-    'at a zoo',
+# Scene templates: mỗi scene có main context + co-occurring objects phổ biến trong COCO
+_SCENES = [
+    # (context, background objects)
+    ('in a park',           'people walking, trees, benches, grass in background'),
+    ('on a city street',    'cars parked, buildings, pedestrians, trash cans nearby'),
+    ('in a kitchen',        'countertop, cabinets, sink, various kitchen items around'),
+    ('in a living room',    'sofa, tv, coffee table, lamps, shelves in background'),
+    ('at a dining table',   'plates, cups, chairs, food items scattered around'),
+    ('in a backyard',       'fence, patio furniture, plants, shed in background'),
+    ('at a market',         'stalls, people shopping, various goods piled nearby'),
+    ('on a sidewalk',       'parked bikes, fire hydrant, street signs, people passing'),
+    ('in a bedroom',        'bed, dresser, curtains, personal items scattered'),
+    ('at a sports field',   'other players, equipment, spectators in background'),
+    ('in a zoo enclosure',  'rocks, trees, water feature, fence, other animals nearby'),
+    ('near a dining area',  'tables with food, people eating, menus, condiments'),
 ]
+
+
+def _scene():
+    ctx, bg = random.choice(_SCENES)
+    return ctx, bg
 
 
 def _build_count_sample(answer, question):
@@ -150,11 +159,12 @@ def _build_count_sample(answer, question):
         try:    count = int(ans)
         except: count = random.randint(1, 5)
     count = max(0, min(count, 10))
-    obj   = random.choice(COUNT_OBJECTS)
-    ctx   = random.choice(_COCO_CONTEXTS)
+    obj      = random.choice(COUNT_OBJECTS)
+    ctx, bg  = _scene()
     prompt = (
-        f"exactly {EN_NUM.get(count, str(count))} {obj} {ctx}, "
-        f"clearly visible and countable, {_COCO_SUFFIX}"
+        f"a scene {ctx} showing exactly {EN_NUM.get(count, str(count))} {obj}, "
+        f"{bg}, each {obj} clearly visible and individually countable, "
+        f"{_COCO_SUFFIX}"
     )
     return {'prompt': prompt,
             'question': question,
@@ -165,10 +175,11 @@ def _build_color_sample(answer, question):
     ans      = answer.strip().lower()
     color_en = VN_COLOR_EN.get(ans, ans)
     obj      = random.choice(COLOR_OBJECTS)
-    ctx      = random.choice(_COCO_CONTEXTS)
+    ctx, bg  = _scene()
     prompt   = (
-        f"a {color_en} {obj} {ctx}, "
-        f"color clearly visible, {_COCO_SUFFIX}"
+        f"a scene {ctx}, a {color_en} {obj} prominently visible, "
+        f"{bg}, the {color_en} color of the {obj} clearly distinguishable, "
+        f"{_COCO_SUFFIX}"
     )
     return {'prompt': prompt,
             'question': question,
@@ -183,18 +194,29 @@ def _build_location_sample(answer, question):
             prep_en = en_val
             break
     subj, anchor = random.choice(LOC_ANCHORS)
+    ctx, bg      = _scene()
     if prep_en is None:
-        prompt = f'a {subj} and a {anchor} in the same scene, {_COCO_SUFFIX}'
+        prompt = (
+            f"a scene {ctx} with a {subj} and a {anchor} visible, "
+            f"{bg}, their spatial relationship clearly shown, {_COCO_SUFFIX}"
+        )
     else:
-        prompt = f'a {subj} {prep_en} a {anchor}, {_COCO_SUFFIX}'
+        prompt = (
+            f"a scene {ctx}, a {subj} {prep_en} a {anchor}, "
+            f"{bg}, spatial positioning clearly visible, {_COCO_SUFFIX}"
+        )
     return {'prompt': prompt,
             'question': question,
             'answer': answer}
 
 
 def _build_object_sample(answer, question):
-    ctx = random.choice(_COCO_CONTEXTS)
-    prompt = f'{answer} {ctx}, {_COCO_SUFFIX}'
+    ctx, bg = _scene()
+    prompt  = (
+        f"a scene {ctx} featuring a {answer}, "
+        f"{bg}, the {answer} is the main subject clearly identifiable, "
+        f"{_COCO_SUFFIX}"
+    )
     return {'prompt': prompt, 'question': question, 'answer': answer}
 
 
@@ -207,40 +229,73 @@ def _build_sample(type_name, answer, question):
 
 # ── FLUX batch inference ──────────────────────────────────────────
 
-def _generate_flux_batch(prompts: list, seeds: list) -> list:
+def _load_ref_image(img_id: str) -> 'PIL.Image | None':
+    """Load ảnh COCO thật từ image_dir làm reference cho img2img."""
+    from PIL import Image as PILImage
+    img_dir = CFG['image_dir']
+    for ext in ('.jpg', '.jpeg', '.png', ''):
+        path = os.path.join(img_dir, f'{img_id}{ext}')
+        if os.path.exists(path):
+            try:
+                return PILImage.open(path).convert('RGB')
+            except Exception:
+                return None
+    return None
+
+
+def _generate_flux_batch(prompts: list, seeds: list,
+                         ref_images: list = None) -> list:
     global _flux_pipe
     if _flux_pipe is None:
         raise RuntimeError('FLUX pipe chưa load — gọi load_generation_models() trước')
 
-    # COCO: 72.5% landscape (~572x482), 22.5% portrait, 5% square
-    # Dùng multiples of 64 gần nhất
-    def _pick_wh():
-        r = random.random()
-        if r < 0.72:  return 576, 448   # landscape
-        elif r < 0.94: return 448, 576   # portrait
-        else:          return 512, 512   # square
-
-    # Mỗi ảnh dùng seed riêng — tránh batch ra ảnh giống nhau
     generators = [torch.Generator('cpu').manual_seed(s) for s in seeds]
-
-    # schnell: guidance_scale=0.0 (distilled, fixed)
-    # dev:     guidance_scale=3.5 (CFG-enabled, prompt adherence tốt hơn)
-    is_dev = 'dev' in CFG['flux_model']
-    guidance = 3.5 if is_dev else 0.0
+    is_dev     = 'dev' in CFG['flux_model']
+    guidance   = 3.5 if is_dev else 0.0
+    use_img2img = (
+        CFG.get('flux_use_img2img', True)
+        and is_dev
+        and ref_images is not None
+    )
 
     images = []
-    for prompt, gen in zip(prompts, generators):
-        w, h = _pick_wh()
-        result = _flux_pipe(
-            prompt=prompt,
-            num_inference_steps=CFG['flux_steps'],
-            guidance_scale=guidance,
-            width=w,
-            height=h,
-            max_sequence_length=256,
-            generator=gen,
-            output_type='pil',
-        )
+    for i, (prompt, gen) in enumerate(zip(prompts, generators)):
+        ref = ref_images[i] if (use_img2img and ref_images) else None
+
+        if use_img2img and ref is not None:
+            # img2img: giữ composition/complexity từ ảnh COCO thật
+            # strength=0.85 → 85% noise → content thay đổi theo prompt
+            # nhưng scene structure/complexity giữ từ reference
+            from PIL import Image as PILImage
+            w, h = ref.size
+            # Snap to multiples of 64
+            w = (w // 64) * 64 or 512
+            h = (h // 64) * 64 or 512
+            ref_resized = ref.resize((w, h), PILImage.LANCZOS)
+            result = _flux_pipe(
+                prompt=prompt,
+                image=ref_resized,
+                strength=CFG.get('flux_img2img_strength', 0.85),
+                num_inference_steps=CFG['flux_steps'],
+                guidance_scale=guidance,
+                max_sequence_length=256,
+                generator=gen,
+                output_type='pil',
+            )
+        else:
+            # Fallback: text-to-image
+            r = random.random()
+            w, h = (576, 448) if r < 0.72 else (448, 576) if r < 0.94 else (512, 512)
+            result = _flux_pipe(
+                prompt=prompt,
+                num_inference_steps=CFG['flux_steps'],
+                guidance_scale=guidance,
+                width=w,
+                height=h,
+                max_sequence_length=256,
+                generator=gen,
+                output_type='pil',
+            )
         images.append(result.images[0])
     return images
 
@@ -271,19 +326,24 @@ def _verify_with_qwen(image, question_vi, expected_vi, qwen_model, qwen_proc):
 
 def load_generation_models():
     global _flux_pipe
-    from diffusers import FluxPipeline
     from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
     from ultralytics import YOLO
+
+    use_img2img = CFG.get('flux_use_img2img', True) and 'dev' in CFG['flux_model']
+    if use_img2img:
+        from diffusers import FluxImg2ImgPipeline as FluxPipeline
+        print(f'Loading FLUX.1-dev img2img (strength={CFG.get("flux_img2img_strength", 0.85)})...')
+    else:
+        from diffusers import FluxPipeline
+        print(f'Loading {CFG["flux_model"]}...')
 
     cpu_offload = CFG.get('flux_cpu_offload', True)
     do_compile  = CFG.get('flux_compile', False)
 
     if cpu_offload:
-        print('Loading FLUX.1-schnell (cpu_offload mode — low VRAM)...')
         _flux_pipe = FluxPipeline.from_pretrained(CFG['flux_model'], torch_dtype=torch.bfloat16)
         _flux_pipe.enable_model_cpu_offload()
     else:
-        print('Loading FLUX.1-schnell (full GPU mode — high VRAM)...')
         _flux_pipe = FluxPipeline.from_pretrained(
             CFG['flux_model'], torch_dtype=torch.bfloat16,
         ).to('cuda')
@@ -387,12 +447,17 @@ def generate_images_for_type(type_name, plan_entry, current_train_csv, models, l
     while generated < n and attempts < max_attempts:
 
         batch_samples = []
+        ref_imgs      = []
         for _ in range(B):
             row      = pool.sample(1, weights=ans_weights).iloc[0]
             base_ans = row['answer']
             base_q   = row['question']
             try:
                 batch_samples.append(_build_sample(type_name, str(base_ans), str(base_q)))
+                # Sample reference image từ cùng type (có thể khác answer)
+                # để giữ scene complexity của COCO
+                ref_row = pool.sample(1).iloc[0]
+                ref_imgs.append(_load_ref_image(str(ref_row['img_id'])))
             except Exception:
                 pass
 
@@ -405,7 +470,7 @@ def generate_images_for_type(type_name, plan_entry, current_train_csv, models, l
         attempts += len(batch_samples)
 
         try:
-            gen_images = _generate_flux_batch(prompts, seeds)
+            gen_images = _generate_flux_batch(prompts, seeds, ref_images=ref_imgs)
         except Exception as e:
             print(f'    FLUX batch failed: {e}')
             continue

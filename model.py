@@ -560,13 +560,19 @@ class DeterministicVQA(nn.Module):
             print(f"  🔥 Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}, dropout={vision_lora_dropout}")
         
         # Language model
-        # attn_implementation='eager' forces the pre-4.45 manual bmm+softmax attention,
+        # attn_implementation='eager': forces pre-4.45 manual bmm+softmax attention,
         # matching the numerical behavior that produced the 70.38% baseline.
-        # transformers 4.45+ switched MBart to attention_interface (SDPA/Flash) by default,
-        # which changes the optimization landscape enough to hurt convergence.
+        # transformers 4.45+ switched MBart to attention_interface (SDPA/Flash) by default.
+        #
+        # tie_word_embeddings=False: BARTpho checkpoint stores model.shared,
+        # encoder.embed_tokens, and decoder.embed_tokens as 3 separate keys.
+        # transformers 4.57 keeps them as 3 separate tensors (prints "NOT tying" warning),
+        # giving 606.1M params. Without this flag, from_pretrained ties them to 1 tensor
+        # → 524.2M params (82M fewer). The baseline ran with 3 separate tables.
         bartpho_full = MBartForConditionalGeneration.from_pretrained(
             bartpho_model_name, revision=bartpho_revision,
-            attn_implementation='eager'
+            attn_implementation='eager',
+            tie_word_embeddings=False,
         )
         bartpho_full.config.use_cache = False
 

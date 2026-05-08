@@ -94,8 +94,10 @@ CFG = {
     # ── Generation — FLUX.1-schnell ───────────────────────────────
     # H100 80GB: FLUX (~23GB) + Qwen (~4GB) = ~27GB, load full lên GPU
     # P100 16GB: cpu_offload để fit 16GB
-    'flux_model'      : 'black-forest-labs/FLUX.1-dev',
-    'flux_steps'      : 20,  # dev: 20=good, 28=best quality
+    'flux_model'           : 'black-forest-labs/FLUX.1-dev',
+    'flux_steps'           : 20,   # dev: 20=good, 28=best quality
+    'flux_use_img2img'     : True,  # dùng ảnh COCO thật làm reference
+    'flux_img2img_strength': 0.85,  # 0.85=đổi nhiều, 0.7=giữ structure gốc
     'flux_batch_size' : _FLUX_BATCH,
     'flux_cpu_offload': _CPU_OFFLOAD,
     'flux_compile'    : _COMPILE,     # torch.compile ~30% throughput on Ampere+

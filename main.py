@@ -268,47 +268,41 @@ def main():
 
         unload_generation_models(gen_models)
 
-        # E: Merge
-        print(f'\n[{loop}E] Merging dataset...')
-        current_train_csv = merge_dataset(current_train_csv, new_rows_all, loop)
+        # E: Merge — chỉ dùng aug của loop này + original data
+        # KHÔNG tích lũy aug từ loop trước để tránh noise compounding
+        print(f'\n[{loop}E] Merging dataset (loop {loop} aug only)...')
+        loop_train_csv = merge_dataset(CFG['train_csv'], new_rows_all, loop)
 
-        # Rebuild combined dir với tất cả ảnh aug từ mọi loop
-        aug_dirs = [
-            os.path.join(CFG['aug_root'], f'result_{i}')
-            for i in range(1, loop + 1)
-        ]
-        if os.path.exists(combined_image_dir):
-            import shutil; shutil.rmtree(combined_image_dir)
-        os.makedirs(combined_image_dir)
         import shutil
+        loop_img_dir = os.path.join(CFG['aug_root'], f'result_{loop}')
+        loop_combined = os.path.join(CFG['work_dir'], f'combined_loop{loop}')
+        if os.path.exists(loop_combined):
+            shutil.rmtree(loop_combined)
+        os.makedirs(loop_combined)
         for f in os.listdir(CFG['image_dir']):
             os.symlink(os.path.join(CFG['image_dir'], f),
-                       os.path.join(combined_image_dir, f))
-        for d in aug_dirs:
-            if os.path.isdir(d):
-                for f in os.listdir(d):
-                    dst = os.path.join(combined_image_dir, f)
-                    if not os.path.exists(dst):
-                        shutil.copy2(os.path.join(d, f), dst)
-        print(f'✓ Combined: {len(os.listdir(combined_image_dir))} images')
+                       os.path.join(loop_combined, f))
+        if os.path.isdir(loop_img_dir):
+            for f in os.listdir(loop_img_dir):
+                dst = os.path.join(loop_combined, f)
+                if not os.path.exists(dst):
+                    shutil.copy2(os.path.join(loop_img_dir, f), dst)
+        print(f'✓ Loop {loop} combined: {len(os.listdir(loop_combined))} images')
 
-        recompute_answer_weights(current_train_csv)
+        recompute_answer_weights(loop_train_csv)
 
-        # F: Fine-tune
-        print(f'\n[{loop}F] Fine-tuning {CFG["finetune_epochs"]} epochs...')
+        # F: Fine-tune từ loop 0 baseline — không resume từ checkpoint đã degraded
+        print(f'\n[{loop}F] Fine-tuning từ baseline checkpoint...')
         ckpt_dir_loop = os.path.join(CFG['ckpt_dir'], f'loop{loop}')
         os.makedirs(ckpt_dir_loop, exist_ok=True)
 
-        total_epochs = CFG['initial_epochs'] + CFG['finetune_epochs'] * loop
         run_train(
-            train_csv=current_train_csv,
+            train_csv=loop_train_csv,
             val_csv=CFG['val_csv'],
-            image_dir=combined_image_dir,
+            image_dir=loop_combined,
             output_dir=ckpt_dir_loop,
-            epochs=total_epochs,
-            lr=CFG['finetune_lr'],
-            warmup_epochs=CFG['finetune_warmup_epochs'],
-            resume=current_ckpt,
+            epochs=CFG['initial_epochs'],
+            resume=best_ckpt,          # luôn resume từ best checkpoint (loop 0 ban đầu)
             early_stopping=True,
             early_stopping_patience=CFG['finetune_es_patience'],
         )
