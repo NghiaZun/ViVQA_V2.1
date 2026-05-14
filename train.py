@@ -88,6 +88,10 @@ def _normalize_vn(text: str) -> str:
     return unicodedata.normalize('NFC', text).strip().lower()
 
 
+def compute_exact_match(prediction: str, ground_truth: str) -> float:
+    return 1.0 if _normalize_vn(prediction) == _normalize_vn(ground_truth) else 0.0
+
+
 def _decode_gt(tokenizer, label_token_ids: list) -> str:
     """Decode ground-truth label ids with the same BOS filtering as model._decode_seq.
     Prevents false EM mismatches when BOS token is not in tokenizer.all_special_ids."""
@@ -414,6 +418,8 @@ def run_one_epoch_deterministic(
     total_loss = 0.0
     total_answer_loss = 0.0
     total_type_loss = 0.0  # 🔥 NEW: Track type loss
+    nan_loss_steps = 0
+    nan_grad_steps = 0
     num_batches = 0
     steps_since_update = 0
 
@@ -478,6 +484,18 @@ def run_one_epoch_deterministic(
                     loss = loss / gradient_accumulation_steps
             
             if is_training and loss is not None:
+                # Guard: skip batch if loss is NaN/Inf BEFORE backward.
+                # Must NOT call scaler.update() here — scaler.scale() hasn't
+                # been called yet so there are no inf checks recorded.
+                # Calling scaler.update() without a prior scale+backward raises
+                # "No inf checks were recorded prior to update."
+                if torch.isnan(loss) or torch.isinf(loss):
+                    print("⚠️  NaN/Inf loss detected, skipping backward")
+                    nan_loss_steps += 1
+                    optimizer.zero_grad()
+                    steps_since_update = 0
+                    continue
+
                 if scaler is not None:
                     scaler.scale(loss).backward()
                 else:
@@ -498,7 +516,7 @@ def run_one_epoch_deterministic(
                     for _i in range(len(_greedy)):
                         _lbl = labels[_i][labels[_i] != -100].cpu().tolist()
                         _gt  = _decode_gt(model.tokenizer, _lbl)
-                        _adv.append(compute_f1_score(_sample[_i], _gt) - compute_f1_score(_greedy[_i], _gt))
+                        _adv.append(compute_exact_match(_sample[_i], _gt) - compute_exact_match(_greedy[_i], _gt))
                     _advantage = torch.tensor(_adv, dtype=torch.float32, device=device)
                     # Positive-only advantage: only reward samples strictly better than greedy.
                     # Negative advantage penalizes the whole sampled sequence including any
@@ -527,14 +545,29 @@ def run_one_epoch_deterministic(
                 # Update weights after accumulating gradients
                 if steps_since_update == gradient_accumulation_steps:
                     if scaler is not None:
+                        # scaler.unscale_() must come AFTER scale+backward,
+                        # BEFORE clip_grad_norm and step.
                         scaler.unscale_(optimizer)
                         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                        if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                            print("⚠️  NaN/Inf gradient detected, skipping step")
+                            nan_grad_steps += 1
+                            optimizer.zero_grad()
+                            scaler.update()  # safe: scale+backward was called above
+                            steps_since_update = 0
+                            continue
                         scaler.step(optimizer)
                         scaler.update()
                     else:
                         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+                        if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                            print("⚠️  NaN/Inf gradient detected, skipping step")
+                            nan_grad_steps += 1
+                            optimizer.zero_grad()
+                            steps_since_update = 0
+                            continue
                         optimizer.step()
-                    
+
                     optimizer.zero_grad()
                     steps_since_update = 0
             
@@ -592,11 +625,17 @@ def run_one_epoch_deterministic(
         if scaler is not None:
             scaler.unscale_(optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            scaler.step(optimizer)
-            scaler.update()
+            if torch.isnan(grad_norm) or torch.isinf(grad_norm):
+                print("⚠️  NaN/Inf gradient at end-of-epoch flush, skipping step")
+                nan_grad_steps += 1
+                scaler.update()
+            else:
+                scaler.step(optimizer)
+                scaler.update()
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-            optimizer.step()
+            if not (torch.isnan(grad_norm) or torch.isinf(grad_norm)):
+                optimizer.step()
         optimizer.zero_grad()
     
     if num_batches == 0:
@@ -609,7 +648,9 @@ def run_one_epoch_deterministic(
     return {
         'loss': total_loss / num_batches,
         'answer_loss': total_answer_loss / num_batches,
-        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0  # 🔥 NEW
+        'type_loss': total_type_loss / num_batches if use_type_loss else 0.0,  # 🔥 NEW
+        'nan_loss_steps': nan_loss_steps,
+        'nan_grad_steps': nan_grad_steps
     }
 
 
@@ -816,8 +857,19 @@ def main():
     parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
     parser.add_argument('--max_norm', type=float, default=1.0, help='Gradient clipping max norm')
     parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision')
+    parser.add_argument('--amp_dtype', type=str, default='bf16', choices=['fp16', 'bf16', 'fp32'],
+                       help='AMP dtype (fp16/bf16/fp32). Use bf16 on H100 for stability.')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1, 
                        help='Number of gradient accumulation steps (for effective larger batch size)')
+    # GradScaler tuning (helps H100 BF16/FP16 stability)
+    parser.add_argument('--scaler_init_scale', type=float, default=256.0,
+                       help='GradScaler initial scale (default: 256)')
+    parser.add_argument('--scaler_growth_factor', type=float, default=1.5,
+                       help='GradScaler growth factor (default: 1.5)')
+    parser.add_argument('--scaler_backoff_factor', type=float, default=0.5,
+                       help='GradScaler backoff factor (default: 0.5)')
+    parser.add_argument('--scaler_growth_interval', type=int, default=2000,
+                       help='GradScaler growth interval (default: 2000 steps)')
     
     # LR scheduler & early stopping
     parser.add_argument('--scheduler', type=str, default='plateau', choices=['none', 'plateau', 'cosine'],
@@ -878,6 +930,8 @@ def main():
                        help='Path to answer_weights.json for balanced loss (use compute_answer_weights.py)')
     parser.add_argument('--use_type_loss', action='store_true',
                        help='Enable type prediction head auxiliary loss (TypePredictionHead, safe)')
+    parser.add_argument('--type_loss_weight', type=float, default=0.2,
+                       help='Weight for auxiliary type loss (default: 0.2, try 0.5 for stronger type learning)')
     parser.add_argument('--use_logits_bias', action='store_true',
                        help='Enable type-aware logits biasing (TypeAwareLogitsBias, risky - use separately)')
     
@@ -935,6 +989,8 @@ def main():
     # Checkpointing
     parser.add_argument('--output_dir', type=str, default='./checkpoints_no_latent', help='Output directory for checkpoints')
     parser.add_argument('--resume', type=str, default=None, help='Resume from checkpoint')
+    parser.add_argument('--resume_reset_epoch', action='store_true',
+                       help='When resuming, reset epoch counter and early-stopping state (fresh schedule with loaded weights)')
     parser.add_argument('--reset_lr', action='store_true',
                        help='When resuming, reset LR to --lr value and reinitialize scheduler (warm restart)')
     parser.add_argument('--save_every', type=int, default=1, help='Save checkpoint every N epochs')
@@ -1000,7 +1056,13 @@ def main():
     learning_rate = args.lr
     weight_decay = args.weight_decay
     max_norm = args.max_norm
-    use_amp = not args.no_amp
+    use_amp = not args.no_amp and args.amp_dtype != 'fp32'
+    amp_dtype_map = {
+        'fp16': torch.float16,
+        'bf16': torch.bfloat16,
+        'fp32': torch.float32,
+    }
+    amp_dtype = amp_dtype_map[args.amp_dtype]
     
     # Freezing strategy
     unfreeze_encoder_layers = args.unfreeze_encoder_layers
@@ -1025,7 +1087,7 @@ def main():
     print(f"  Learning rate: {learning_rate}")
     print(f"  Weight decay: {weight_decay}")
     print(f"  Gradient clipping: {max_norm}")
-    print(f"  Mixed precision: {use_amp}")
+    print(f"  Mixed precision: {use_amp} ({args.amp_dtype})")
     print(f"  Fusion layers: {num_fusion_layers}")
     print(f"  Unfreeze encoder layers: {unfreeze_encoder_layers}")
     print(f"  Unfreeze decoder: {unfreeze_decoder}")
@@ -1037,6 +1099,7 @@ def main():
         print(f"  🔥 Answer-aware loss: {args.answer_weights}")
     if args.use_type_loss:
         print(f"  🔥 Type-conditional loss: 1.5x counting, 1.4x location, 1.3x color")
+        print(f"  🔥 Type loss weight: {args.type_loss_weight}")
     if args.use_contrastive:
         print(f"  🔥 Contrastive alignment: λ={args.contrastive_lambda}, τ={args.contrastive_temp}")
     if args.use_gate_divergence:
@@ -1106,11 +1169,11 @@ def main():
             vision_processor=vision_processor,
             tokenizer_name=bartpho_model,
             include_question_type=args.use_type_loss,  # 🔥 Enable question type if using type loss
-            auto_detect_type=False,  # ✅ Dùng cột 'type' từ CSV (ground truth), không dùng regex
+            auto_detect_type=False,  # Dùng cột 'type' từ CSV (ground truth), không dùng regex
             use_distillation=args.use_distillation,  # 🔥🔥🔥
             teacher_vision_processor=teacher_vision_processor  # 🔥🔥🔥
         )
-        
+
         # Check if val_csv provided
         if args.val_csv:
             print(f"[Data] Using provided validation CSV: {args.val_csv}")
@@ -1120,7 +1183,7 @@ def main():
                 vision_processor=vision_processor,
                 tokenizer_name=bartpho_model,
                 include_question_type=args.use_type_loss,
-                auto_detect_type=False,  # ✅ Dùng cột 'type' từ CSV (ground truth)
+                auto_detect_type=False,  # Dùng cột 'type' từ CSV (ground truth)
                 use_distillation=args.use_distillation,
                 teacher_vision_processor=teacher_vision_processor
             )
@@ -1255,6 +1318,7 @@ def main():
         text_lora_dropout=args.text_lora_dropout,  # 🔥 NEW
         use_type_task=args.use_type_loss,       # 🔥 type head auxiliary loss only
         use_logits_bias=args.use_logits_bias,   # 🔥 type-aware logits bias (risky, separate flag)
+    type_loss_weight=args.type_loss_weight,
         use_vision_gate=args.use_vision_gate,
         vision_gate_init=args.vision_gate_init,
         vision_gate_min_alpha=args.vision_gate_min_alpha,
@@ -1321,19 +1385,30 @@ def main():
         trainable_params,
         lr=learning_rate,
         weight_decay=weight_decay,
-        eps=1e-10
+        eps=1e-8
     )
     
     # Mixed precision: float16 + GradScaler (proven reproducible)
-    amp_dtype = torch.float16 if use_amp else torch.float32
+    amp_dtype = amp_dtype if use_amp else torch.float32
 
     if use_amp:
         try:
             from torch.amp import GradScaler as NewGradScaler
-            scaler = NewGradScaler('cuda')
+            scaler = NewGradScaler(
+                'cuda',
+                init_scale=args.scaler_init_scale,
+                growth_factor=args.scaler_growth_factor,
+                backoff_factor=args.scaler_backoff_factor,
+                growth_interval=args.scaler_growth_interval,
+            )
         except (ImportError, AttributeError):
-            scaler = GradScaler()
-        print(f"[AMP] float16 + GradScaler")
+            scaler = GradScaler(
+                init_scale=args.scaler_init_scale,
+                growth_factor=args.scaler_growth_factor,
+                backoff_factor=args.scaler_backoff_factor,
+                growth_interval=args.scaler_growth_interval,
+            )
+        print(f"[AMP] {args.amp_dtype} + GradScaler (init={args.scaler_init_scale}, growth={args.scaler_growth_factor})")
     else:
         scaler = None
     
@@ -1391,6 +1466,10 @@ def main():
     _es_metric = args.early_stopping_metric  # shorthand
     best_monitor = 0.0 if _es_metric != 'loss' else float('inf')
     
+    # Initialize accumulated NaN counters (will be restored from checkpoint if resuming)
+    total_nan_loss_steps = 0
+    total_nan_grad_steps = 0
+
     if args.resume:
         print(f"\n[Resume] Loading checkpoint: {args.resume}")
         checkpoint = torch.load(args.resume, map_location=device)
@@ -1422,7 +1501,23 @@ def main():
             early_stopping.best_loss = early_stopping.best_score   # mirror field cũ
             early_stopping.early_stop = es_state['early_stop']
             print(f"[Resume] Early stopping restored: counter={early_stopping.counter}/{early_stopping.patience}, best_score={early_stopping.best_score:.4f}")
+
+        # Optional: reset epoch/ES state while keeping weights
+        if args.resume_reset_epoch:
+            start_epoch = 1
+            best_val_loss = float('inf')
+            best_monitor = 0.0 if _es_metric != 'loss' else float('inf')
+            args._best_monitor = best_monitor
+            if early_stopping is not None:
+                early_stopping.counter = 0
+                early_stopping.best_score = best_monitor
+                early_stopping.best_loss = best_monitor
+                early_stopping.early_stop = False
+            print("[Resume] Epoch/early-stopping state reset (resume_reset_epoch enabled)")
         print(f"[Resume] Resuming from epoch {start_epoch}, best val loss: {best_val_loss:.4f}")
+        # Restore accumulated NaN counters if present in checkpoint
+        total_nan_loss_steps = checkpoint.get('total_nan_loss_steps', 0)
+        total_nan_grad_steps = checkpoint.get('total_nan_grad_steps', 0)
     
     # ========================================================================
     # STAGE 3: END-TO-END TRAINING (NO STAGES 1/2!)
@@ -1486,6 +1581,9 @@ def main():
         )
         
         print(f"  TRAIN -> Loss: {train_metrics['loss']:.4f} | Answer: {train_metrics['answer_loss']:.4f}")
+        print(f"  TRAIN -> NaN loss steps: {train_metrics['nan_loss_steps']} | NaN grad steps: {train_metrics['nan_grad_steps']}")
+        total_nan_loss_steps += train_metrics['nan_loss_steps']
+        total_nan_grad_steps += train_metrics['nan_grad_steps']
         
         # Validation
         val_metrics = run_one_epoch_deterministic(
@@ -1622,6 +1720,8 @@ def main():
                 'val_loss': val_metrics['loss'],
                 'best_val_loss': best_val_loss,
                 'best_monitor': best_monitor,   # ✅ lưu để resume đúng
+                'total_nan_loss_steps': total_nan_loss_steps,
+                'total_nan_grad_steps': total_nan_grad_steps,
                 'args': vars(args)
             }
             
@@ -1654,6 +1754,8 @@ def main():
             'val_loss': val_metrics['loss'],
             'best_val_loss': best_val_loss,
             'best_monitor': best_monitor,       # ✅ lưu để resume đúng
+            'total_nan_loss_steps': total_nan_loss_steps,
+            'total_nan_grad_steps': total_nan_grad_steps,
             'training_history': training_history,  # Include history for resume
             'args': vars(args)
         }
@@ -1697,6 +1799,8 @@ def main():
     print("TRAINING COMPLETE!")
     print("="*80)
     print(f"  Best validation loss: {best_val_loss:.4f}")
+    print(f"  Total NaN loss steps: {total_nan_loss_steps}")
+    print(f"  Total NaN grad steps: {total_nan_grad_steps}")
     print(f"  Checkpoints saved to: {output_dir}")
     print("="*80)
     

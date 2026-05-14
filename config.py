@@ -33,28 +33,35 @@ CFG = {
     # ── Data — đường dẫn relative so với project root ─────────────
     'train_csv'       : os.path.join(_ARCHIVE, 'train_split.csv'),
     'val_csv'         : os.path.join(_ARCHIVE, 'val_split.csv'),
+    'test_csv'        : os.path.join(_ARCHIVE, 'test.csv'),
     'image_dir'       : os.path.join(_ARCHIVE, 'data', 'images', 'train'),
     'answer_weights'  : 'answer_weights.json',
 
     # ── Working dirs ──────────────────────────────────────────────
     'work_dir'        : _PROJECT_ROOT,
-    'ckpt_dir'        : os.path.join(_PROJECT_ROOT, 'checkpoints'),
+    'ckpt_dir'        : os.path.join(_PROJECT_ROOT, 'checkpoints_pk'),
     'aug_root'        : os.path.join(_PROJECT_ROOT, 'aug_images'),
 
     # ── Fine-tune loop config (main.py) ───────────────────────────
     'initial_epochs'          : 40,
-    'finetune_epochs'         : 15,
+    'finetune_epochs'         : 30,
     'finetune_lr'             : 2e-5,
     'finetune_warmup_epochs'  : 2,
     'finetune_es_patience'    : 8,
+    'resume_reset_epoch'      : True,
     'max_loops'               : 5,
+    # Loop behavior: accumulate augmented data + resume policy
+    # accumulate_aug=True sẽ giữ lại aug của các loop trước (có thể tăng chất lượng nhưng rủi ro noise)
+    # resume_from_best=True sẽ luôn fine-tune từ best checkpoint (ổn định, ít drift)
+    'loop_accumulate_aug'     : True,
+    'loop_resume_from_best'   : True,
 
     # ── Training hyperparameters ──────────────────────────────────
     'epochs'                      : 40,
     'lr'                          : 7e-5,
     'weight_decay'                : 0.01,
     'dropout'                     : 0.1,
-    'label_smoothing'             : 0.1,
+    'label_smoothing'             : 0.05,
     'gradient_accumulation_steps' : 1,
     'scheduler'                   : 'cosine',
     'warmup_epochs'               : 3,
@@ -70,20 +77,14 @@ CFG = {
     'fusion_type'       : 'text2vision',
     'num_fusion_layers' : 2,
 
-    # ── Batch sampling ────────────────────────────────────────────
-    # PK sampling tắt: hard-cap K/type sẽ under-train OBJECT (41.6% test)
-    # Thay bằng share cap trong compute_generation_plan
-    'pk_sampling' : False,
-    'pk_p'        : 4,
-    'pk_k'        : 8,
-
     # ── LoRA (text encoder) ───────────────────────────────────────
     'use_text_lora'   : True,
     'text_lora_r'     : 16,
     'text_lora_alpha' : 32,
 
     # ── Vision gate ───────────────────────────────────────────────
-    'use_vision_gate' : True,
+    'use_vision_gate'      : True,
+    'vision_gate_init'     : 1.5,
 
     # ── Auxiliary losses ──────────────────────────────────────────
     'use_type_loss'      : True,
@@ -95,21 +96,44 @@ CFG = {
     # H100 80GB: FLUX (~23GB) + Qwen (~4GB) = ~27GB, load full lên GPU
     # P100 16GB: cpu_offload để fit 16GB
     'flux_model'           : 'black-forest-labs/FLUX.1-dev',
-    'flux_steps'           : 20,   # dev: 20=good, 28=best quality
+    'flux_steps'           : 25,   # dev: 20=good, 28=best quality
     'flux_use_img2img'     : True,  # dùng ảnh COCO thật làm reference
-    'flux_img2img_strength': 0.85,  # 0.85=đổi nhiều, 0.7=giữ structure gốc
+    'flux_img2img_strength': 0.70,   # đủ noise để FLUX sinh content mới, vẫn giữ COCO style
+    # Xác suất dùng ảnh reference từ đúng câu hỏi/answer gốc (giữ style COCO)
+    'flux_ref_same_answer_prob': 0.0,  # dùng random ref từ cùng type → tránh copy structure gốc
     'flux_batch_size' : _FLUX_BATCH,
     'flux_cpu_offload': _CPU_OFFLOAD,
     'flux_compile'    : _COMPILE,     # torch.compile ~30% throughput on Ampere+
-    'mllm_model'      : 'Qwen/Qwen2-VL-2B-Instruct',
-    'yolo_model'      : 'yolov8m.pt',
+    'mllm_model'      : 'Qwen/Qwen2-VL-7B-Instruct',
+    'yolo_model'      : 'yolov8x.pt',
 
     # ── Generation budget ─────────────────────────────────────────
     'gen_budget_total': 800,
     'gen_budget_min'  : 80,
     'gen_budget_max'  : 400,
+    # Loop tuning: giảm budget và siết lỗi ở loop sau
+    'loop_budget_decay': 0.8,
+    'loop_min_error_rate_delta': 0.1,
+    # Ưu tiên COUNT/LOCATION khi gen (OBJECT/COLOR giảm để tránh noise)
+    'gen_focus_weights': {
+        'COUNT': 1.2,
+        'LOCATION': 1.1,
+        'OBJECT': 0.9,
+        'COLOR': 0.9,
+    },
+    # Dynamic focus: tự tăng weight cho type EM thấp mỗi loop
+    'gen_focus_dynamic': True,
+    'gen_focus_min': 0.7,
+    'gen_focus_max': 1.4,
+    # Chỉ gen cho một số type nhất định (ví dụ ['COUNT','LOCATION'])
+    'gen_only_types'    : None,
+    # Hoặc chọn top-k type EM thấp nhất mỗi loop (None để tắt)
+    'gen_focus_top_k'   : None,
     # Type có EM >= ngưỡng này → bỏ qua generation, giữ performance
-    'gen_skip_em'       : 70.0,
+    'gen_skip_em'       : 72.0,
+    # Scale budget theo khoảng cách EM với gen_skip_em
+    # gap_ratio = (gen_skip_em - em) / gen_skip_em, scale = 1 + gen_gap_budget_scale * gap_ratio
+    'gen_gap_budget_scale': 1.0,
     # Chỉ gen cho answer có error_rate >= ngưỡng này
     'gen_min_error_rate': 0.3,
     # Share tối đa của mỗi type sau khi aug (so với total dataset)

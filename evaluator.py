@@ -4,26 +4,8 @@ import subprocess
 from config import CFG, TYPES, TYPE_NAME_MAP
 
 
-def run_eval(ckpt_path, result_csv_path):
-    """
-    Chạy eval.py và parse kết quả.
-    Trả về:
-        overall  : dict {'F1': float, 'EM': float}  (0-100 scale)
-        per_type : dict {type_name: {'F1': float, 'EM': float}}
-    """
-    cmd = (
-        f"python eval.py "
-        f"--checkpoint {ckpt_path} "
-        f"--csv_path {CFG['val_csv']} "
-        f"--image_folder {CFG['image_dir']} "
-        f"--output_csv {result_csv_path} "
-        f"--num_beams 3 "
-        f"--repetition_penalty 1.3"
-    )
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    output = result.stdout + result.stderr
-    print(output)
-
+def _parse_eval_output(output):
+    """Parse EM, F1 và per-type từ stdout của eval.py."""
     overall = {'F1': 0.0, 'EM': 0.0}
     m = re.search(r'F1 Score:\s+([\d.]+)%', output)
     if m:
@@ -36,10 +18,33 @@ def run_eval(ckpt_path, result_csv_path):
     for raw_name, key in TYPE_NAME_MAP.items():
         m = re.search(rf'\b{raw_name}\s+([\d.]+)\s+([\d.]+)', output)
         if m:
-            per_type[key] = {
-                'EM': float(m.group(1)),
-                'F1': float(m.group(2)),
-            }
+            per_type[key] = {'EM': float(m.group(1)), 'F1': float(m.group(2))}
+    return overall, per_type
+
+
+def run_eval(ckpt_path, result_csv_path):
+    """
+    Eval trên val_csv (dùng cho stop check + generation plan).
+    Trả về:
+        overall  : dict {'F1': float, 'EM': float}  (0-100 scale)
+        per_type : dict {type_name: {'F1': float, 'EM': float}}
+    """
+    cmd = (
+        f"python eval.py "
+        f"--checkpoint {ckpt_path} "
+        f"--csv_path {CFG['val_csv']} "
+        f"--image_folder {CFG['image_dir']} "
+        f"--output_csv {result_csv_path} "
+        f"--num_beams 3 "
+        f"--repetition_penalty 1.3 "
+        f"--use_synonyms "
+        f"--num_samples 20"
+    )
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = result.stdout + result.stderr
+    print(output)
+
+    overall, per_type = _parse_eval_output(output)
 
     if not per_type:
         print('⚠️  per_type rỗng — eval.py có thể đã crash hoặc output format thay đổi.')
@@ -47,6 +52,36 @@ def run_eval(ckpt_path, result_csv_path):
         print(output[-2000:])
         print('────────────────────────────')
 
+    return overall, per_type
+
+
+def run_test_eval(ckpt_path, result_csv_path):
+    """
+    Eval trên test.csv sau mỗi loop để track số thực (so sánh được với 70.94%).
+    Không dùng cho stop check hay generation plan.
+    """
+    test_csv = CFG.get('test_csv')
+    if not test_csv:
+        return None, {}
+
+    cmd = (
+        f"python eval.py "
+        f"--checkpoint {ckpt_path} "
+        f"--csv_path {test_csv} "
+        f"--image_folder {CFG['image_dir']} "
+        f"--output_csv {result_csv_path} "
+        f"--num_beams 3 "
+        f"--repetition_penalty 1.3 "
+        f"--use_synonyms "
+        f"--num_samples 20"
+    )
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    output = result.stdout + result.stderr
+    print(output)
+
+    overall, per_type = _parse_eval_output(output)
+    if not per_type:
+        print('⚠️  test eval per_type rỗng.')
     return overall, per_type
 
 

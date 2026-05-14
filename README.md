@@ -59,17 +59,23 @@ gated_vision = α * v_proj + (1-α) * text_pooled
 
 ```
 ViVQA_V2.1/
+├── main.py                    # Fine-tune loop orchestrator (eval → gen → merge → train)
+├── config.py                  # Central config — all hyperparams and paths
 ├── model.py                   # All model classes
 ├── dataset.py                 # VQAGenDataset, detect_question_type, PKSampler
-├── train.py                   # Training loop, all CLI args
+├── train.py                   # Single training run, all CLI args
 ├── eval.py                    # Evaluation script (EM/F1/ROUGE, per-type breakdown, CSV export)
+├── evaluator.py               # Wrapper: runs eval.py, parses output, stop condition check
+├── generation.py              # FLUX.1-dev image gen + Qwen2-VL/YOLO verify + budget planner
+├── pipeline_utils.py          # Dataset merge, image dir rebuild, answer weights recompute
 ├── diagnose_tcvg.py           # Diagnose whether TCVG is learning (weight + runtime analysis)
 ├── diagnose_vision_shortcut.py# Test blank/noise/real vision → detect text shortcut
 ├── compute_answer_weights.py  # Generate answer_weights.json for balanced loss
 ├── create_val_split.py        # Split train.csv → train_split.csv + val_split.csv
 ├── answer_weights.json        # Pre-computed inverse-frequency weights
+├── PIPELINE.md                # Fine-tune loop documentation
 ├── requirements.txt
-└── archive/                   # Old CSV splits
+└── archive/                   # CSV splits + original images
 ```
 
 ---
@@ -179,7 +185,7 @@ Add `--reset_lr` to restart LR schedule from scratch (useful for warm restart af
 | `--lr` | 2e-5 | 7e-5 works well for this setup (flat LR, no differential) |
 | `--scheduler` | `plateau` | `cosine` recommended for long runs; `plateau` for short exploratory runs |
 | `--warmup_epochs` | 0 | 5 recommended with cosine scheduler |
-| `--label_smoothing` | 0.1 | Standard; do NOT monitor loss for early stopping when > 0 |
+| `--label_smoothing` | 0.05 | Standard; do NOT monitor loss for early stopping when > 0 |
 | `--vision_gate_min_alpha` | 0.0 | **Set to 0.4** to prevent COLOR/COUNT vision over-suppression |
 | `--use_scst` | off | SCST directly optimizes F1 reward; start after CE warmup (epoch 15+) |
 | `--scst_lambda` | 0.1 | 0.05 for stability; 0.1 for stronger EM push |
@@ -281,6 +287,43 @@ After training, `output_dir/` contains:
 - `metrics.csv` — per-epoch metrics table
 
 Checkpoint keys: `epoch`, `model_state_dict`, `optimizer_state_dict`, `best_monitor`, `args`, `training_history`.
+
+---
+
+## Fine-tune Loop (Automated Pipeline)
+
+`main.py` chạy vòng lặp tự động: eval → phân tích lỗi → sinh ảnh augmented (FLUX.1-dev) → merge dataset → fine-tune, tối đa `max_loops=5` lần.
+
+```bash
+python main.py
+```
+
+Config đọc từ `config.py`. Xem chi tiết đầy đủ trong **[PIPELINE.md](PIPELINE.md)**.
+
+### Tóm tắt flow
+
+```
+Loop 0: baseline training (40 epochs)
+Loop 1…N:
+  A. Eval → F1/EM per type
+  B. Stop check (EM variance + delta + F1-EM gap)
+  C. Generation plan (budget ∝ error_rate per answer)
+  D. FLUX.1-dev sinh ảnh → verify bằng Qwen2-VL-2B + YOLOv8m
+  E. Merge dataset (original + aug loop này)
+  F. Fine-tune từ best checkpoint (30 epochs, lr=2e-5, ES patience=8)
+```
+
+### Key pipeline config (config.py)
+
+| Key | Default | Ý nghĩa |
+|---|---|---|
+| `max_loops` | 5 | Số loop tối đa |
+| `initial_epochs` | 40 | Baseline training |
+| `finetune_epochs` | 30 | Fine-tune mỗi loop |
+| `gen_skip_em` | 72.0 | Bỏ qua type nếu EM đã >= 72% |
+| `gen_min_error_rate` | 0.3 | Chỉ gen answer sai >= 30% |
+| `loop_accumulate_aug` | True | Giữ aug các loop trước |
+| `loop_resume_from_best` | False | Resume từ best ckpt tổng thể |
 
 ---
 

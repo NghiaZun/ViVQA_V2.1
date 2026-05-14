@@ -18,9 +18,21 @@ from dataset import detect_question_type as _detect_type_int
 _TYPE_NAMES = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
 
 
-def _normalize_vn(text: str) -> str:
+_SYNONYM_MAP = {
+    'ngựa rằn'   : 'ngựa vằn',
+    'tủ đá'      : 'tủ lạnh',
+    'máy tính'   : 'laptop',
+    'máy vi tính': 'laptop',
+    'vali'       : 'hành lý',
+}
+
+
+def _normalize_vn(text: str, use_synonyms: bool = False) -> str:
     """NFC normalization cho tiếng Việt — tránh false negative do byte khác nhau."""
-    return unicodedata.normalize('NFC', text).strip().lower()
+    t = unicodedata.normalize('NFC', text).strip().lower()
+    if use_synonyms:
+        t = _SYNONYM_MAP.get(t, t)
+    return t
 
 
 def _decode_gt(tokenizer, label_token_ids: list) -> str:
@@ -30,13 +42,13 @@ def _decode_gt(tokenizer, label_token_ids: list) -> str:
     return tokenizer.decode(ids, skip_special_tokens=True).strip()
 
 
-def compute_exact_match(prediction: str, ground_truth: str) -> float:
-    return 1.0 if _normalize_vn(prediction) == _normalize_vn(ground_truth) else 0.0
+def compute_exact_match(prediction: str, ground_truth: str, use_synonyms: bool = False) -> float:
+    return 1.0 if _normalize_vn(prediction, use_synonyms) == _normalize_vn(ground_truth, use_synonyms) else 0.0
 
 
-def compute_f1_score(prediction: str, ground_truth: str) -> float:
-    pred_tokens = _normalize_vn(prediction).split()
-    gt_tokens   = _normalize_vn(ground_truth).split()
+def compute_f1_score(prediction: str, ground_truth: str, use_synonyms: bool = False) -> float:
+    pred_tokens = _normalize_vn(prediction, use_synonyms).split()
+    gt_tokens   = _normalize_vn(ground_truth, use_synonyms).split()
 
     if len(pred_tokens) == 0 and len(gt_tokens) == 0:
         return 1.0
@@ -62,7 +74,8 @@ def detect_question_type(question_text: str) -> str:
     return _TYPE_NAMES[_detect_type_int(question_text)]
 
 
-def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penalty=1.3):
+def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penalty=1.0,
+             max_length=20, use_synonyms=False, num_samples=1, vote_temp=0.8):
     model.eval()
 
     _INT_TO_TYPE = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
@@ -71,9 +84,6 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
     all_ground_truths = []
     all_questions = []
     all_question_types = []
-
-    total_loss = 0.0
-    num_batches = 0
 
     exact_matches = []
     f1_scores = []
@@ -97,43 +107,39 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
 
-            # Forward pass (for loss)
-            outputs = model(
+            # Generate (encoder runs once inside here)
+            gen_out = model.generate(
                 pixel_values=pixel_values,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                labels=labels
-            )
-
-            if outputs.total_loss is not None:
-                total_loss += outputs.total_loss.item()
-                num_batches += 1
-
-            # Generate
-            predictions = model.generate(
-                pixel_values=pixel_values,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_length=10,
+                max_length=max_length,
                 num_beams=num_beams,
-                repetition_penalty=repetition_penalty
+                repetition_penalty=repetition_penalty,
+                return_type_preds=has_type_head,
+                num_samples=num_samples,
+                vote_temp=vote_temp,
             )
+            if has_type_head:
+                predictions, pred_type_ids = gen_out
+            else:
+                predictions = gen_out
+                pred_type_ids = None
 
-            # Decode questions + detect types via regex (ground-truth type)
+            # Ground-truth type: from CSV column (same source as training)
             batch_gt_types = []
-            for inp in input_ids:
+            csv_type_ids = batch.get('question_type')
+            for i, inp in enumerate(input_ids):
                 question_text = tokenizer.decode(inp, skip_special_tokens=True)
                 all_questions.append(question_text)
-                q_type = detect_question_type(question_text)
+                if csv_type_ids is not None:
+                    q_type = _INT_TO_TYPE[int(csv_type_ids[i])]
+                else:
+                    q_type = detect_question_type(question_text)
                 all_question_types.append(q_type)
                 batch_gt_types.append(q_type)
 
-            # Type prediction accuracy: compare model's predicted type vs regex type
-            if has_type_head:
-                text_enc = model.encoder(input_ids=input_ids, attention_mask=attention_mask)
-                text_cls = text_enc.last_hidden_state[:, 0, :]
-                type_logits = model.type_head(text_cls)
-                pred_type_ids = torch.argmax(type_logits, dim=-1).cpu().tolist()
+            # Type prediction accuracy: use type preds already computed in generate()
+            if has_type_head and pred_type_ids is not None:
                 pred_type_names = [_INT_TO_TYPE[t] for t in pred_type_ids]
                 for pred_t, gt_t in zip(pred_type_names, batch_gt_types):
                     correct = int(pred_t == gt_t)
@@ -151,8 +157,8 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
             # Metrics (overall and per-type)
             batch_start_idx = len(all_ground_truths) - len(predictions)
             for i, (pred, gt) in enumerate(zip(predictions, all_ground_truths[-len(predictions):])):
-                em = compute_exact_match(pred, gt)
-                f1 = compute_f1_score(pred, gt)
+                em = compute_exact_match(pred, gt, use_synonyms)
+                f1 = compute_f1_score(pred, gt, use_synonyms)
                 q_type = all_question_types[batch_start_idx + i]
 
                 exact_matches.append(em)
@@ -165,12 +171,10 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
             current_f1 = sum(f1_scores) / len(f1_scores) * 100
 
             pbar.set_postfix({
-                'loss': f"{total_loss/num_batches:.3f}",
                 'EM': f"{current_em:.1f}%",
                 'F1': f"{current_f1:.1f}%"
             })
 
-    avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     exact_match_acc = sum(exact_matches) / len(exact_matches) * 100
     f1_score_avg = sum(f1_scores) / len(f1_scores) * 100
 
@@ -196,7 +200,6 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
         type_pred_accuracy = {'overall': overall_acc, 'per_type': per_type_acc}
 
     return {
-        'loss': avg_loss,
         'exact_match': exact_match_acc,
         'f1_score': f1_score_avg,
         'per_type': per_type_results,
@@ -220,8 +223,16 @@ def main():
     parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--num_beams', type=int, default=3,
                         help='Beam search width (default: 3, beam=5 is slower and not better)')
-    parser.add_argument('--repetition_penalty', type=float, default=1.3,
-                        help='Repetition penalty to suppress repeated tokens (default: 1.3)')
+    parser.add_argument('--max_length', type=int, default=20,
+                        help='Max generated tokens (default: 20, matches older eval)')
+    parser.add_argument('--repetition_penalty', type=float, default=1.0,
+                        help='Repetition penalty to suppress repeated tokens (default: 1.0)')
+    parser.add_argument('--num_samples', type=int, default=1,
+                        help='Majority vote: sample N sequences, pick most frequent. 1=off (default)')
+    parser.add_argument('--vote_temp', type=float, default=0.8,
+                        help='Temperature for majority vote sampling (default: 0.8)')
+    parser.add_argument('--use_synonyms', action='store_true',
+                        help='Apply synonym normalization before computing EM/F1')
     parser.add_argument('--output_csv', type=str, default=None)
     args = parser.parse_args()
 
@@ -242,7 +253,8 @@ def main():
         tokenizer_name='vinai/bartpho-syllable',
         max_q_len=32,
         max_a_len=10,
-        include_question_type=False
+        include_question_type=True,
+        auto_detect_type=False,
     )
 
     dataloader = DataLoader(
@@ -345,14 +357,18 @@ def main():
     print(f"Loaded weights from epoch {checkpoint.get('epoch', 'N/A')}")
     
     # Evaluate
-    print(f"\nEvaluating... (num_beams={args.num_beams}, repetition_penalty={args.repetition_penalty})")
+    mode_str = (f"majority_vote n={args.num_samples} temp={args.vote_temp}"
+                if args.num_samples > 1 else f"num_beams={args.num_beams}")
+    print(f"\nEvaluating... ({mode_str}, max_length={args.max_length}, "
+          f"synonyms={'on' if args.use_synonyms else 'off'})")
     results = evaluate(model, dataloader, device, model.tokenizer,
-                       num_beams=args.num_beams, repetition_penalty=args.repetition_penalty)
+                       num_beams=args.num_beams, repetition_penalty=args.repetition_penalty,
+                       max_length=args.max_length, use_synonyms=args.use_synonyms,
+                       num_samples=args.num_samples, vote_temp=args.vote_temp)
     
     print("\n" + "="*80)
     print("RESULTS")
     print("="*80)
-    print(f"Loss: {results['loss']:.4f}")
     print(f"Exact Match: {results['exact_match']:.2f}%")
     print(f"F1 Score: {results['f1_score']:.2f}%")
     
@@ -388,8 +404,8 @@ def main():
                 'prediction': results['predictions'],
                 'ground_truth': results['ground_truths'],
                 'question_type': results['question_types'],
-                'exact_match': [compute_exact_match(p, g) for p, g in zip(results['predictions'], results['ground_truths'])],
-                'f1_score': [compute_f1_score(p, g) for p, g in zip(results['predictions'], results['ground_truths'])]
+                'exact_match': [compute_exact_match(p, g, use_synonyms=args.use_synonyms) for p, g in zip(results['predictions'], results['ground_truths'])],
+                'f1_score': [compute_f1_score(p, g, use_synonyms=args.use_synonyms) for p, g in zip(results['predictions'], results['ground_truths'])]
             }
             
             df = pd.DataFrame(save_data)

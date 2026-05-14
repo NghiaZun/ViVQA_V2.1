@@ -23,7 +23,7 @@ import torch
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 from config import CFG, TYPES
-from evaluator import run_eval, should_stop
+from evaluator import run_eval, run_test_eval, should_stop
 from generation import (
     compute_generation_plan, print_plan,
     load_generation_models, unload_generation_models,
@@ -39,7 +39,8 @@ from pipeline_utils import (
 
 def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
               lr=None, warmup_epochs=None, resume=None, seed=None,
-              early_stopping=None, early_stopping_patience=None):
+              early_stopping=None, early_stopping_patience=None,
+              resume_reset_epoch=None):
     # Defaults từ config.py — cho phép override qua tham số
     epochs                  = CFG['epochs']                   if epochs                  is None else epochs
     lr                      = CFG['lr']                       if lr                      is None else lr
@@ -47,6 +48,7 @@ def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
     seed                    = CFG['seed']                     if seed                    is None else seed
     early_stopping          = CFG['early_stopping']           if early_stopping          is None else early_stopping
     early_stopping_patience = CFG['early_stopping_patience']  if early_stopping_patience is None else early_stopping_patience
+    resume_reset_epoch      = CFG.get('resume_reset_epoch', False) if resume_reset_epoch is None else resume_reset_epoch
 
     parts = [
         'python train.py',
@@ -95,6 +97,8 @@ def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
         ]
     if resume:
         parts += [f'--resume {resume}', '--reset_lr']
+        if resume_reset_epoch:
+            parts.append('--resume_reset_epoch')
     if early_stopping:
         parts += ['--early_stopping', f'--early_stopping_patience {early_stopping_patience}']
 
@@ -171,6 +175,12 @@ def plot_history(history, overall_final, per_type_final, out_path):
 # ── Main pipeline ─────────────────────────────────────────────────
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description='ViVQA Fine-tune Loop v2')
+    parser.add_argument('--checkpoints', type=str, default=None,
+                        help='Bỏ qua Loop 0, dùng checkpoint này làm baseline')
+    args = parser.parse_args()
+
     print(f'GPU: {torch.cuda.get_device_name(0)}')
     print(f'VRAM: {torch.cuda.get_device_properties(0).total_memory/1024**3:.1f} GB')
 
@@ -178,35 +188,44 @@ def main():
     current_ckpt      = None
     best_ckpt         = None
     best_em           = -1.0
-    best_loop         = -1
+    best_loop         = 0
     prev_overall_em   = 0.0
     history           = []
-
-    # ── Loop 0: baseline training ─────────────────────────────────
-    print('\n' + '=' * 60)
-    print('LOOP 0 — Training baseline')
-    print('=' * 60)
 
     recompute_answer_weights(current_train_csv)
     rebuild_combined_image_dir()
 
-    ckpt_dir_0 = os.path.join(CFG['ckpt_dir'], 'loop0')
-    os.makedirs(ckpt_dir_0, exist_ok=True)
+    if args.checkpoints:
+        # ── Dùng checkpoint có sẵn, bỏ qua Loop 0 ────────────────
+        if not os.path.exists(args.checkpoints):
+            print(f'⚠️  Checkpoint không tồn tại: {args.checkpoints}')
+            sys.exit(1)
+        current_ckpt = args.checkpoints
+        best_ckpt    = args.checkpoints
+        print(f'\n✓ Bỏ qua Loop 0 — dùng checkpoint: {current_ckpt}')
+    else:
+        # ── Loop 0: baseline training ─────────────────────────────
+        print('\n' + '=' * 60)
+        print('LOOP 0 — Training baseline')
+        print('=' * 60)
 
-    run_train(
-        train_csv=current_train_csv,
-        val_csv=CFG['val_csv'],
-        image_dir=combined_image_dir,
-        output_dir=ckpt_dir_0,
-        epochs=CFG['initial_epochs'],
-    )
+        ckpt_dir_0 = os.path.join(CFG['ckpt_dir'], 'loop0')
+        os.makedirs(ckpt_dir_0, exist_ok=True)
 
-    current_ckpt = resolve_checkpoint(ckpt_dir_0)
-    if current_ckpt is None:
-        print('⚠️  Không tìm thấy checkpoint sau loop 0, thoát.')
-        sys.exit(1)
-    best_ckpt = current_ckpt
-    print(f'✓ Baseline checkpoint: {current_ckpt}')
+        run_train(
+            train_csv=current_train_csv,
+            val_csv=CFG['val_csv'],
+            image_dir=combined_image_dir,
+            output_dir=ckpt_dir_0,
+            epochs=CFG['initial_epochs'],
+        )
+
+        current_ckpt = resolve_checkpoint(ckpt_dir_0)
+        if current_ckpt is None:
+            print('⚠️  Không tìm thấy checkpoint sau loop 0, thoát.')
+            sys.exit(1)
+        best_ckpt = current_ckpt
+        print(f'✓ Baseline checkpoint: {current_ckpt}')
 
     # ── Loops 1…max_loops ─────────────────────────────────────────
     for loop in range(1, CFG['max_loops'] + 1):
@@ -252,7 +271,7 @@ def main():
         # C: Generation plan — đọc result.csv để target answer hay sai
         print(f'\n[{loop}C] Computing generation plan...')
         result_csv = os.path.join(CFG['work_dir'], f'result_loop{loop-1}.csv')
-        plan = compute_generation_plan(result_csv=result_csv, train_csv=current_train_csv)
+        plan = compute_generation_plan(result_csv=result_csv, train_csv=current_train_csv, loop_idx=loop)
         print_plan(plan)
 
         # D: Generate
@@ -270,11 +289,16 @@ def main():
 
         # E: Merge — chỉ dùng aug của loop này + original data
         # KHÔNG tích lũy aug từ loop trước để tránh noise compounding
+        accumulate_aug = CFG.get('loop_accumulate_aug', False)
+        base_train_csv = current_train_csv if accumulate_aug else CFG['train_csv']
+
         print(f'\n[{loop}E] Merging dataset (loop {loop} aug only)...')
-        loop_train_csv = merge_dataset(CFG['train_csv'], new_rows_all, loop)
+        loop_train_csv = merge_dataset(base_train_csv, new_rows_all, loop)
 
         import shutil
-        loop_img_dir = os.path.join(CFG['aug_root'], f'result_{loop}')
+        loop_img_dirs = [os.path.join(CFG['aug_root'], f'result_{loop}')]
+        if accumulate_aug:
+            loop_img_dirs = [os.path.join(CFG['aug_root'], f'result_{i}') for i in range(1, loop + 1)]
         loop_combined = os.path.join(CFG['work_dir'], f'combined_loop{loop}')
         if os.path.exists(loop_combined):
             shutil.rmtree(loop_combined)
@@ -282,27 +306,35 @@ def main():
         for f in os.listdir(CFG['image_dir']):
             os.symlink(os.path.join(CFG['image_dir'], f),
                        os.path.join(loop_combined, f))
-        if os.path.isdir(loop_img_dir):
-            for f in os.listdir(loop_img_dir):
-                dst = os.path.join(loop_combined, f)
-                if not os.path.exists(dst):
-                    shutil.copy2(os.path.join(loop_img_dir, f), dst)
+        for loop_img_dir in loop_img_dirs:
+            if os.path.isdir(loop_img_dir):
+                for f in os.listdir(loop_img_dir):
+                    dst = os.path.join(loop_combined, f)
+                    if not os.path.exists(dst):
+                        shutil.copy2(os.path.join(loop_img_dir, f), dst)
         print(f'✓ Loop {loop} combined: {len(os.listdir(loop_combined))} images')
 
         recompute_answer_weights(loop_train_csv)
+        if accumulate_aug:
+            current_train_csv = loop_train_csv
 
         # F: Fine-tune từ loop 0 baseline — không resume từ checkpoint đã degraded
         print(f'\n[{loop}F] Fine-tuning từ baseline checkpoint...')
         ckpt_dir_loop = os.path.join(CFG['ckpt_dir'], f'loop{loop}')
         os.makedirs(ckpt_dir_loop, exist_ok=True)
 
+        resume_from_best = CFG.get('loop_resume_from_best', True)
+        resume_ckpt = best_ckpt if resume_from_best else current_ckpt
+
         run_train(
             train_csv=loop_train_csv,
             val_csv=CFG['val_csv'],
             image_dir=loop_combined,
             output_dir=ckpt_dir_loop,
-            epochs=CFG['initial_epochs'],
-            resume=best_ckpt,          # luôn resume từ best checkpoint (loop 0 ban đầu)
+            epochs=CFG['finetune_epochs'],
+            lr=CFG['finetune_lr'],
+            warmup_epochs=CFG['finetune_warmup_epochs'],
+            resume=resume_ckpt,
             early_stopping=True,
             early_stopping_patience=CFG['finetune_es_patience'],
         )
@@ -313,6 +345,17 @@ def main():
             print(f'\n✓ Loop {loop} done. Checkpoint: {current_ckpt}')
         else:
             print(f'\n⚠️  Không có checkpoint nào trong loop {loop}, giữ: {current_ckpt}')
+
+        # ── Test eval sau mỗi loop (so sánh được với 70.94%) ─────
+        if CFG.get('test_csv') and current_ckpt and os.path.exists(current_ckpt):
+            print(f'\n[{loop}G] Test eval (archive/test.csv)...')
+            test_result_csv = os.path.join(CFG['work_dir'], f'test_result_loop{loop}.csv')
+            t_overall, t_per_type = run_test_eval(current_ckpt, test_result_csv)
+            if t_overall:
+                print(f'  TEST  EM={t_overall["EM"]:.2f}%  F1={t_overall["F1"]:.2f}%')
+                for t in TYPES:
+                    if t in t_per_type:
+                        print(f'    {t:<10} EM={t_per_type[t]["EM"]:.2f}%  F1={t_per_type[t]["F1"]:.2f}%')
 
     else:
         print('\n⛔ Đạt max_loops.')

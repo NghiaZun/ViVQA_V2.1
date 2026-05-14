@@ -463,8 +463,9 @@ class DeterministicVQA(nn.Module):
         use_contrastive: bool = False,   # Enable InfoNCE vision↔text alignment
         contrastive_lambda: float = 0.1, # λ_c weight (recommended: 0.05–0.15)
         contrastive_temp: float = 0.07,  # Temperature τ (0.07 = SimCLR default)
-        use_gate_divergence: bool = False,    # Inter-type gate divergence loss
-        gate_divergence_lambda: float = 0.05, # λ_div weight (recommended: 0.03–0.1)
+    use_gate_divergence: bool = False,    # Inter-type gate divergence loss
+    gate_divergence_lambda: float = 0.05, # λ_div weight (recommended: 0.03–0.1)
+    type_loss_weight: float = 0.2,        # Weight for auxiliary type loss
         label_smoothing: float = 0.1
     ):
         super().__init__()
@@ -489,6 +490,7 @@ class DeterministicVQA(nn.Module):
         # Inter-type gate divergence config
         self.use_gate_divergence = use_gate_divergence
         self.gate_divergence_lambda = gate_divergence_lambda
+        self.type_loss_weight = type_loss_weight
         self.label_smoothing = label_smoothing
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
@@ -1159,6 +1161,9 @@ class DeterministicVQA(nn.Module):
         # 4. Similarity matrix [B, B] scaled by temperature
         logits = torch.matmul(v, t.T) / self.contrastive_temp  # [B, B]
 
+        # Clamp to avoid extreme values (BF16/TF32 can overflow faster on H100)
+        logits = torch.clamp(logits, min=-100.0, max=100.0)
+
         # 5. False-negative mask: samples sharing the same answer should NOT
         #    be treated as negatives — mask them out of the CE denominator.
         #    mask[i, j] = True  → pair (i,j) is a false negative → ignore
@@ -1182,19 +1187,40 @@ class DeterministicVQA(nn.Module):
                     if i != j and valid_tokens[i] == valid_tokens[j]:
                         fn_mask[i, j] = True
 
-        # 6. Apply false-negative mask by setting those logits to -inf
-        #    → they contribute 0 to the softmax denominator
+        # 6. Apply false-negative mask by setting those logits to a large negative
+        #    value (avoid -inf to prevent NaNs in softmax when a row is all-masked)
         if fn_mask is not None and fn_mask.any():
-            logits = logits.masked_fill(fn_mask, float('-inf'))
+            # Determine which rows still have at least one valid negative
+            row_has_valid = ~fn_mask
+            row_has_valid.fill_diagonal_(False)
+            valid_rows = row_has_valid.any(dim=1)
 
-        # 7. Positive targets = diagonal (i, i)
-        targets = torch.arange(B, device=device)
+            logits = logits.masked_fill(fn_mask, -1e4)
 
-        # 8. Symmetric InfoNCE: vision→text + text→image
-        loss_v2t = F.cross_entropy(logits,   targets)
-        loss_t2v = F.cross_entropy(logits.T, targets)
+            # 7. Positive targets = diagonal (i, i)
+            targets = torch.arange(B, device=device)
 
-        return (loss_v2t + loss_t2v) / 2.0
+            # 8. Symmetric InfoNCE: vision→text + text→image (valid rows only)
+            if valid_rows.any():
+                loss_v2t = F.cross_entropy(logits[valid_rows], targets[valid_rows])
+                loss_t2v = F.cross_entropy(logits.T[valid_rows], targets[valid_rows])
+            else:
+                return torch.tensor(0.0, device=device)
+        else:
+            # 7. Positive targets = diagonal (i, i)
+            targets = torch.arange(B, device=device)
+
+            # 8. Symmetric InfoNCE: vision→text + text→image
+            loss_v2t = F.cross_entropy(logits,   targets)
+            loss_t2v = F.cross_entropy(logits.T, targets)
+
+        loss = (loss_v2t + loss_t2v) / 2.0
+
+        # Guard NaN/Inf
+        if torch.isnan(loss) or torch.isinf(loss):
+            return torch.tensor(0.0, device=device)
+
+        return loss
 
     def compute_gate_divergence_loss(
         self,
@@ -1417,6 +1443,9 @@ class DeterministicVQA(nn.Module):
 
         if labels is not None:
             # (A) Answer generation loss (weighted CE + label smoothing)
+            if answer_weights is not None:
+                answer_weights = answer_weights.clamp(min=1e-6, max=100.0)
+
             answer_loss = F.cross_entropy(
                 answer_logits.view(-1, answer_logits.size(-1)),
                 labels.view(-1),
@@ -1424,6 +1453,14 @@ class DeterministicVQA(nn.Module):
                 weight=answer_weights if answer_weights is not None else None,
                 label_smoothing=self.label_smoothing
             )
+
+            if torch.isnan(answer_loss) or torch.isinf(answer_loss):
+                answer_loss = F.cross_entropy(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1),
+                    ignore_index=-100,
+                    label_smoothing=self.label_smoothing
+                )
 
             # (B) 🔥 Cross-Modal Contrastive Alignment Loss
             # Aligns fused vision ↔ Vietnamese text CLS in a shared 128D space.
@@ -1451,7 +1488,7 @@ class DeterministicVQA(nn.Module):
             total_loss = answer_loss
 
             if type_loss is not None:
-                total_loss = total_loss + 0.2 * type_loss
+                total_loss = total_loss + self.type_loss_weight * type_loss
 
             if contrastive_loss is not None:
                 total_loss = total_loss + self.contrastive_lambda * contrastive_loss
@@ -1481,6 +1518,55 @@ class DeterministicVQA(nn.Module):
         return self.tokenizer.decode(ids, skip_special_tokens=True).strip()
 
     @torch.inference_mode()  # Faster than @torch.no_grad()!
+    def _sample_decoder_once(
+        self,
+        encoder_hidden_states: torch.Tensor,
+        encoder_attention_mask: torch.Tensor,
+        max_length: int,
+        temperature: float,
+        predicted_types,
+        batch_size: int,
+        device,
+    ):
+        """Single temperature-sampled decoder pass. Used by majority-vote generation."""
+        generated_ids = torch.full(
+            (batch_size, 1), self.config.decoder_start_token_id,
+            dtype=torch.long, device=device,
+        )
+        past_key_values = None
+        done = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
+        for _ in range(max_length):
+            cur_input = generated_ids if past_key_values is None else generated_ids[:, -1:]
+            dec_out = self.decoder(
+                input_ids=cur_input,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=True,
+            )
+            past_key_values = dec_out.past_key_values
+
+            base_logits = self.lm_head(dec_out.last_hidden_state[:, -1:, :])
+            logits = (self.logits_bias(base_logits, predicted_types)
+                      if self.use_logits_bias and self.logits_bias is not None
+                         and predicted_types is not None
+                      else base_logits)
+
+            probs = torch.softmax(logits[:, 0, :] / temperature, dim=-1)
+            next_tokens = torch.multinomial(probs, num_samples=1)  # [B, 1]
+            next_tokens = torch.where(
+                done.unsqueeze(-1),
+                torch.full_like(next_tokens, self.config.eos_token_id),
+                next_tokens,
+            )
+            generated_ids = torch.cat([generated_ids, next_tokens], dim=1)
+            done = done | (next_tokens.squeeze(-1) == self.config.eos_token_id)
+            if done.all():
+                break
+
+        return [self._decode_seq(generated_ids[i]) for i in range(batch_size)]
+
     def generate(
         self,
         pixel_values: torch.Tensor,
@@ -1493,6 +1579,9 @@ class DeterministicVQA(nn.Module):
         top_p: float = 0.9,
         top_k: int = 50,
         repetition_penalty: float = 1.0,
+        return_type_preds: bool = False,
+        num_samples: int = 1,
+        vote_temp: float = 0.8,
     ):
         """
         Generate answers với greedy (num_beams=1) hoặc beam search (num_beams>1).
@@ -1563,6 +1652,23 @@ class DeterministicVQA(nn.Module):
         ], dim=1)
 
         # ── 6. Decoding ───────────────────────────────────────────────────
+        if num_samples > 1:
+            # ── Majority voting: sample N times, pick most frequent answer ──
+            from collections import Counter
+            buckets = [[] for _ in range(batch_size)]
+            for _ in range(num_samples):
+                decoded = self._sample_decoder_once(
+                    encoder_hidden_states, encoder_attention_mask,
+                    max_length, vote_temp, predicted_types, batch_size, device,
+                )
+                for i, d in enumerate(decoded):
+                    buckets[i].append(d)
+            final = [Counter(b).most_common(1)[0][0] for b in buckets]
+            if return_type_preds:
+                type_ids = predicted_types.cpu().tolist() if predicted_types is not None else [0] * batch_size
+                return final, type_ids
+            return final
+
         if num_beams > 1:
             # ── Beam search với KV-cache (incremental decoding) ───────────
             expanded_hidden = encoder_hidden_states.unsqueeze(1) \
@@ -1679,7 +1785,11 @@ class DeterministicVQA(nn.Module):
                     break
 
             best_seqs = beam_seqs[:, 0, :]  # beam có score cao nhất
-            return [self._decode_seq(best_seqs[i]) for i in range(batch_size)]
+            decoded = [self._decode_seq(best_seqs[i]) for i in range(batch_size)]
+            if return_type_preds:
+                type_ids = predicted_types.cpu().tolist() if predicted_types is not None else [0] * batch_size
+                return decoded, type_ids
+            return decoded
 
         else:
             # ── Greedy decoding với KV-cache (num_beams=1, nhanh nhất) ────
@@ -1739,7 +1849,11 @@ class DeterministicVQA(nn.Module):
                 if done.all():
                     break
 
-            return [self._decode_seq(generated_ids[i]) for i in range(batch_size)]
+            decoded = [self._decode_seq(generated_ids[i]) for i in range(batch_size)]
+            if return_type_preds:
+                type_ids = predicted_types.cpu().tolist() if predicted_types is not None else [0] * batch_size
+                return decoded, type_ids
+            return decoded
 
     @torch.inference_mode()
     def generate_sample(
