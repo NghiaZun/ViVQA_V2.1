@@ -67,7 +67,9 @@ def compute_answer_weights(csv_path, tokenizer_name='vinai/bartpho-syllable',
     # Normalize weights to have mean=1.0
     weights = list(answer_to_weight.values())
     mean_weight = np.mean(weights)
-    answer_to_weight = {k: v/mean_weight for k, v in answer_to_weight.items()}
+    # Clamp to floor=1.0: high-frequency COUNT tokens (hai, ba, bốn) were getting
+    # downweighted below 1.0 because they dominate global frequency, reducing COUNT gradient.
+    answer_to_weight = {k: max(v/mean_weight, 1.0) for k, v in answer_to_weight.items()}
     
     print(f"\n[Weight Stats]")
     print(f"  Unique answers: {len(answer_to_weight)}")

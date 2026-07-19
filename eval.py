@@ -19,11 +19,27 @@ _TYPE_NAMES = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
 
 
 _SYNONYM_MAP = {
-    'ngựa rằn'   : 'ngựa vằn',
-    'tủ đá'      : 'tủ lạnh',
-    'máy tính'   : 'laptop',
-    'máy vi tính': 'laptop',
-    'vali'       : 'hành lý',
+    # --- existing ---
+    'ngựa rằn'         : 'ngựa vằn',
+    'tủ đá'            : 'tủ lạnh',
+    'máy tính'         : 'laptop',
+    'máy vi tính'      : 'laptop',
+    'vali'             : 'hành lý',
+    # --- label noise / dataset inconsistency ---
+    'hươu cao cổ khắc' : 'hươu cao cổ',   # 9x "khắc" thừa trong label
+    'màu nâua'         : 'màu nâu',        # 2x typo
+    'màu nâu gấu'      : 'màu nâu',        # 2x label noise
+    # --- Vietnamese synonyms ---
+    'nhà vệ sinh'      : 'phòng tắm',      # 9x toilet=bathroom
+    'đĩa'              : 'đĩa ăn',         # 3x plate=dish
+    'tủ đông'          : 'tủ lạnh',        # 3x freezer=fridge
+    'đường phố'        : 'đường',          # 2x street=road
+    'đường bộ'         : 'đường',          # 2x road=road
+    # --- v3 additions (confirmed from run25 error analysis) ---
+    'nón'              : 'mũ',             # 3x headwear synonyms
+    'bữa ăn tối'       : 'bữa ăn',        # 2x dinner≈meal in VQA context
+    'cửa tiệm'         : 'cửa hàng',       # same meaning: store/shop
+    'bữa trưa'         : 'bữa ăn',        # 1x lunch≈meal
 }
 
 
@@ -74,8 +90,59 @@ def detect_question_type(question_text: str) -> str:
     return _TYPE_NAMES[_detect_type_int(question_text)]
 
 
+def build_valid_answers_set(train_csv):
+    """Build set of NFC-normalized lowercase valid answers (for snap post-processing)."""
+    import pandas as pd
+    df = pd.read_csv(train_csv)
+    return {unicodedata.normalize('NFC', str(a).strip().lower()) for a in df['answer'].unique()}
+
+
+def snap_to_valid_answer(pred, valid_answers_set):
+    """Fix garbled constrained-decoding outputs: if pred not in trie vocab,
+    snap to the longest valid answer that is a character-level prefix of pred.
+
+    Root cause: BARTpho SentencePiece sometimes concatenates syllables without
+    spaces at answer boundaries, producing 'cái ghếa', 'diềuván lướt sóng', etc.
+    These are NOT in the training trie, but their valid prefix IS (e.g. 'cái ghế').
+    """
+    pred_n = unicodedata.normalize('NFC', pred.strip().lower())
+    if pred_n in valid_answers_set:
+        return pred.strip()
+    candidates = [a for a in valid_answers_set if pred_n.startswith(a) and len(a) > 0]
+    if candidates:
+        return max(candidates, key=len)
+    return pred.strip()
+
+
+def build_answer_trie(train_csv, tokenizer):
+    """Build prefix trie from all unique answers in training CSV.
+
+    IMPORTANT: Dataset encodes answers WITH special tokens (add_special_tokens=True),
+    so labels = [BOS=0, tokens..., EOS=2, PAD=-100...].
+    After shift_tokens_right, model learns: [BOS] → BOS → actual_tokens → EOS.
+    The trie must match this protocol: include BOS=0 as mandatory first token.
+    """
+    import pandas as pd
+    df = pd.read_csv(train_csv)
+    pad_id = tokenizer.pad_token_id
+    trie = {}
+    for answer in df['answer'].unique():
+        # encode WITH special tokens to match training label format:
+        # [BOS=0, answer_tokens..., EOS=2]
+        tokens = tokenizer.encode(str(answer))
+        tokens = [t for t in tokens if t != pad_id]  # strip padding just in case
+        node = trie
+        for t in tokens:
+            if t not in node:
+                node[t] = {}
+            node = node[t]
+    print(f"[Trie] Built from {len(df['answer'].unique())} unique answers ({len(df)} total rows)")
+    return trie
+
+
 def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penalty=1.0,
-             max_length=20, use_synonyms=False, num_samples=1, vote_temp=0.8):
+             max_length=20, use_synonyms=False, num_samples=1, vote_temp=0.8,
+             prefix_trie=None, valid_answers_set=None):
     model.eval()
 
     _INT_TO_TYPE = {0: 'OBJECT', 1: 'COUNT', 2: 'COLOR', 3: 'LOCATION'}
@@ -118,6 +185,7 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
                 return_type_preds=has_type_head,
                 num_samples=num_samples,
                 vote_temp=vote_temp,
+                prefix_trie=prefix_trie,
             )
             if has_type_head:
                 predictions, pred_type_ids = gen_out
@@ -151,6 +219,10 @@ def evaluate(model, dataloader, device, tokenizer, num_beams=3, repetition_penal
                 label_tokens = label[label != -100].cpu().tolist()
                 gt_text = _decode_gt(tokenizer, label_tokens)
                 all_ground_truths.append(gt_text)
+
+            # Snap garbled predictions back to nearest valid trie answer
+            if valid_answers_set is not None:
+                predictions = [snap_to_valid_answer(p, valid_answers_set) for p in predictions]
 
             all_predictions.extend(predictions)
 
@@ -233,6 +305,10 @@ def main():
                         help='Temperature for majority vote sampling (default: 0.8)')
     parser.add_argument('--use_synonyms', action='store_true',
                         help='Apply synonym normalization before computing EM/F1')
+    parser.add_argument('--use_constrained', action='store_true',
+                        help='Constrained beam search: only generate tokens in training answer trie')
+    parser.add_argument('--train_csv_for_trie', type=str, default='archive/train_split.csv',
+                        help='Train CSV to build answer trie for constrained decoding')
     parser.add_argument('--output_csv', type=str, default=None)
     args = parser.parse_args()
 
@@ -261,7 +337,7 @@ def main():
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=1,
         pin_memory=True
     )
     print(f"Loaded {len(dataset)} samples")
@@ -272,9 +348,11 @@ def main():
     state_dict_keys = checkpoint['model_state_dict'].keys()
     
     # Detect features
-    has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in state_dict_keys if 'vision' in k)
-    has_text_lora = any('encoder.base_model.model' in k for k in state_dict_keys)
+    has_vision_lora = any('lora_A' in k or 'lora_B' in k for k in state_dict_keys if 'vision_encoder' in k)
+    # Exclude vision_encoder keys to avoid false positive when vision LoRA key contains 'encoder.base_model.model'
+    has_text_lora = any(k.startswith('encoder.base_model.model') for k in state_dict_keys)
     has_vision_gate = any('vision_gating' in k for k in state_dict_keys)
+    has_delta_gate = any('vision_gating.orig_proj' in k for k in state_dict_keys)
     has_type_adapter = any('vision_adapter' in k for k in state_dict_keys)  # TypeConditionedVisionAdapter
     has_type_task = any(k.startswith('type_head') for k in state_dict_keys)   # 🔥 Type prediction head
     has_logits_bias = any(k.startswith('logits_bias') for k in state_dict_keys)  # 🔥 Type-aware logits bias
@@ -292,25 +370,30 @@ def main():
     saved_args = checkpoint.get('args', {})
     fusion_type = args.fusion_type or saved_args.get('fusion_type', 'text2vision')
     
-    # 🔥 Detect LoRA ranks from checkpoint weights
+    # 🔥 Detect LoRA ranks and alphas from checkpoint weights + saved_args
     text_lora_r = 16  # default
     vision_lora_r = 8  # default
-    
+    text_lora_alpha = saved_args.get('text_lora_alpha', 32)
+    vision_lora_alpha = saved_args.get('vision_lora_alpha', 16)
+
     if has_text_lora:
-        # Check shape of text LoRA weight to infer rank
         for key in state_dict_keys:
-            if 'encoder.base_model.model.layers.0.self_attn.q_proj.lora_A.default.weight' in key:
+            # Must start with 'encoder.' to exclude vision_encoder.encoder.base_model.model... keys
+            if key.startswith('encoder.base_model.model.layers.0.self_attn.q_proj.lora_A'):
                 shape = checkpoint['model_state_dict'][key].shape
-                text_lora_r = shape[0]  # First dim is rank
+                text_lora_r = shape[0]
                 break
-    
+
     if has_vision_lora:
-        # Check shape of vision LoRA weight to infer rank
+        # New format: vision_encoder.encoder.base_model.model.layers.X.self_attn.*.lora_A.*
+        # Fallback to saved_args if key pattern not matched
         for key in state_dict_keys:
-            if 'vision_lora_A' in key:
+            if 'vision_encoder' in key and 'lora_A' in key:
                 shape = checkpoint['model_state_dict'][key].shape
-                vision_lora_r = shape[0]  # First dim is rank
+                vision_lora_r = shape[0]
                 break
+        else:
+            vision_lora_r = saved_args.get('vision_lora_r', 8)
     
     print(f"\nCheckpoint features:")
     print(f"  Vision LoRA: {has_vision_lora}")
@@ -319,13 +402,28 @@ def main():
     print(f"  Text LoRA: {has_text_lora}")
     if has_text_lora:
         print(f"    └─ Rank: {text_lora_r}")
-    print(f"  Vision Gate: {has_vision_gate}")
+    print(f"  Vision Gate: {has_vision_gate} (delta={has_delta_gate})")
     print(f"  Type Adapter: {has_type_adapter}")
     print(f"  Type Task Head: {has_type_task}")       # 🔥
     print(f"  Logits Bias: {has_logits_bias}")        # 🔥
+    # Auto-detect architecture flags from saved checkpoint args
+    use_siglip_pooler = saved_args.get('use_siglip_pooler', False)
+    use_mean_pool_cls = saved_args.get('use_mean_pool_cls', False)
+    use_attn_pool_cls = saved_args.get('use_attn_pool_cls', False)
+    vision_gate_max_alpha = saved_args.get('vision_gate_max_alpha', 1.0)
+    use_type_text_adapter = saved_args.get('use_type_text_adapter', False)
+    type_text_adapter_bottleneck = saved_args.get('type_text_adapter_bottleneck', 64)
+
     print(f"  Fusion Layers: {num_fusion_layers}")
     print(f"  Fusion Type: {fusion_type}")
-    
+    print(f"  SigLIP pooler token: {use_siglip_pooler}")
+    print(f"  Mean-pool text cls: {use_mean_pool_cls}")
+    print(f"  Attn-pool text cls: {use_attn_pool_cls}")
+    print(f"  Gate max alpha: {vision_gate_max_alpha}")
+    print(f"  TypeSpecificTextAdapter: {use_type_text_adapter} (bottleneck={type_text_adapter_bottleneck})")
+    print(f"  Text LoRA: r={text_lora_r}, alpha={text_lora_alpha}")
+    print(f"  Vision LoRA: r={vision_lora_r}, alpha={vision_lora_alpha}")
+
     # Build model
     print(f"\nBuilding model...")
     model = DeterministicVQA(
@@ -338,18 +436,27 @@ def main():
         gradient_checkpointing=False,
         use_vision_lora=has_vision_lora,
         vision_lora_r=vision_lora_r,
-        vision_lora_alpha=16,
+        vision_lora_alpha=vision_lora_alpha,
         vision_lora_dropout=0.1,
         use_text_lora=has_text_lora,
         text_lora_r=text_lora_r,
-        text_lora_alpha=32,
+        text_lora_alpha=text_lora_alpha,
         text_lora_dropout=0.1,
         use_vision_gate=has_vision_gate,
-        use_type_task=has_type_task,          # 🔥 was missing
-        use_logits_bias=has_logits_bias,      # 🔥 was missing
-        use_type_adapter=has_type_adapter,  # 🔥 NEW
-        type_adapter_rank=64,  # 🔥 NEW
-        type_adapter_bias=2.0  # 🔥 NEW
+        vision_gate_init=saved_args.get('vision_gate_init', 1.5),
+        vision_gate_min_alpha=saved_args.get('vision_gate_min_alpha', 0.35),
+        vision_gate_max_alpha=vision_gate_max_alpha,
+        use_delta_gate=has_delta_gate,
+        use_type_task=has_type_task,
+        use_logits_bias=has_logits_bias,
+        use_type_adapter=has_type_adapter,
+        type_adapter_rank=64,
+        type_adapter_bias=2.0,
+        use_siglip_pooler=use_siglip_pooler,
+        use_mean_pool_cls=use_mean_pool_cls,
+        use_attn_pool_cls=use_attn_pool_cls,
+        use_type_text_adapter=use_type_text_adapter,
+        type_text_adapter_bottleneck=type_text_adapter_bottleneck,
     ).to(device)
     
     # Load weights
@@ -361,10 +468,17 @@ def main():
                 if args.num_samples > 1 else f"num_beams={args.num_beams}")
     print(f"\nEvaluating... ({mode_str}, max_length={args.max_length}, "
           f"synonyms={'on' if args.use_synonyms else 'off'})")
+    prefix_trie = None
+    valid_answers_set = None
+    if args.use_constrained:
+        prefix_trie = build_answer_trie(args.train_csv_for_trie, model.tokenizer)
+        valid_answers_set = build_valid_answers_set(args.train_csv_for_trie)
+
     results = evaluate(model, dataloader, device, model.tokenizer,
                        num_beams=args.num_beams, repetition_penalty=args.repetition_penalty,
                        max_length=args.max_length, use_synonyms=args.use_synonyms,
-                       num_samples=args.num_samples, vote_temp=args.vote_temp)
+                       num_samples=args.num_samples, vote_temp=args.vote_temp,
+                       prefix_trie=prefix_trie, valid_answers_set=valid_answers_set)
     
     print("\n" + "="*80)
     print("RESULTS")

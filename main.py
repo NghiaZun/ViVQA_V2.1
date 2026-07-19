@@ -40,7 +40,8 @@ from pipeline_utils import (
 def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
               lr=None, warmup_epochs=None, resume=None, seed=None,
               early_stopping=None, early_stopping_patience=None,
-              resume_reset_epoch=None):
+              resume_reset_epoch=None, vision_dropout_rate=None,
+              text_dropout_rate=None):
     # Defaults từ config.py — cho phép override qua tham số
     epochs                  = CFG['epochs']                   if epochs                  is None else epochs
     lr                      = CFG['lr']                       if lr                      is None else lr
@@ -73,6 +74,10 @@ def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
         f'--answer_weights {CFG["answer_weights"]}',
         f'--seed {seed}',
     ]
+    if vision_dropout_rate is not None:
+        parts.append(f'--vision_dropout_rate {vision_dropout_rate}')
+    if text_dropout_rate is not None and text_dropout_rate > 0:
+        parts.append(f'--text_dropout_rate {text_dropout_rate}')
     if CFG.get('pk_sampling'):
         parts += [
             '--pk_sampling',
@@ -104,6 +109,8 @@ def run_train(train_csv, val_csv, image_dir, output_dir, epochs=None,
 
     cmd = ' '.join(parts)
     subprocess.run(cmd, shell=True, check=False)
+
+
 
 
 def resolve_checkpoint(ckpt_dir):
@@ -204,7 +211,7 @@ def main():
         best_ckpt    = args.checkpoints
         print(f'\n✓ Bỏ qua Loop 0 — dùng checkpoint: {current_ckpt}')
     else:
-        # ── Loop 0: baseline training ─────────────────────────────
+        # ── Loop 0: baseline training (single phase) ──────────────
         print('\n' + '=' * 60)
         print('LOOP 0 — Training baseline')
         print('=' * 60)

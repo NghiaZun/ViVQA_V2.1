@@ -1,1 +1,82 @@
-/archive
+# =============================================================================
+# ViVQA V2.1 — .gitignore (public / thesis source submission)
+# Chỉ public MÃ NGUỒN + tài liệu. KHÔNG public data, checkpoint, log, file nội bộ.
+# =============================================================================
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.ipynb_checkpoints/
+
+# ----- Virtual environments -----
+.venv/
+venv/
+env/
+all_env/
+
+# ----- Model checkpoints & weights (rất nặng, KHÔNG public) -----
+checkpoints*/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+model_soup_output/
+
+# ----- Datasets & images (KHÔNG public: dung lượng + rủi ro rò rỉ test set) -----
+# ViVQA là dataset công khai — xem README để biết cách tải & tạo split.
+# Tất cả CSV data (train/val/test/combined splits) đều bị bỏ.
+archive/
+coco/
+vivqax_data/
+data/
+images/
+*.csv
+
+# ----- Experiment artifacts / trọng số phái sinh nội bộ -----
+answer_weights_count_boost.json
+answer_weights_original.json
+*_original.json
+type_sample_weights*.json
+*_count_boost*.json
+
+# ----- Logs & kết quả thí nghiệm nội bộ -----
+*.log
+run_train.txt
+vivqa_seed_*.txt
+vivqax_*.txt
+*_results*.txt
+*_master.log
+
+# ----- Scripts chạy thí nghiệm nội bộ (chứa đường dẫn máy cá nhân) -----
+*.sh
+
+# ----- Hình ảnh/biểu đồ sinh ra khi train -----
+training_curves*.png
+*.png
+*.jpg
+*.jpeg
+
+# ----- Tài liệu / ghi chú nội bộ (không dành cho public) -----
+CLAUDE.md
+.claude/
+experiment_analysis.md
+RUN87_PARAMS.md
+THESIS_AUDIT_NOTES.md
+*AUDIT*.md
+run_queue.sh
+# paper (bản quyền / đang review) — không đính kèm cùng mã nguồn
+KES_SUBMIT.pdf
+
+# ----- OS / IDE -----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

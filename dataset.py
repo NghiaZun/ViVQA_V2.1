@@ -87,7 +87,9 @@ class VQAGenDataset(Dataset):
                  include_question_type=False,  # 🔥 Enable question type
                  auto_detect_type=False,  # 🔥 NEW: Auto-detect from question text
                  use_distillation=False,  # 🔥🔥🔥 Enable teacher inputs
-                 teacher_vision_processor=None):  # 🔥🔥🔥 Teacher's processor (384px)
+                 teacher_vision_processor=None,  # 🔥🔥🔥 Teacher's processor (384px)
+                 use_img_aug=False,  # 🔥 Safe photometric augmentation (training only)
+                 is_training=False):  # 🔥 Whether this dataset is used for training
 
         self.data = pd.read_csv(csv_path)
         self.image_folder = image_folder
@@ -100,6 +102,22 @@ class VQAGenDataset(Dataset):
         self.auto_detect_type = auto_detect_type  # 🔥 NEW
         self.use_distillation = use_distillation  # 🔥🔥🔥
         self.teacher_vision_processor = teacher_vision_processor  # 🔥🔥🔥
+        self.use_img_aug = use_img_aug and is_training  # only during training
+        self.is_training = is_training
+
+        if self.use_img_aug:
+            from torchvision import transforms
+            # Safe photometric-only augmentation:
+            # - brightness+contrast: does NOT change color semantics (màu gì vẫn đúng)
+            # - gaussian blur: does NOT change spatial layout (location vẫn đúng)
+            # - NO hue/saturation (breaks color answers)
+            # - NO flip/crop/rotation (breaks location/count answers)
+            self._img_aug = transforms.Compose([
+                transforms.ColorJitter(brightness=0.25, contrast=0.25),
+                transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.5)),
+            ])
+        else:
+            self._img_aug = None
 
     def __len__(self):
         return len(self.data)
@@ -115,6 +133,12 @@ class VQAGenDataset(Dataset):
         except Exception as e:
             print(f"[Warning] Failed to load image: {img_path} - {e}")
             image = Image.new('RGB', (224, 224), color='white')
+
+        # 🔥 Safe photometric augmentation (training only, before processor)
+        if self._img_aug is not None:
+            import random
+            if random.random() < 0.5:
+                image = self._img_aug(image)
 
         vision_inputs = self.vision_processor(images=image, return_tensors='pt')
         pixel_values = vision_inputs['pixel_values'].squeeze(0)  # (3, H, W)
@@ -144,7 +168,8 @@ class VQAGenDataset(Dataset):
             'pixel_values': pixel_values,
             'input_ids': input_ids,
             'attention_mask': attention_mask,
-            'labels': labels
+            'labels': labels,
+            'raw_answer': answer,  # for sample-level type-conditional weighting
         }
         
         # 🔥🔥🔥 Add teacher inputs for online distillation

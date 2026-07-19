@@ -244,98 +244,151 @@ class VisionGating(nn.Module):
         3. Attention query @ vision → importance scores α
         4. Gated vision = α * vision + (1-α) * text_context
     """
-    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.5, min_alpha=0.0):
+    def __init__(self, hidden_dim=1024, num_types=4, init_bias=1.0, min_alpha=0.0,
+                 max_alpha=1.0, use_delta_gate=False):
         super().__init__()
 
-        self.min_alpha = min_alpha  # floor on α to prevent over-suppression
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
+        self.use_delta_gate = use_delta_gate
 
         # Type embeddings (learnable per-type representations)
         self.type_embedding = nn.Embedding(num_types, hidden_dim)
-        
-        # Project vision features
+
+        # Project fused vision features (used for the gated output)
         self.vision_proj = nn.Linear(hidden_dim, hidden_dim)
-        
-        # Project text features  
+
+        # Project text features
         self.text_proj = nn.Linear(hidden_dim, hidden_dim)
-        
-        # 🔥 NEW: Type-aware query projection
-        # Combines question + type to form attention query
-        self.query_proj = nn.Linear(hidden_dim * 2, hidden_dim)  # concat(text_cls, type_emb)
-        
-        # Gating network: outputs raw logit (sigmoid applied later with vision_bias)
+
+        # Type-aware query projection: concat(text_cls, type_emb) → D
+        self.query_proj = nn.Linear(hidden_dim * 2, hidden_dim)
+
+        if use_delta_gate:
+            # Delta gate: gate_input = cat([orig_proj(v_orig), delta_proj(v_delta), q]) → 3D
+            # v_orig: raw SigLIP spatial content (pre-Flamingo)
+            # v_delta = v_fused − v_orig: Flamingo's per-patch attention fingerprint
+            # Together they give strong, per-question, per-patch discriminative signal.
+            self.orig_proj = nn.Linear(hidden_dim, hidden_dim)
+            self.delta_proj = nn.Linear(hidden_dim, hidden_dim)
+            # Identity init for orig_proj: gate sees real spatial content immediately,
+            # not random noise. Prevents alpha collapse to 0 in early training.
+            nn.init.eye_(self.orig_proj.weight)
+            nn.init.zeros_(self.orig_proj.bias)
+            # Small-scale init for delta_proj: delta signal is subtle early on,
+            # start near-zero and let it grow as training progresses.
+            nn.init.normal_(self.delta_proj.weight, std=0.01)
+            nn.init.zeros_(self.delta_proj.bias)
+            gate_input_dim = hidden_dim * 3
+        else:
+            gate_input_dim = hidden_dim * 2
+
+        # Gating network: outputs raw logit per patch
         self.gate_net = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim // 2),
+            nn.Linear(gate_input_dim, hidden_dim // 2),
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(hidden_dim // 2, 1)
         )
-        
-        # Learnable bias to prefer vision
+
+        # Learnable bias — matches paper: α_i = σ(g_θ([v(L)_i; q]) + b)
         self.vision_bias = nn.Parameter(torch.tensor(init_bias))
-        
+
         # Layer norm for stability
         self.layer_norm = nn.LayerNorm(hidden_dim)
     
-    def forward(self, vision_features, text_features, type_ids=None):
+    def forward(self, vision_features, text_features, type_ids=None, text_attention_mask=None,
+                detach_for_gate=False, vision_orig=None):
         """
         Args:
-            vision_features: [B, num_patches, D]  (e.g. [B, 256, 1024])
-            text_features: [B, seq_len, D]         (e.g. [B, 20, 1024])
-            type_ids: [B] - question type IDs (0=OBJECT, 1=COUNT, 2=COLOR, 3=LOCATION)
-                      If None, uses uniform attention (no type conditioning)
-        
+            vision_features: [B, P, D]  post-Flamingo fused vision (v_fused)
+            text_features:   [B, L, D]  post-Flamingo text features
+            type_ids:        [B]        question type IDs (0=OBJ,1=COUNT,2=COLOR,3=LOC)
+            text_attention_mask: [B, L] 1=real token, 0=padding
+            detach_for_gate: cut gradient from gate_net back into Flamingo/vision_orig
+            vision_orig:     [B, P, D]  pre-Flamingo features (required for delta gate).
+                             v_delta = vision_features − vision_orig encodes how much
+                             Flamingo changed each patch for this specific question.
+
         Returns:
-            gated_vision: [B, num_patches, D]  # Type-conditioned vision
-            gate_values: [B, num_patches]      # α values for monitoring
+            gated_vision: [B, P, D]  instance-level gated vision
+            gate_values:  [B, P]     α per patch for monitoring
         """
         batch_size, num_patches, hidden_dim = vision_features.shape
-        
-        # 1. Project features
+
+        # 1. Project fused vision for the gated OUTPUT (always with grad → Flamingo signal)
         v_proj = self.vision_proj(vision_features)  # [B, P, D]
-        t_proj = self.text_proj(text_features)      # [B, L, D]
-        
-        # 2. Get text CLS token (first token in BARTpho)
-        text_cls = t_proj[:, 0, :]  # [B, D]
-        
-        # 3. 🔥 Type-aware attention query
+        t_proj = self.text_proj(text_features)       # [B, L, D]
+
+        # 2. Type-aware query: q = W_q[t_cls; e_type]
+        text_cls = t_proj[:, 0, :]  # [B, D] — BOS token acts as sentence summary
         if type_ids is not None:
-            # Embed type and combine with text CLS
-            type_emb = self.type_embedding(type_ids)  # [B, D]
-            query = torch.cat([text_cls, type_emb], dim=-1)  # [B, 2D]
-            query = self.query_proj(query)  # [B, D]
+            type_emb = self.type_embedding(type_ids)       # [B, D]
+            query = self.query_proj(
+                torch.cat([text_cls, type_emb], dim=-1))   # [B, D]
         else:
-            # Fallback: use text CLS only (no type conditioning)
             query = text_cls
-        
-        # 4. Broadcast query for per-patch attention
         query_expanded = query.unsqueeze(1).expand(-1, num_patches, -1)  # [B, P, D]
-        
-        # 5. Compute gating scores
-        # Concatenate vision + type-aware query for each patch
-        gate_input = torch.cat([v_proj, query_expanded], dim=-1)  # [B, P, 2D]
-        
-        # Learn α per patch (which patches are important for THIS type?)
+
+        # 3. Gate input — two modes:
+        #
+        #  [DELTA GATE] use_delta_gate=True and vision_orig provided:
+        #    gate sees cat([orig_proj(v_orig), delta_proj(v_delta), q]) — 3D input
+        #    v_orig:  raw spatial content before any language conditioning
+        #    v_delta: per-patch Flamingo attention fingerprint for this question
+        #    Together: gate knows WHERE things are (v_orig) and WHAT Flamingo
+        #    attended to per question (v_delta) → true instance-level gating
+        #
+        #  [STANDARD GATE] fallback:
+        #    gate sees cat([v_proj, q]) — same as pre-delta behavior
+        if self.use_delta_gate and vision_orig is not None:
+            v_delta = vision_features - vision_orig  # [B, P, D]: Flamingo's contribution
+
+            # Detach both signals from gate gradient if requested — stops feedback
+            # oscillation (gate_net gradient cannot corrupt Flamingo or vision_proj)
+            v_orig_g  = vision_orig.detach()  if detach_for_gate else vision_orig
+            v_delta_g = v_delta.detach()      if detach_for_gate else v_delta
+
+            o_proj = self.orig_proj(v_orig_g)    # [B, P, D]
+            d_proj = self.delta_proj(v_delta_g)  # [B, P, D]
+            gate_input = torch.cat([o_proj, d_proj, query_expanded], dim=-1)  # [B, P, 3D]
+        else:
+            # Standard gate — detach v_proj to avoid Flamingo feedback (run11 behaviour)
+            v_for_gate = v_proj.detach() if detach_for_gate else v_proj
+            gate_input = torch.cat([v_for_gate, query_expanded], dim=-1)       # [B, P, 2D]
+
+        # 4. α per patch: scaled sigmoid so α ∈ [min_alpha, max_alpha]
+        #
+        # Formula: α = min_alpha + (max_alpha - min_alpha) · σ(gate_net + vision_bias)
+        #
+        # Why scaled sigmoid instead of hard clamp:
+        #   Hard clamp: gradient = 0 when α hits boundary → gate can stop learning
+        #   Scaled sigmoid: gradient = (max-min)·σ'(·) > 0 always → gate always learns
+        #
+        # With min=0.0, max=1.0 (default): α = σ(·) — identical to original formula.
+        # With min=0.0, max=0.85: α ∈ [0, 0.85] → prevents saturation to 1.0,
+        #   keeps α(1-α) ≥ α·0.15 > 0 → gradient of (v_proj - text_pooled) never dies.
         alpha = self.gate_net(gate_input)  # [B, P, 1]
-        
-        # 6. Apply vision bias (learnable parameter)
-        # min_alpha: prevent over-suppression of visual signal.
-        # Without a floor, COLOR learns α≈0.18 (82% text anchor) and COUNT α≈0.33 —
-        # visual features become too weak for color discrimination and counting.
-        alpha = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias).clamp(min=self.min_alpha)  # [B, P]
+        raw_sigmoid = torch.sigmoid(alpha.squeeze(-1) + self.vision_bias)  # [B, P] ∈ (0, 1)
+        alpha = self.min_alpha + (self.max_alpha - self.min_alpha) * raw_sigmoid  # [B, P] ∈ [min, max]
         alpha_expanded = alpha.unsqueeze(-1)  # [B, P, 1] for broadcasting
-        
-        # 7. Gated combination
-        # Pool text for context (average over sequence)
-        text_pooled = t_proj.mean(dim=1, keepdim=True)  # [B, 1, D]
+
+        # 7. Gated combination — masked mean of text features (exclude padding)
+        if text_attention_mask is not None:
+            # [B, L, 1] mask; clamp denom to avoid div-by-zero on degenerate inputs
+            mask = text_attention_mask.float().unsqueeze(-1)  # [B, L, 1]
+            text_pooled = (t_proj * mask).sum(dim=1, keepdim=True) / mask.sum(dim=1, keepdim=True).clamp(min=1)
+        else:
+            text_pooled = t_proj.mean(dim=1, keepdim=True)
         text_pooled = text_pooled.expand(-1, num_patches, -1)  # [B, P, D]
 
         # α close to 1 → use vision features (important patches)
         # α close to 0 → use text context (suppress noise)
         gated_vision = alpha_expanded * v_proj + (1 - alpha_expanded) * text_pooled
-        
+
         # 8. Layer norm for stability
         gated_vision = self.layer_norm(gated_vision)
-        
+
         return gated_vision, alpha  # Return alpha for monitoring
 
 
@@ -386,6 +439,77 @@ class TypeAwareLogitsBias(nn.Module):
         
         # Add bias (soft reweighting)
         return logits + bias
+
+
+# ============================================================================
+# TYPE-SPECIFIC TEXT ADAPTER (breaks OBJECT-COUNT gradient interference)
+# ============================================================================
+
+class TypeSpecificTextAdapter(nn.Module):
+    """
+    Bottleneck adapter applied to the BOS/CLS position [B, D] AFTER Flamingo fusion,
+    before VisionGating. Each question type gets a separate up-projection.
+
+    Applied point: text_for_concat[:, 0, :] (post-Flamingo BOS token).
+    VisionGating internally uses t_proj[:, 0, :] as its text summary for gate query,
+    so modifying this position makes gating type-aware with independent type gradients.
+
+    IMPORTANT: Never apply to full text_features [B, L, D] — disrupts decoder
+    cross-attention and causes catastrophic convergence failure (run83: COUNT=0% for 8 epochs).
+
+    Architecture: x + up[type](GELU(down(x)))  where x is [B, D]
+    - Shared down: bottleneck compression
+    - Type-specific up (4 × hidden_dim): zero-init → identity at start
+    """
+    def __init__(self, hidden_dim: int, num_types: int = 4, bottleneck: int = 64):
+        super().__init__()
+        self.num_types = num_types
+        self.down = nn.Linear(hidden_dim, bottleneck, bias=False)
+        self.act = nn.GELU()
+        self.up = nn.ModuleList([
+            nn.Linear(bottleneck, hidden_dim, bias=False) for _ in range(num_types)
+        ])
+        nn.init.normal_(self.down.weight, std=0.02)
+        for up in self.up:
+            nn.init.zeros_(up.weight)  # zero init → pure residual at start
+
+    def forward(self, x: torch.Tensor, type_ids: torch.Tensor) -> torch.Tensor:
+        # x: [B, L, D]  type_ids: [B]
+        shared = self.act(self.down(x))          # [B, L, bottleneck]
+        delta = torch.zeros_like(x)
+        for t in range(self.num_types):
+            mask = (type_ids == t)               # [B]
+            if mask.any():
+                delta[mask] = self.up[t](shared[mask]).to(x.dtype)
+        return x + delta                         # residual
+
+
+# ============================================================================
+# ATTENTION POOLING (learned sentence summary)
+# ============================================================================
+
+class AttentionPooling(nn.Module):
+    """
+    Replaces BOS token or mean-pool as text_cls for VisionGating.
+
+    Learns a scoring vector over encoder hidden states so the model can
+    attend to question-relevant tokens (object nouns, color adjectives, etc.)
+    instead of relying on BOS (no context) or mean-pool (dilutes content).
+
+    Params: D (1024 for BARTpho) — negligible overhead.
+    """
+    def __init__(self, hidden_size: int):
+        super().__init__()
+        self.score = nn.Linear(hidden_size, 1, bias=False)
+        nn.init.normal_(self.score.weight, std=0.02)
+
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        # hidden_states: [B, L, D]  attention_mask: [B, L] (1=real, 0=pad)
+        scores = self.score(hidden_states).squeeze(-1)          # [B, L]
+        if attention_mask is not None:
+            scores = scores + (1.0 - attention_mask.float()) * -1e4   # mask padding
+        weights = torch.softmax(scores, dim=-1).unsqueeze(-1)  # [B, L, 1]
+        return (hidden_states * weights).sum(1)                 # [B, D]
 
 
 # ============================================================================
@@ -448,7 +572,8 @@ class DeterministicVQA(nn.Module):
         use_logits_bias: bool = False,  # 🔥 Enable TypeAwareLogitsBias (risky - use separately)
         use_vision_gate: bool = False,  # 🔥 NEW: Use vision gating
         vision_gate_init: float = 1.5,  # 🔥 Initial vision boost (>1.0 = prefer vision)
-        vision_gate_min_alpha: float = 0.0,  # 🔥 Floor on α (0.4 recommended for retrain)
+        vision_gate_min_alpha: float = 0.0,  # 🔥 Floor on α
+        vision_gate_max_alpha: float = 1.0,  # 🔥 Ceiling on α (0.85 prevents saturation to 1.0)
         use_type_adapter: bool = False,  # 🔥 NEW: Type-conditioned vision adapter
         type_adapter_rank: int = 64,  # 🔥 Adapter bottleneck rank
         type_adapter_bias: float = 2.0,  # 🔥 Type supervision strength
@@ -466,7 +591,14 @@ class DeterministicVQA(nn.Module):
     use_gate_divergence: bool = False,    # Inter-type gate divergence loss
     gate_divergence_lambda: float = 0.05, # λ_div weight (recommended: 0.03–0.1)
     type_loss_weight: float = 0.2,        # Weight for auxiliary type loss
-        label_smoothing: float = 0.1
+        label_smoothing: float = 0.1,
+        focal_gamma: float = 0.0,         # Focal loss γ (0=standard CE, 2=standard focal)
+        use_delta_gate: bool = False,     # Delta gate: gate_input=cat([v_orig, v_delta, q])
+        use_mean_pool_cls: bool = False,   # Mean-pool valid tokens as text_cls instead of BOS
+        use_attn_pool_cls: bool = False,   # Learned attention pool over encoder tokens as text_cls
+        use_siglip_pooler: bool = False,   # Prepend SigLIP pooler_output as extra global vision token
+        use_type_text_adapter: bool = False,  # Type-specific bottleneck adapter on encoder output
+        type_text_adapter_bottleneck: int = 64,  # Bottleneck dim (64 = ~330K params)
     ):
         super().__init__()
         
@@ -492,6 +624,16 @@ class DeterministicVQA(nn.Module):
         self.gate_divergence_lambda = gate_divergence_lambda
         self.type_loss_weight = type_loss_weight
         self.label_smoothing = label_smoothing
+        self.focal_gamma = focal_gamma
+        # Per-type label smoothing: {type_id(int) -> epsilon}
+        # type 0=OBJECT, 1=COUNT, 2=COLOR, 3=LOCATION
+        # None = disabled (use uniform self.label_smoothing)
+        self.type_label_smoothing: Optional[dict] = None
+        self.use_mean_pool_cls = use_mean_pool_cls
+        self.use_attn_pool_cls = use_attn_pool_cls
+        self.use_siglip_pooler = use_siglip_pooler
+        self.use_type_text_adapter = use_type_text_adapter
+        self.type_text_adapter_bottleneck = type_text_adapter_bottleneck
         
         self.use_type_task = use_type_task  # 🔥 Type prediction head (auxiliary loss)
         self.use_logits_bias = use_logits_bias  # 🔥 Type-aware logits biasing (optional, risky)
@@ -515,6 +657,9 @@ class DeterministicVQA(nn.Module):
         self.use_vision_gate = use_vision_gate
         self.vision_gate_init = vision_gate_init
         self.vision_gate_min_alpha = vision_gate_min_alpha
+        self.vision_gate_max_alpha = vision_gate_max_alpha
+        self.gate_detach_input = False    # set by train.py via --gate_detach_input
+        self.use_delta_gate = use_delta_gate
         
         # Vision encoder (SigLIP or DINOv2)
         # For SigLIP, load full model first, then extract vision_model
@@ -566,15 +711,16 @@ class DeterministicVQA(nn.Module):
         # matching the numerical behavior that produced the 70.38% baseline.
         # transformers 4.45+ switched MBart to attention_interface (SDPA/Flash) by default.
         #
-        # tie_word_embeddings=False: BARTpho checkpoint stores model.shared,
-        # encoder.embed_tokens, and decoder.embed_tokens as 3 separate keys.
-        # transformers 4.57 keeps them as 3 separate tensors (prints "NOT tying" warning),
-        # giving 606.1M params. Without this flag, from_pretrained ties them to 1 tensor
-        # → 524.2M params (82M fewer). The baseline ran with 3 separate tables.
+        # tie_word_embeddings NOT overridden (default=True): lm_head.weight is tied to
+        # model.shared/decoder.embed_tokens — loaded from pre-trained checkpoint.
+        # BARTpho checkpoint stores the embedding as model.shared; with tying, lm_head
+        # reuses this pre-trained matrix as the output projection (524M params).
+        # Previous flag tie_word_embeddings=False caused lm_head to be randomly initialized
+        # (checkpoint has no lm_head.weight key → MISSING → random init, 41M extra random
+        # params). That regression was added in commit 300e058 after the 72.26% result.
         bartpho_full = MBartForConditionalGeneration.from_pretrained(
             bartpho_model_name, revision=bartpho_revision,
             attn_implementation='eager',
-            tie_word_embeddings=False,
         )
         bartpho_full.config.use_cache = False
 
@@ -617,6 +763,30 @@ class DeterministicVQA(nn.Module):
             nn.Dropout(dropout)
         )
         print(f"  ✅ Vision projection: {vision_hidden_dim} → {bart_hidden_dim}")
+
+        # SigLIP pooler_output global token (optional)
+        if use_siglip_pooler:
+            self.siglip_global_proj = nn.Linear(vision_hidden_dim, bart_hidden_dim)
+            nn.init.eye_(self.siglip_global_proj.weight[:min(vision_hidden_dim, bart_hidden_dim), :min(vision_hidden_dim, bart_hidden_dim)])
+            nn.init.zeros_(self.siglip_global_proj.bias)
+            print(f"  ✅ SigLIP global token: pooler_output {vision_hidden_dim} → {bart_hidden_dim} (prepended to patches)")
+
+        # Attention pooling for text_cls (replaces BOS or mean-pool)
+        if use_attn_pool_cls:
+            self.attn_pool = AttentionPooling(bart_hidden_dim)
+            print(f"  ✅ Attention pooling text_cls: learned scoring over {bart_hidden_dim}D encoder tokens")
+
+        # Type-specific text adapter (breaks OBJECT-COUNT gradient interference)
+        if use_type_text_adapter:
+            self.type_text_adapter = TypeSpecificTextAdapter(
+                hidden_dim=bart_hidden_dim,
+                num_types=4,
+                bottleneck=type_text_adapter_bottleneck,
+            )
+            print(f"  🔥 TypeSpecificTextAdapter: bottleneck={type_text_adapter_bottleneck}, "
+                  f"params={4 * type_text_adapter_bottleneck * bart_hidden_dim + type_text_adapter_bottleneck * bart_hidden_dim:,}")
+        else:
+            self.type_text_adapter = None
         
         # 🔥 Cross-Modal Contrastive Alignment: projection heads
         # Both heads project into a shared contrastive space (128D follows SimCLR/MoCo convention:
@@ -664,15 +834,24 @@ class DeterministicVQA(nn.Module):
         else:
             self.vision_adapter = None
         
-        # 🔥 Initialize VisionGating NOW (after bart_hidden_dim is known)
+        # 🔥 Initialize VisionGating (applied AFTER Flamingo — gate on question-conditioned features)
+        # IMPORTANT: gate operates on raw projected SigLIP features, not Flamingo-fused features.
+        # When gating is after Flamingo, v_proj ≈ text_pooled (both text-fused in same space)
+        # → (v_proj - text_pooled) ≈ 0 → gate_net gets near-zero gradient → flat heatmap.
+        # Raw SigLIP features are in a different semantic space from BARTpho text_pooled
+        # → strong gradient signal → gate learns real content/spatial discrimination.
         if self.use_vision_gate:
             self.vision_gating = VisionGating(
                 hidden_dim=bart_hidden_dim,
                 num_types=4,
                 init_bias=self.vision_gate_init,
-                min_alpha=self.vision_gate_min_alpha
+                min_alpha=self.vision_gate_min_alpha,
+                max_alpha=self.vision_gate_max_alpha,
+                use_delta_gate=self.use_delta_gate,
             )
-            print(f"  🔥 Type-Conditioned Vision Gating: 4 types, init_bias={self.vision_gate_init:.2f}, min_alpha={self.vision_gate_min_alpha:.2f}")
+            gate_mode = "delta(v_orig+v_delta+q)" if self.use_delta_gate else "standard(v_fused+q)"
+            alpha_range = f"α∈[{self.vision_gate_min_alpha:.2f}, {self.vision_gate_max_alpha:.2f}]"
+            print(f"  🔥 Type-Conditioned Vision Gating (after GCA): 4 types, init_bias={self.vision_gate_init:.2f}, {alpha_range}, gate={gate_mode}")
         
         # 🔥 NEW: Type prediction head (auxiliary task)
         if self.use_type_task:
@@ -795,32 +974,6 @@ class DeterministicVQA(nn.Module):
         
         This method will RAISE ERROR if SigLIP + LoRA detected!
         """
-        # 🚨 CRITICAL CHECK: Block SigLIP + LoRA combination
-        if self.is_siglip:
-            raise RuntimeError(
-                "\n"
-                "="*70 + "\n"
-                "❌ CRITICAL ERROR: SigLIP + Vision LoRA is NOT SUPPORTED!\n"
-                "="*70 + "\n"
-                "SigLIP vision_model has implementation conflicts with PEFT LoRA.\n"
-                "Error: 'got multiple values for keyword argument inputs_embeds'\n"
-                "\n"
-                "SOLUTIONS:\n"
-                "  1. Use DINOv2 (RECOMMENDED):\n"
-                "     --vision_model facebook/dinov2-base \\\n"
-                "     --use_vision_lora --vision_lora_r 8\n"
-                "\n"
-                "  2. Use SigLIP WITHOUT vision LoRA:\n"
-                "     --vision_model google/siglip-base-patch16-224 \\\n"
-                "     (remove --use_vision_lora flag)\n"
-                "\n"
-                "  3. Use text LoRA only (still beneficial!):\n"
-                "     --vision_model google/siglip-base-patch16-224 \\\n"
-                "     --use_text_lora --text_lora_r 16\n"
-                "="*70 + "\n"
-            )
-        
-        # DINOv2: Safe to apply LoRA
         try:
             from peft import LoraConfig, get_peft_model
         except ImportError:
@@ -830,26 +983,32 @@ class DeterministicVQA(nn.Module):
                 "   Install with: pip install peft\n"
                 "   Then retry training.\n"
             )
-        
-        print(f"  [LoRA] Using PEFT library for vision encoder...")
-        
-        # LoRA config for vision encoder (SigLIP)
+
         lora_config = LoraConfig(
             r=self.vision_lora_r,
             lora_alpha=self.vision_lora_alpha,
             lora_dropout=self.vision_lora_dropout,
-            target_modules=["q_proj", "k_proj", "v_proj"],  # SigLIP uses different naming: q_proj/k_proj/v_proj
+            target_modules=["q_proj", "k_proj", "v_proj"],
             bias="none",
-            task_type="FEATURE_EXTRACTION"  # SigLIP vision encoder is feature extractor
+            task_type="FEATURE_EXTRACTION"
         )
-        
-        # Apply LoRA (PEFT automatically hooks into forward pass!)
-        self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
-        
-        # Print trainable parameters summary
-        trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in self.vision_encoder.parameters())
-        print(f"  [LoRA] Vision - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+
+        if self.is_siglip:
+            # SigLIP: wrapping the outer SiglipVisionTransformer with PEFT causes
+            # "got multiple values for keyword argument inputs_embeds" because PEFT
+            # intercepts forward() args. Fix: wrap only the inner SiglipEncoder
+            # (pure transformer stack, no pixel embedding logic) — forward conflict avoided.
+            target = self.vision_encoder.encoder
+            self.vision_encoder.encoder = get_peft_model(target, lora_config)
+            trainable_params = sum(p.numel() for p in self.vision_encoder.encoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.vision_encoder.parameters())
+            print(f"  [LoRA] Vision (SigLIP inner encoder) - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
+        else:
+            # DINOv2 / other: safe to wrap full model
+            self.vision_encoder = get_peft_model(self.vision_encoder, lora_config)
+            trainable_params = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in self.vision_encoder.parameters())
+            print(f"  [LoRA] Vision - Trainable: {trainable_params:,} ({trainable_params/total_params*100:.2f}%) | Total: {total_params:,}")
     
     def _inject_lora_to_text_encoder(self):
         """
@@ -913,9 +1072,18 @@ class DeterministicVQA(nn.Module):
             try:
                 from peft import PeftModel
                 if isinstance(self.vision_encoder, PeftModel):
-                    # PEFT automatically freezes base weights and unfreezes LoRA adapters
+                    # DINOv2: full model wrapped by PEFT — base frozen, LoRA trainable
                     trainable = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
                     print(f"[Freeze] Vision encoder: FROZEN (base) + PEFT LoRA ({trainable/1e6:.2f}M params)")
+                elif hasattr(self.vision_encoder, 'encoder') and isinstance(self.vision_encoder.encoder, PeftModel):
+                    # SigLIP: inner encoder wrapped — freeze outer, re-enable LoRA params
+                    for param in self.vision_encoder.parameters():
+                        param.requires_grad = False
+                    for name, param in self.vision_encoder.named_parameters():
+                        if 'lora_' in name:
+                            param.requires_grad = True
+                    trainable = sum(p.numel() for p in self.vision_encoder.parameters() if p.requires_grad)
+                    print(f"[Freeze] Vision encoder: FROZEN (base) + SigLIP inner LoRA ({trainable/1e6:.2f}M params)")
                 else:
                     print(f"[Freeze] Vision encoder: WARNING - LoRA requested but not applied!")
             except ImportError:
@@ -1264,10 +1432,11 @@ class DeterministicVQA(nn.Module):
         attention_mask: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
         stage: int = 3,  # Kept for compatibility, but ignored
-        answer_weights: Optional[torch.Tensor] = None,  # 🔥 NEW: Token-level weights for balanced loss
-        question_types: Optional[torch.Tensor] = None,  # 🔥 NEW: Question type (0=object_id, 1=counting, 2=color, 3=location)
-        images_384: Optional[torch.Tensor] = None,  # 🔥🔥🔥 For vision teacher (384px)
-        raw_questions: Optional[list] = None  # 🔥🔥🔥 For text teacher (raw strings)
+        answer_weights: Optional[torch.Tensor] = None,  # Token-level weights for balanced loss
+        question_types: Optional[torch.Tensor] = None,  # Question type (0=object_id, 1=counting, 2=color, 3=location)
+        images_384: Optional[torch.Tensor] = None,  # For vision teacher (384px)
+        raw_questions: Optional[list] = None,  # For text teacher (raw strings)
+        sample_weights: Optional[torch.Tensor] = None,  # Per-sample weights [batch_size] for type-conditional weighting
     ):
         """
         Forward pass - deterministic fusion
@@ -1283,86 +1452,113 @@ class DeterministicVQA(nn.Module):
                 3 = location (Ở đâu? Trên bàn?)
         """
         batch_size = pixel_values.size(0)
-        
-        # 1. Vision encoding
-        # Note: self.vision_encoder is already vision_model component for SigLIP
-        # or full DINOv2 model. Both take pixel_values directly.
-        vision_outputs = self.vision_encoder(pixel_values=pixel_values)
-        patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
-        
-        # Remove CLS token if present
-        # SigLIP vision_model: [batch, 197, hidden_dim] → 196 patches + 1 CLS
-        # DINOv2: [batch, 197, hidden_dim] → 196 patches + 1 CLS  
-        # We only need patch tokens for cross-attention fusion
-        original_seq_len = patch_tokens.size(1)
-        if original_seq_len > self.num_patches:  # Has CLS token
-            patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
-            # Verify shape matches expected
-            assert patch_tokens.size(1) == self.num_patches, \
-                f"Shape mismatch after CLS removal: got {patch_tokens.size(1)} patches, expected {self.num_patches}"
-        
-        # 🔥 NEW: Apply type-conditioned adapter (BEFORE position embeddings)
-        # This allows adapter to transform raw vision features based on question type
-        if self.vision_adapter is not None:
-            patch_tokens = self.vision_adapter(
-                patch_tokens,
-                type_ids=question_types  # Use ground-truth types during training
-            )
-        
-        # Add position embeddings
-        patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
-        # Save raw encoder features (768D) for distillation BEFORE projection.
-        # Distilling here avoids double-projection bias: the distill_proj learns
-        # a clean 768→1152 mapping without interference from vision_proj (768→1024).
-        raw_patch_tokens = patch_tokens  # [B, 196, vision_hidden] — used for KD only
-        vision_features = self.vision_proj(patch_tokens)  # [batch, 196, bart_hidden]
-        
+        # H3: text-only warmup mode — decoder learns answer patterns before seeing vision
+        text_only = getattr(self, 'text_only_mode', False)
+
+        # 1. Vision encoding (skipped during text-only warmup)
+        if not text_only:
+            # Note: self.vision_encoder is already vision_model component for SigLIP
+            # or full DINOv2 model. Both take pixel_values directly.
+            vision_outputs = self.vision_encoder(pixel_values=pixel_values)
+            patch_tokens = vision_outputs.last_hidden_state  # [batch, seq_len, hidden]
+
+            # Remove CLS token if present
+            # SigLIP vision_model: [batch, 197, hidden_dim] → 196 patches + 1 CLS
+            # DINOv2: [batch, 197, hidden_dim] → 196 patches + 1 CLS
+            # We only need patch tokens for cross-attention fusion
+            original_seq_len = patch_tokens.size(1)
+            if original_seq_len > self.num_patches:  # Has CLS token
+                patch_tokens = patch_tokens[:, 1:, :]  # Remove first token (CLS)
+                assert patch_tokens.size(1) == self.num_patches, \
+                    f"Shape mismatch after CLS removal: got {patch_tokens.size(1)} patches, expected {self.num_patches}"
+
+            # 🔥 NEW: Apply type-conditioned adapter (BEFORE position embeddings)
+            if self.vision_adapter is not None:
+                patch_tokens = self.vision_adapter(
+                    patch_tokens,
+                    type_ids=question_types
+                )
+
+            # Add position embeddings
+            patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
+            raw_patch_tokens = patch_tokens  # [B, 196, vision_hidden] — used for KD only
+            vision_features = self.vision_proj(patch_tokens)  # [batch, 196, bart_hidden]
+
+            # Optionally prepend SigLIP pooler_output as a global vision token
+            if self.use_siglip_pooler and hasattr(vision_outputs, 'pooler_output') and vision_outputs.pooler_output is not None:
+                global_feat = self.siglip_global_proj(vision_outputs.pooler_output)  # [B, bart_hidden]
+                vision_features = torch.cat([global_feat.unsqueeze(1), vision_features], dim=1)  # [B, 197, bart_hidden]
+        else:
+            raw_patch_tokens = None
+            vision_features = None  # set after text encoding (need bart_hidden_dim)
+
         # 2. Text encoding
         text_encoder_outputs = self.encoder(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
         text_features = text_encoder_outputs.last_hidden_state
-        
-        # 🔥 Type prediction (auxiliary task)
-        # Extract CLS token (first token in BARTpho)
-        text_cls = text_features[:, 0, :]  # [B, D]
+
+        if text_only:
+            # Zero vision: decoder learns to generate answers from question context alone
+            vision_features = torch.zeros(
+                batch_size, self.num_patches, text_features.size(-1),
+                device=text_features.device, dtype=text_features.dtype
+            )
+
+        # text_cls: attention pool (learned) > BOS (default) > mean-pool (worst)
+        if self.use_attn_pool_cls:
+            text_cls = self.attn_pool(text_features, attention_mask)  # [B, D]
+        elif self.use_mean_pool_cls:
+            _mask = attention_mask.float().unsqueeze(-1)  # [B, L, 1]
+            text_cls = (text_features * _mask).sum(1) / _mask.sum(1).clamp(min=1)  # [B, D]
+        else:
+            text_cls = text_features[:, 0, :]  # [B, D]
         type_logits = None
         type_loss = None
         if self.use_type_task:
             type_logits = self.type_head(text_cls)  # [B, 4]
             if question_types is not None:
-                type_loss = F.cross_entropy(type_logits, question_types)
+                type_weights = getattr(self, 'type_class_weights', None)
+                type_loss = F.cross_entropy(type_logits, question_types, weight=type_weights)
         
-        # 3. Vision-text fusion (Flamingo style with configurable direction)
-        fused_vision = vision_features
-        fused_text = text_features  # Track text too for bidirectional
-        
-        for fusion_layer in self.flamingo_fusion:
-            fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
-        
-        # 🔥 CRITICAL: Select features based on fusion type
-        # Purpose: Decoder should cross-attend to the UPDATED modality
-        if self.fusion_type == 'text2vision':
-            # Vision learned from text → vision is primary for decoder
-            vision_for_decoder = fused_vision  # Updated
-            text_for_concat = fused_text       # Unchanged (original text context)
-        elif self.fusion_type == 'vision2text':
-            # Text learned from vision → text is primary for decoder
-            vision_for_decoder = fused_vision  # Unchanged (original vision context)
-            text_for_concat = fused_text       # Updated (text enriched with vision info)
-        elif self.fusion_type == 'bidirectional':
-            # Both learned from each other → both are enriched
-            vision_for_decoder = fused_vision  # Updated
-            text_for_concat = fused_text       # Updated
+        # 3. Vision-text fusion (Flamingo GCA, text-to-vision) — skipped in text-only warmup
+        if not text_only:
+            # GCA injects question semantics into each patch → v(L)_i becomes question-conditioned.
+            vision_features_pre_flamingo = vision_features  # [B, 196, D] — pre-GCA, for delta gate
+            fused_vision = vision_features
+            fused_text = text_features
+
+            for fusion_layer in self.flamingo_fusion:
+                fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
+
+            if self.fusion_type in ('text2vision', 'vision2text', 'bidirectional'):
+                vision_for_decoder = fused_vision
+                text_for_concat = fused_text
+            else:
+                raise ValueError(f"Unknown fusion_type: {self.fusion_type}")
+
+            # Type-specific adapter: modify ONLY BOS/CLS position [B,D] post-Flamingo.
+            # VisionGating uses t_proj[:,0,:] as text summary for gate query → this makes gating type-aware.
+            # Decoder cross-attends to all positions; touching only pos-0 is far less disruptive than full sequence.
+            # WARNING: never apply this to full text_features — disrupts decoder cross-attention (run83 failure).
+            if self.type_text_adapter is not None and question_types is not None:
+                _cls = self.type_text_adapter(text_for_concat[:, 0, :], question_types)
+                text_for_concat = torch.cat([_cls.unsqueeze(1), text_for_concat[:, 1:, :]], dim=1)
         else:
-            raise ValueError(f"Unknown fusion_type: {self.fusion_type}")
-        
-        # 🔥 Type-Conditioned Vision Gating
-        # NOTE: Only gate vision features, not text!
+            vision_features_pre_flamingo = vision_features
+            vision_for_decoder = vision_features  # zeros — decoder trains on text context only
+            text_for_concat = text_features
+
+        # 4. Type-Conditioned Vision Gating (AFTER Flamingo — question-conditioned features)
+        # Gate input v(L)_i already encodes "patch i as understood in context of this question".
+        # Combined with q = Wq[t_cls; e_type], gate achieves instance-level type conditioning:
+        # same type but different questions → different patches selected.
+        # vision_prefgate used for contrastive: pre-gating Flamingo output has no α-collapse
+        # attractor (gated_vision = α·v + (1-α)·t̄ would trivially satisfy contrastive at α→0).
+        vision_prefgate = vision_for_decoder if not text_only else None
         gate_stats = None
-        if self.use_vision_gate:
-            # Use predicted types during inference, ground truth during training
+        if self.use_vision_gate and not text_only:
             if question_types is not None:
                 type_ids_for_gating = question_types
             elif type_logits is not None:
@@ -1370,19 +1566,20 @@ class DeterministicVQA(nn.Module):
             else:
                 type_ids_for_gating = None
             gated_vision, gate_values = self.vision_gating(
-                vision_for_decoder,  # Gate vision only
-                text_for_concat,     # Use text as context
-                type_ids=type_ids_for_gating  # 🔥 Type-conditioned!
+                vision_for_decoder,
+                text_for_concat,
+                type_ids=type_ids_for_gating,
+                text_attention_mask=attention_mask,
+                detach_for_gate=self.gate_detach_input,
+                vision_orig=vision_features_pre_flamingo if self.use_delta_gate else None,
             )
-            
-            # Compute statistics for monitoring
             gate_stats = {
                 'mean': gate_values.mean().item(),
                 'std': gate_values.std().item(),
                 'min': gate_values.min().item(),
                 'max': gate_values.max().item()
             }
-            vision_for_decoder = gated_vision  # Use gated version
+            vision_for_decoder = gated_vision
         
         # 4. Prepare decoder inputs
         if labels is not None:
@@ -1446,13 +1643,102 @@ class DeterministicVQA(nn.Module):
             if answer_weights is not None:
                 answer_weights = answer_weights.clamp(min=1e-6, max=100.0)
 
-            answer_loss = F.cross_entropy(
-                answer_logits.view(-1, answer_logits.size(-1)),
-                labels.view(-1),
-                ignore_index=-100,
-                weight=answer_weights if answer_weights is not None else None,
-                label_smoothing=self.label_smoothing
-            )
+            if (self.type_label_smoothing is not None
+                    and question_types is not None
+                    and self.focal_gamma == 0):
+                # Per-type label smoothing: different ε per question type.
+                # Rationale: COUNT needs ε=0 (off-by-one errors dominate, need precision),
+                # COLOR needs ε=0.05 (subtle distinctions), LOCATION/OBJECT keep ε=0.1.
+                # Manual LS formula (matches PyTorch):
+                #   L = (1-ε)*CE_hard + ε*(-mean(log_softmax))
+                B, T = labels.size()
+                V = answer_logits.size(-1)
+                logits_flat = answer_logits.view(-1, V)   # [B*T, V]
+                labels_flat = labels.view(-1)              # [B*T]
+                valid_mask  = (labels_flat != -100)
+
+                # Hard CE per token (no smoothing)
+                ce_hard = F.cross_entropy(
+                    logits_flat, labels_flat,
+                    ignore_index=-100,
+                    weight=answer_weights if answer_weights is not None else None,
+                    reduction='none',
+                )  # [B*T]
+
+                # Uniform cross-entropy: -mean(log_softmax) per token
+                log_probs  = F.log_softmax(logits_flat, dim=-1)  # [B*T, V]
+                ce_uniform = -log_probs.mean(dim=-1)              # [B*T]
+                ce_uniform[~valid_mask] = 0.0
+
+                # Build per-sample epsilon, expand to per-token
+                eps_sample = torch.tensor(
+                    [self.type_label_smoothing.get(int(t), self.label_smoothing)
+                     for t in question_types],
+                    device=labels.device, dtype=answer_logits.dtype,
+                )  # [B]
+                eps_tok = eps_sample.unsqueeze(1).expand(B, T).reshape(-1)  # [B*T]
+
+                loss_per_tok = (1.0 - eps_tok) * ce_hard + eps_tok * ce_uniform
+                n_valid  = valid_mask.float().sum().clamp(min=1)
+                answer_loss = loss_per_tok[valid_mask].sum() / n_valid
+
+            elif self.focal_gamma > 0:
+                # Focal loss: FL(p_t) = (1-p_t)^γ * CE(p_t)
+                # Down-weights easy examples (high p_t), relatively up-weights hard ones.
+                # p_t computed from raw logits (before label smoothing) for accurate weighting.
+                logits_flat = answer_logits.view(-1, answer_logits.size(-1))
+                labels_flat = labels.view(-1)
+                valid_mask = (labels_flat != -100)
+
+                # CE per token with label smoothing (for gradient quality)
+                ce_per_tok = F.cross_entropy(
+                    logits_flat, labels_flat,
+                    ignore_index=-100,
+                    weight=answer_weights if answer_weights is not None else None,
+                    label_smoothing=self.label_smoothing,
+                    reduction='none',
+                )
+
+                # p_t: model probability for the true class (no label smoothing)
+                with torch.no_grad():
+                    labels_safe = labels_flat.clone()
+                    labels_safe[~valid_mask] = 0  # avoid gather on -100
+                    log_pt = F.log_softmax(logits_flat, dim=-1).gather(
+                        1, labels_safe.unsqueeze(1)
+                    ).squeeze(1)
+                    pt = log_pt.exp().clamp(min=1e-6, max=1.0 - 1e-6)
+                    focal_weight = (1.0 - pt) ** self.focal_gamma
+                    focal_weight[~valid_mask] = 0.0  # zero out ignored positions
+
+                focal_loss = focal_weight * ce_per_tok
+                n_valid = valid_mask.float().sum().clamp(min=1)
+                answer_loss = focal_loss.sum() / n_valid
+
+            elif sample_weights is not None:
+                # Sample-level type-conditional weighting
+                loss_per_tok = F.cross_entropy(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1),
+                    ignore_index=-100,
+                    weight=answer_weights if answer_weights is not None else None,
+                    label_smoothing=self.label_smoothing,
+                    reduction='none',
+                )
+                bs, seq = labels.size()
+                loss_per_tok = loss_per_tok.view(bs, seq)
+                valid = (labels != -100).float()
+                seq_len = valid.sum(dim=1).clamp(min=1)
+                per_sample_loss = (loss_per_tok * valid).sum(dim=1) / seq_len
+                sw = sample_weights.to(per_sample_loss.dtype)
+                answer_loss = (per_sample_loss * sw).sum() / sw.sum()
+            else:
+                answer_loss = F.cross_entropy(
+                    answer_logits.view(-1, answer_logits.size(-1)),
+                    labels.view(-1),
+                    ignore_index=-100,
+                    weight=answer_weights if answer_weights is not None else None,
+                    label_smoothing=self.label_smoothing
+                )
 
             if torch.isnan(answer_loss) or torch.isinf(answer_loss):
                 answer_loss = F.cross_entropy(
@@ -1466,11 +1752,11 @@ class DeterministicVQA(nn.Module):
             # Aligns fused vision ↔ Vietnamese text CLS in a shared 128D space.
             # Applied only during training (labels is not None) and only when
             # batch_size > 1 (need at least one negative per anchor).
-            if self.use_contrastive and self.vision_contrastive_head is not None and batch_size > 1:
+            if self.use_contrastive and self.vision_contrastive_head is not None and batch_size > 1 and not text_only:
                 contrastive_loss = self.compute_contrastive_loss(
-                    fused_vision=vision_for_decoder,  # post-Flamingo, post-gating
-                    text_cls=text_cls,                # LoRA-adapted CLS
-                    labels=labels                     # for false-negative masking
+                    fused_vision=vision_prefgate,  # Flamingo-fused, pre-gating (clean signal)
+                    text_cls=text_cls,             # LoRA-adapted BOS/CLS
+                    labels=labels                  # for false-negative masking
                 )
 
             # (C) Inter-type gate divergence loss
@@ -1582,6 +1868,7 @@ class DeterministicVQA(nn.Module):
         return_type_preds: bool = False,
         num_samples: int = 1,
         vote_temp: float = 0.8,
+        prefix_trie: dict = None,
     ):
         """
         Generate answers với greedy (num_beams=1) hoặc beam search (num_beams>1).
@@ -1613,6 +1900,18 @@ class DeterministicVQA(nn.Module):
         patch_tokens = patch_tokens + self.vision_pos_embed.expand(batch_size, -1, -1)
         vision_features = self.vision_proj(patch_tokens)
 
+        # Optionally prepend SigLIP pooler_output as a global vision token
+        if self.use_siglip_pooler and hasattr(vision_outputs, 'pooler_output') and vision_outputs.pooler_output is not None:
+            global_feat = self.siglip_global_proj(vision_outputs.pooler_output)  # [B, bart_hidden]
+            vision_features = torch.cat([global_feat.unsqueeze(1), vision_features], dim=1)  # [B, 197, bart_hidden]
+
+        # text_only_mode: zero out vision (used for shortcut analysis)
+        if getattr(self, 'text_only_mode', False):
+            vision_features = torch.zeros(
+                batch_size, self.num_patches, vision_features.size(-1),
+                device=vision_features.device, dtype=vision_features.dtype
+            )
+
         # ── 2. Text encoding ──────────────────────────────────────────────
         text_encoder_outputs = self.encoder(
             input_ids=input_ids,
@@ -1621,25 +1920,39 @@ class DeterministicVQA(nn.Module):
         text_features = text_encoder_outputs.last_hidden_state
 
         # Predict type for type-conditioned generation
-        text_cls = text_features[:, 0, :]
+        if self.use_attn_pool_cls:
+            text_cls = self.attn_pool(text_features, attention_mask)
+        elif self.use_mean_pool_cls:
+            _mask = attention_mask.float().unsqueeze(-1)
+            text_cls = (text_features * _mask).sum(1) / _mask.sum(1).clamp(min=1)
+        else:
+            text_cls = text_features[:, 0, :]
         predicted_types = None
         if self.use_type_task and self.type_head is not None:
             type_logits = self.type_head(text_cls)
             predicted_types = torch.argmax(type_logits, dim=-1)  # [B]
 
         # ── 3. Fusion ─────────────────────────────────────────────────────
+        vision_features_pre_flamingo = vision_features  # for delta gate
         fused_vision = vision_features
         fused_text = text_features
         for fusion_layer in self.flamingo_fusion:
             fused_vision, fused_text = fusion_layer(fused_vision, fused_text, attention_mask)
         text_features = fused_text
 
-        # ── 4. Vision gating ──────────────────────────────────────────────
+        # Type-specific adapter: BOS/CLS position only, post-Flamingo (see forward() comment)
+        if self.type_text_adapter is not None and predicted_types is not None:
+            _cls = self.type_text_adapter(text_features[:, 0, :], predicted_types)
+            text_features = torch.cat([_cls.unsqueeze(1), text_features[:, 1:, :]], dim=1)
+
+        # ── 4. Vision gating (AFTER Flamingo) ────────────────────────────
         if self.use_vision_gate:
             gated_vision, _ = self.vision_gating(
-                fused_vision,
-                text_features,
-                type_ids=predicted_types
+                fused_vision, text_features,
+                type_ids=predicted_types,
+                text_attention_mask=attention_mask,
+                detach_for_gate=self.gate_detach_input,
+                vision_orig=vision_features_pre_flamingo if self.use_delta_gate else None,
             )
         else:
             gated_vision = fused_vision
@@ -1736,6 +2049,42 @@ class DeterministicVQA(nn.Module):
                     logits = logits_2d.unsqueeze(1)
 
                 log_probs   = torch.log_softmax(logits[:, 0, :], dim=-1)           # [B*beams, V]
+
+                # 🔥 Prefix trie constrained decoding: mask invalid next tokens
+                if prefix_trie is not None:
+                    vocab_size_tmp = log_probs.size(-1)
+                    eos_id = self.config.eos_token_id
+                    for i in range(batch_size * num_beams):
+                        b, k = i // num_beams, i % num_beams
+                        # Tokens generated so far (skip initial decoder_start token)
+                        seq = beam_seqs[b, k, 1:].tolist()
+                        # Traverse trie
+                        node = prefix_trie
+                        valid = True
+                        past_eos = False
+                        for t in seq:
+                            if t == eos_id:
+                                past_eos = True
+                                node = {}
+                                break
+                            if t in node:
+                                node = node[t]
+                            else:
+                                valid = False
+                                break
+                        mask = torch.full((vocab_size_tmp,), -1e9, device=device, dtype=log_probs.dtype)
+                        if valid and node:
+                            # In-trie: allow only next trie tokens
+                            for t in node.keys():
+                                if t < vocab_size_tmp:
+                                    mask[t] = 0.0
+                        else:
+                            # Off-trie (valid=False) OR already past EOS (node={}):
+                            # Force EOS to prevent garbage tokens being decoded
+                            if eos_id < vocab_size_tmp:
+                                mask[eos_id] = 0.0
+                        log_probs[i] = log_probs[i] + mask
+
                 log_probs   = log_probs.reshape(batch_size, num_beams, -1)         # [B, beams, V]
 
                 vocab_size  = log_probs.size(-1)
@@ -1883,17 +2232,30 @@ class DeterministicVQA(nn.Module):
         vision_features = self.vision_proj(patch_tokens)
 
         text_features = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        text_cls = text_features[:, 0, :]
+        if self.use_attn_pool_cls:
+            text_cls = self.attn_pool(text_features, attention_mask)
+        elif self.use_mean_pool_cls:
+            _mask = attention_mask.float().unsqueeze(-1)
+            text_cls = (text_features * _mask).sum(1) / _mask.sum(1).clamp(min=1)
+        else:
+            text_cls = text_features[:, 0, :]
         predicted_types = None
         if self.use_type_task and self.type_head is not None:
             predicted_types = torch.argmax(self.type_head(text_cls), dim=-1)
 
+        vision_features_pre_flamingo = vision_features  # for delta gate
         fused_vision, fused_text = vision_features, text_features
         for layer in self.flamingo_fusion:
             fused_vision, fused_text = layer(fused_vision, fused_text, attention_mask)
 
-        gated_vision, _ = self.vision_gating(fused_vision, fused_text, type_ids=predicted_types) \
+        # Gate AFTER Flamingo (same as forward())
+        gated_vision, _ = (
+            self.vision_gating(fused_vision, fused_text, type_ids=predicted_types,
+                               text_attention_mask=attention_mask,
+                               detach_for_gate=self.gate_detach_input,
+                               vision_orig=vision_features_pre_flamingo if self.use_delta_gate else None)
             if self.use_vision_gate else (fused_vision, None)
+        )
 
         encoder_hidden_states = torch.cat([gated_vision, fused_text], dim=1)
         encoder_attention_mask = torch.cat([

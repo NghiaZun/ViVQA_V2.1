@@ -50,6 +50,7 @@ CFG = {
     'finetune_es_patience'    : 8,
     'resume_reset_epoch'      : True,
     'max_loops'               : 5,
+
     # Loop behavior: accumulate augmented data + resume policy
     # accumulate_aug=True sẽ giữ lại aug của các loop trước (có thể tăng chất lượng nhưng rủi ro noise)
     # resume_from_best=True sẽ luôn fine-tune từ best checkpoint (ổn định, ít drift)
