@@ -59,7 +59,7 @@ CURATED_CORRECT = [
     ('418479', 'màu của con chim'),                    # COLOR  → xám
 ]
 CURATED_WRONG = [
-    ('545250', 'xếp hàng để được đỗ rác',
+    ('545250', 'xếp hàng',
      'Xác định sai đối tượng: dãy tủ lạnh cũ bị vứt ngoài bãi, model bắt nhầm '
      'sang chiếc máy xúc/xe cơ giới màu vàng ở phía sau nên trả lời "xe tải" '
      'thay vì tủ lạnh.'),

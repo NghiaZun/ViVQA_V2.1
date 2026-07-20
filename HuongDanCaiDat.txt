@@ -1,0 +1,86 @@
+================================================================================
+HƯỚNG DẪN CÀI ĐẶT
+Đề tài: ViGCT-VQA — Visual Question Answering tiếng Việt trên bộ dữ liệu ViVQA
+================================================================================
+
+Tài liệu này mô tả công cụ, môi trường phát triển và thư viện cần cài đặt để
+biên dịch và chạy chương trình. Toàn bộ mã nguồn nằm trong thư mục "src/".
+
+LƯU Ý: Gói nộp KHÔNG kèm theo thư viện. Tất cả thư viện đều được cài qua pip
+theo hướng dẫn bên dưới. Gói nộp cũng KHÔNG kèm dataset, ảnh hay checkpoint
+(xem phần "Chuẩn bị dữ liệu" trong HuongDanSuDung.txt).
+
+
+--------------------------------------------------------------------------------
+1. YÊU CẦU PHẦN CỨNG
+--------------------------------------------------------------------------------
+- GPU NVIDIA có CUDA (khuyến nghị >= 12 GB VRAM để huấn luyện; nhiều hơn nếu
+  chạy pipeline sinh ảnh FLUX.1-dev trong main.py).
+- RAM >= 16 GB.
+- Ổ đĩa trống >= 20 GB (cho mô hình nền tải từ Hugging Face + checkpoint).
+- Có thể chạy trên CPU cho phần đánh giá nhẹ, nhưng huấn luyện thực tế cần GPU.
+
+
+--------------------------------------------------------------------------------
+2. CÔNG CỤ & MÔI TRƯỜNG PHÁT TRIỂN
+--------------------------------------------------------------------------------
+- Hệ điều hành: Linux (Ubuntu 20.04+). Windows/macOS chạy được nhưng chưa
+  kiểm thử đầy đủ.
+- Python: 3.10 hoặc 3.11.
+- CUDA Toolkit / NVIDIA Driver tương thích với PyTorch 2.6.0 (CUDA 12.x).
+- Trình quản lý gói: pip (kèm sẵn với Python) và venv để tạo môi trường ảo.
+- Kết nối Internet ở lần chạy đầu tiên để tải mô hình nền từ Hugging Face:
+      google/siglip-base-patch16-224   (bộ mã hoá thị giác SigLIP)
+      vinai/bartpho-syllable           (mô hình ngôn ngữ BARTpho)
+
+
+--------------------------------------------------------------------------------
+3. TẠO MÔI TRƯỜNG ẢO
+--------------------------------------------------------------------------------
+Mở terminal tại thư mục chứa "src/" rồi chạy:
+
+    python -m venv .venv
+    source .venv/bin/activate          # Linux/macOS
+    # .venv\Scripts\activate           # Windows (PowerShell/CMD)
+
+    python -m pip install --upgrade pip
+
+
+--------------------------------------------------------------------------------
+4. CÀI ĐẶT THƯ VIỆN
+--------------------------------------------------------------------------------
+Toàn bộ thư viện được liệt kê trong "src/requirements.txt". Cài bằng:
+
+    pip install -r src/requirements.txt
+
+Danh sách thư viện chính (xem phiên bản chính xác trong src/requirements.txt):
+
+    torch==2.6.0            torchvision==0.21.0     torchaudio==2.6.0
+    transformers==5.8.0     accelerate==1.12.0      peft==0.18.1
+    diffusers==0.38.0       bitsandbytes            sentencepiece
+    einops                  ultralytics             Pillow
+    numpy                   pandas                  matplotlib
+    tqdm                    protobuf                rouge-score
+
+Ghi chú:
+- torch/torchvision/torchaudio: cài bản CUDA phù hợp với driver máy bạn. Nếu
+  lệnh trên cài nhầm bản CPU, cài lại theo hướng dẫn tại https://pytorch.org
+  (chọn đúng phiên bản CUDA), ví dụ:
+      pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 \
+          --index-url https://download.pytorch.org/whl/cu124
+- diffusers + ultralytics chỉ cần cho pipeline sinh ảnh (main.py / generation.py).
+  Nếu chỉ huấn luyện và đánh giá mô hình VQA, có thể bỏ qua hai gói này.
+- sentencepiece + protobuf cần cho tokenizer của BARTpho.
+
+
+--------------------------------------------------------------------------------
+5. KIỂM TRA CÀI ĐẶT
+--------------------------------------------------------------------------------
+Chạy thử để xác nhận PyTorch nhận GPU:
+
+    python -c "import torch; print('CUDA:', torch.cuda.is_available(), torch.__version__)"
+
+Kết quả mong đợi: CUDA: True <phiên bản torch>
+
+Sau khi bước này thành công, chuyển sang HuongDanSuDung.txt để biên dịch và
+chạy chương trình.

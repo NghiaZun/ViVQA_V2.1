@@ -1239,10 +1239,15 @@ def main():
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-    # NOTE: cudnn.deterministic=True breaks MBart SDPA on newer transformers
-    # (CUDNN_STATUS_NOT_INITIALIZED on H100 MIG). benchmark=False is enough
-    # to reduce cross-run variance for conv-heavy vision encoders.
+    # Full CUDA determinism: disable Flash/MemEfficient SDPA (use math backend)
+    # so cudnn.deterministic=True no longer triggers CUDNN_STATUS_NOT_INITIALIZED
+    # on H100 MIG with MBart SDPA.
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
+    torch.use_deterministic_algorithms(True, warn_only=True)
     # TF32 left at H100 default (True) — matches run87 training conditions.
     
     # ========================================================================
