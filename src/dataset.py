@@ -170,6 +170,7 @@ class VQAGenDataset(Dataset):
             'attention_mask': attention_mask,
             'labels': labels,
             'raw_answer': answer,  # for sample-level type-conditional weighting
+            'img_id': int(img_id),  # 🔬 de tra cuu patch-region-map (COCO) neu can, khong bat buoc dung
         }
         
         # 🔥🔥🔥 Add teacher inputs for online distillation
@@ -195,7 +196,12 @@ class VQAGenDataset(Dataset):
                 question_type = detect_question_type(question)
             
             result['question_type'] = question_type
-        
+
+        # 🔬 Chi so hang trong CSV -- de tra cuu nhan ngoai duoc sinh theo dung thu tu CSV
+        # (vd alpha oracle cho --gate_distill_path). Dataset KHONG loc/sap xep lai hang nen
+        # idx == so hang trong file, va eval.py dump voi shuffle=False -> khop tuyet doi.
+        result['row_idx'] = idx
+
         return result
 
 

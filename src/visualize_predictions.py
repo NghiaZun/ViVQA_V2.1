@@ -177,12 +177,13 @@ def draw_grid(examples, outpath, correct, title):
     edge = '#1a9850' if correct else '#d73027'
 
     fig, axes = plt.subplots(n, 2, figsize=(12, 3.9 * n),
-                             gridspec_kw={'width_ratios': [1.0, 1.15]},
+                             gridspec_kw={'width_ratios': [1.0, 1.35]},
                              squeeze=False)
     for i, e in enumerate(examples):
         ax_img, ax_txt = axes[i, 0], axes[i, 1]
         # Ảnh + khung màu
         ax_img.imshow(e['pil'])
+        ax_img.set_anchor('N')  # neo anh len tren, khong tran ngang sang cot chu
         ax_img.add_patch(Rectangle((0.005, 0.005), 0.99, 0.99, transform=ax_img.transAxes,
                                    fill=False, edgecolor=edge, linewidth=6))
         ax_img.set_xticks([]); ax_img.set_yticks([])
@@ -206,13 +207,12 @@ def draw_grid(examples, outpath, correct, title):
                         color=(edge if label.startswith('Dự đoán') else 'black'),
                         transform=ax_txt.transAxes)
             y -= 0.165 + 0.085 * val.count('\n')
-        if (not correct) and e.get('note'):
-            note = '\n'.join(textwrap.wrap('Giải thích lỗi: ' + e['note'], width=44))
-            ax_txt.text(0.0, y - 0.03, note, fontsize=14.5, style='italic',
-                        color=edge, va='top', transform=ax_txt.transAxes)
+        # (đã bỏ dòng "Giải thích lỗi" — fig_wrong dùng CÙNG layout với fig_correct)
 
     fig.suptitle(title, fontsize=20, fontweight='bold', color=edge, y=0.995)
-    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    # KHONG dung tight_layout (no phinh axes anh theo ti le anh -> tran sang cot chu).
+    # Dat vi tri co dinh + wspace ro rang.
+    fig.subplots_adjust(left=0.02, right=0.985, top=0.955, bottom=0.02, wspace=0.22, hspace=0.28)
     os.makedirs(os.path.dirname(outpath) or '.', exist_ok=True)
     fig.savefig(outpath, dpi=190, bbox_inches='tight')
     print(f"✅ Đã lưu: {outpath}  ({n} ví dụ)")

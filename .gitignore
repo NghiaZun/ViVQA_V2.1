@@ -80,3 +80,40 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# ----- Datasets phái sinh / dump phân tích (thêm 2026-09-03, KHÔNG public) -----
+viclevr_data/
+openvivqa_data/
+clevr_data/
+analysis/
+rule_study/
+robustness/
+probe_2x2/
+proto_ablation/
+*.npz
+
+# ----- File backup -----
+*.bak
+*.bak_*
+*.py.bak*
+
+# ----- Nội dung nghiên cứu chưa publish (paper đang review) — KHÔNG public -----
+FINDINGS_*.md
+PREREG_*.md
+THESIS_ARGUMENT.md
+THESIS_DRAFT_vi.md
+# Báo cáo / theo dõi thí nghiệm nội bộ (cùng nhóm chưa publish)
+TCVG_REPORT_*.md
+TCVG_STATUS.md
+TCVG_ABLATION_TRACKING.md
+REPORT_advisor_*.md
+RESEARCH_PLAN_next.md
+SYSTEM_RECONSTRUCTION.md
+statistical_analysis.md
+experiment.md
+thesis_revision_tasks_for_claude.md
+audit_report.md
+# Dữ liệu phái sinh (bản đồ patch/region, trọng số tính sẵn) — sinh lại bằng script trong src/
+*.pkl
+answer_weights_*.json
+type_grad_balance_*.json
